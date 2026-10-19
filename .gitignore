@@ -1,0 +1,33 @@
+﻿# PlatformIO / ESP-IDF
+.pio/
+managed_components/
+sdkconfig.*
+!sdkconfig.defaults
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# IDE
+.vscode/
+
+# Temporary files and logs
+tmp/
+.tmp*/
+*.log
+*.tmp
+*.bak
+
+# Secrets and credentials
+.env
+.env.*
+!.env.example
+secrets/
+credentials/
+*.pem
+*.key
+
+# OS
+.DS_Store
+Thumbs.db

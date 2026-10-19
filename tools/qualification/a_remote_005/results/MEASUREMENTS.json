@@ -1,0 +1,16 @@
+{
+  "seed": 50052026,
+  "environment": "3.13.13 / Windows-11-10.0.26200-SP0",
+  "tests": 8,
+  "checks": 10247,
+  "failures": 0,
+  "errors": 0,
+  "fault_scenarios": 1079,
+  "capacity_cases": 180,
+  "host_model": "PASS",
+  "concrete_backend": "FAIL: G1 anti-rollback absent; G2-G4 physical durability/capacity UNKNOWN",
+  "capacity": "CONDITIONAL low-occupancy ideal; FAIL adverse occupancy/fragmentation; actual UNKNOWN",
+  "physical": "NOT RUN",
+  "production": "NOT IMPLEMENTED",
+  "task_verdict": "BLOCKED"
+}

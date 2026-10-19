@@ -1,0 +1,13 @@
+test_A003_valid_old_anchor_and_candidate_whole_rollback (test_backend.Qualification.test_A003_valid_old_anchor_and_candidate_whole_rollback) ... ok
+test_actual_unqualified_candidate_blocks (test_backend.Qualification.test_actual_unqualified_candidate_blocks) ... ok
+test_ambiguous_ack_both_persistence_outcomes (test_backend.Qualification.test_ambiguous_ack_both_persistence_outcomes) ... ok
+test_capacity_and_profile_bounds (test_backend.Qualification.test_capacity_and_profile_bounds) ... ok
+test_corruption_migration_counter_capacity_exhaustion (test_backend.Qualification.test_corruption_migration_counter_capacity_exhaustion) ... ok
+test_fault_every_persistent_boundary (test_backend.Qualification.test_fault_every_persistent_boundary) ... ok
+test_software_CAS_serialization_and_reentry (test_backend.Qualification.test_software_CAS_serialization_and_reentry) ... ok
+test_stale_root_records_and_order_violation (test_backend.Qualification.test_stale_root_records_and_order_violation) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 25.157s
+
+OK

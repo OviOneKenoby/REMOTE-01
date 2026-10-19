@@ -1,0 +1,1 @@
+Host-only A005 source-informed backend falsification; run python -B run_qualification.py from prototype. Uses unchanged sibling a_remote_004 prototype/vendor. No production imports or actual NVS/credentials/hardware. Acceptance BLOCKED; see coordination report.
