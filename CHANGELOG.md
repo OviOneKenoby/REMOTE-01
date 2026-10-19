@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-10-19 - Public baseline audit correction and A-REMOTE-012 reconciliation
+
+The initial public-history audit conservatively classified the literals in
+`components/esp_wifi_bsp/esp_wifi_bsp.c` as possible operational Wi-Fi
+credentials. That classification is **SUPERSEDED**: Waveshare's official
+[`06_WIFI_STA` documentation](https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-3.49) publishes the exact literals as vendor sample
+values and instructs users to replace them for their environment. The
+component remains excluded from the effective production build. No credential
+rotation, source removal or Git-history rewrite is required by this finding.
+
+The complete reachable-history review found no operational RTCP association
+secret, private key, certificate key, API token, NVS/flash dump, device backup
+or REMOTE application binary. Local absolute paths and historical private-LAN
+addresses remain documentation-hygiene items, not credential exposures.
+
+Current public source and the active local REMOTE source have zero substantive
+file differences after line-ending normalization. The preserved local build,
+private candidate and installed readback all identify the accepted 2,526,848-
+byte A-REMOTE-012 application by SHA-256
+`b6053c04c03114a24a59f178da4eb03d4bada77faded43b6009667579c21d5da`.
+This proves artifact identity and current source equivalence separately; it
+does not create a historical source-commit-to-binary reproducibility claim.
+A-REMOTE-012 remains CLOSED / OWNER ACCEPTED. No source, build, firmware,
+hardware, NVS, pairing, partition or pending D-009 contract changed.
+
 ## 2026-10-17 - A-REMOTE-012 bounded low-latency volume candidate
 
 REMOTE now keeps one bounded absolute desired-volume target and coalesces rapid
