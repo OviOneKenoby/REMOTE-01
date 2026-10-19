@@ -46,6 +46,6 @@ Wi-Fi provisioning stores credentials in the default NVS namespace. RTCP associa
 
 - The public source matches the active local source after line-ending normalization, but the historical Git-less build has no immutable source commit proving byte-reproducible derivation of the installed binary.
 - Intermittent QMI8658 motion-wake initialization remains a known separate limitation.
-- Playback commands and richer metadata proposed by A-REMOTE-013 D-009 are not implemented or approved in this baseline.
+- Playback commands and richer metadata defined by owner-approved/frozen A-REMOTE-013 D-009 are not implemented in this baseline; firmware implementation remains separately gated.
 
 See [docs/HARDWARE.md](docs/HARDWARE.md) for verified V2 facts and source citations.
