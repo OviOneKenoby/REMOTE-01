@@ -2,6 +2,7 @@
 #include "association.hpp"
 #include "diagnostic.hpp"
 #include "io_status.hpp"
+#include "mdns_discovery.hpp"
 #include "network_status.hpp"
 #include "wire.hpp"
 #include <array>
@@ -31,6 +32,8 @@ private:
   std::array<std::uint8_t,8>session_id_{};std::uint64_t tx_counter_{1},rx_counter_{1},pending_request_{0};
   wire::Identity identity_{};wire::Capabilities capabilities_{};wire::Snapshot snapshot_{};wire::Result result_{};
   Diagnostic diagnostic_{};NetworkStatusGate network_status_{};
+  EndpointSelection endpoints_{};std::uint64_t discovery_at_{0};
+  DiscoveryBatch pending_discovery_{};bool pending_discovery_present_{false};bool discovery_ready_{false};
   void close(CloseReason,bool schedule=true,std::int32_t error=0);bool connect_start();bool flush();ReadStatus receive();bool make_hello();bool accept_server_hello();
   bool send_plain(const std::uint8_t*,std::size_t);Event accept_record();bool queue_next();
 };
