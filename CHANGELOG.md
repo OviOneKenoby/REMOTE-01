@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-10-20 - A-REMOTE-014 authenticated RTCP endpoint discovery
+
+REMOTE now performs bounded native ESP-IDF mDNS/DNS-SD discovery for
+`_rtcp._tcp` after Wi-Fi becomes available. It accepts at most four IPv4
+candidates per 750 ms query, queries no more often than every five seconds,
+and retains the saved association endpoint as a fallback. A candidate becomes
+the runtime endpoint only after the existing RTCP mutual proof and encrypted
+identity exchange succeed. Discovered addresses are never written to pairing
+NVS, and discovery/session state is cleared on confirmed network loss,
+generation change, or sleep.
+
+Endpoint-selection tests passed 10/10, discovery-policy checks passed 10/10,
+network-status checks passed 15 checks/142 assertions, RTCP association/wire
+tests passed 11/11, and lifecycle-policy checks passed 13/13. The pinned
+`remote01` clean production build passed at source
+`9c805e5444587bc3d8952a57f44ec526c615e74a`, producing a 2,568,992-byte
+private candidate with SHA-256
+`cdfccacdf07d0e4ca0a29b2c92f3cf29ee5e1b65df109ca730c3915185c82e2d`.
+Static RAM is 56,356 bytes and OTA-slot headroom is 577,056 bytes; relative to
+the accepted A-REMOTE-012 application this is +42,144 binary bytes, +8,968
+static RAM bytes, and -42,144 headroom bytes. The fixed application discovery
+worker reserves 6,144 stack bytes; the official mDNS component owns its
+bounded query-result allocations. Hardware discovery, DHCP-change, multicast
+loss, and multiple-advertiser behavior remain NOT RUN.
+
 ## 2026-10-19 - Public baseline audit correction and A-REMOTE-012 reconciliation
 
 The initial public-history audit conservatively classified the literals in

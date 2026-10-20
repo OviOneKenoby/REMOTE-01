@@ -4,6 +4,15 @@ PlatformIO firmware for REMOTE//01 on the Waveshare ESP32-S3-Touch-LCD-3.49B V2,
 
 The installed accepted application is 2,526,848 bytes with SHA-256 `b6053c04c03114a24a59f178da4eb03d4bada77faded43b6009667579c21d5da`. It interoperates with TUNER v1.1.12 through authenticated RTCP/1 for identity, capabilities, authoritative volume/playback observations and correlated `volume.set`. This repository has no public REMOTE firmware release yet.
 
+The A-REMOTE-014 candidate adds runtime `_rtcp._tcp` DNS-SD discovery so a
+paired TUNER can be found after DHCP address changes. Discovery supplies only
+candidate transport locations: every candidate must still pass the existing
+RTCP mutual cryptographic proof and encrypted identity exchange. The saved
+endpoint remains a fallback, discovered addresses are not persisted, and no
+pairing secret or identifier is advertised. Networks that block multicast may
+therefore continue using a reachable saved endpoint but cannot automatically
+recover a stale one until multicast discovery is available.
+
 ## Baseline
 
 The baseline is Waveshare's official V2 `ESP-IDF/11_FactoryProgram` example from [waveshareteam/ESP32-S3-Touch-LCD-3.49-V2](https://github.com/waveshareteam/ESP32-S3-Touch-LCD-3.49-V2). It is not the similarly named V1 project. The factory UI is the main/demo view followed by its swipe-left backlight page; the implementation is in `components/ui_bsp/generated/setup_scr_screen.c`, `components/lvgl/src/extra/widgets/carousel/lv_carousel.c`, and `components/user_app/user_app.cpp`.
