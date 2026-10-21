@@ -1,5 +1,45 @@
 # Changelog
 
+## 2026-10-21 - A-REMOTE-013 D-009 REMOTE software candidate
+
+Implemented the frozen RTCP/1 D-009 playback and now-playing profile on top of
+the A-REMOTE-014 discovery candidate. RTCP message IDs 9-11, capability
+revision 2 feature gating, authenticated play/pause/previous/next commands,
+strict result correlation, fixed-list restrictions, and authoritative station
+and now-playing ingestion are integrated through the existing CCM Core and
+HOME screen at carousel index 2. Existing HOME controls and text widgets are
+reused without layout or generated-resource changes. Physical REMOTE buttons
+remain unassigned.
+
+The implementation preserves the 512-byte plaintext limit, 556-byte record
+buffers, one command in flight, session/generation fencing, no automatic
+command replay, existing volume responsiveness, and LVGL task ownership.
+Malformed or over-limit metadata is rejected, presentation remains bounded and
+UTF-8 safe, and stale metadata/pending commands are cleared across connection
+and session replacement.
+
+Focused verification passed: RTCP D-009 8/8 with 44 assertions; D-009 policy
+12/12; HOME 41/41 with 3,562 assertions; volume admission 9/9 with 238
+assertions; UI volume binding 1/1 with 11 assertions; power 19/19 with 19,236
+assertions and 1,000 stress iterations; ingress 18/18 with 22,189 assertions
+and 1,000 stress iterations. The single authorized `remote01` production build
+passed at source `1a29c4e3652fb3aeb7ef496b674691e78aca2d67`.
+
+The private application is 2,575,168 bytes with SHA-256
+`d9c13a6ce030b9ab2a4db02fad1c5afcf80eee364f0046665a9dcb1652698d76`,
+uses 56,356 bytes of static RAM, and leaves 570,560 bytes in the 3 MiB
+application slot. Relative to the accepted A-REMOTE-012 baseline, this is
++48,320 application bytes, +8,968 static RAM bytes, and -48,320 bytes of
+headroom. The generated partition table remains the accepted seven-entry image
+with SHA-256
+`a144343580dbdadace66fccc5969d7557de3d4c4f15a61e76db205cc26348184`.
+
+No firmware was flashed and no hardware, NVS, pairing, partition, credential,
+TUNER source, or protocol-security state changed. Hardware interoperability and
+rollback validation remain required. The coordination documents that still
+describe D-009 implementation as unstarted predate the owner's explicit REMOTE
+implementation authorization and are preserved as historical status.
+
 ## 2026-10-20 - A-REMOTE-014 authenticated RTCP endpoint discovery
 
 REMOTE now performs bounded native ESP-IDF mDNS/DNS-SD discovery for

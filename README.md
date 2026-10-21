@@ -13,6 +13,13 @@ pairing secret or identifier is advertised. Networks that block multicast may
 therefore continue using a reachable saved endpoint but cannot automatically
 recover a stale one until multicast discovery is available.
 
+The stacked A-REMOTE-013 D-009 candidate adds authenticated radio playback
+commands and authoritative station/now-playing presentation on the existing
+HOME page. It retains A-REMOTE-014 discovery, RTCP/1 IDs 1-8, pairing,
+single-command-in-flight fencing, sleep/wake behavior, and the existing UI
+geometry. This is a software-verified candidate only; it has not been flashed
+or jointly validated with the TUNER D-009 candidate.
+
 ## Baseline
 
 The baseline is Waveshare's official V2 `ESP-IDF/11_FactoryProgram` example from [waveshareteam/ESP32-S3-Touch-LCD-3.49-V2](https://github.com/waveshareteam/ESP32-S3-Touch-LCD-3.49-V2). It is not the similarly named V1 project. The factory UI is the main/demo view followed by its swipe-left backlight page; the implementation is in `components/ui_bsp/generated/setup_scr_screen.c`, `components/lvgl/src/extra/widgets/carousel/lv_carousel.c`, and `components/user_app/user_app.cpp`.
@@ -55,6 +62,9 @@ Wi-Fi provisioning stores credentials in the default NVS namespace. RTCP associa
 
 - The public source matches the active local source after line-ending normalization, but the historical Git-less build has no immutable source commit proving byte-reproducible derivation of the installed binary.
 - Intermittent QMI8658 motion-wake initialization remains a known separate limitation.
-- Playback commands and richer metadata defined by owner-approved/frozen A-REMOTE-013 D-009 are not implemented in this baseline; firmware implementation remains separately gated.
+- Playback commands and richer metadata from the owner-approved/frozen
+  A-REMOTE-013 D-009 profile are implemented on the stacked candidate branch.
+  Hardware installation, interoperability, command refusal cases, metadata
+  changes, lifecycle recovery, and regression testing remain pending.
 
 See [docs/HARDWARE.md](docs/HARDWARE.md) for verified V2 facts and source citations.
