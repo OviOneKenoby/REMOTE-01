@@ -34,6 +34,15 @@ bool coherent() {
   CHECK(x.previous && x.toggle && x.next);
   return true;
 }
+bool remote_pending_preserves_playback_availability() {
+  Snapshot value;
+  value.previous = value.toggle = value.next = true;
+  auto remote = development::present_snapshot(value, true, true);
+  CHECK(remote.previous && remote.toggle && remote.next);
+  auto synthetic = development::present_snapshot(value, true, false);
+  CHECK(!synthetic.previous && !synthetic.toggle && !synthetic.next);
+  return true;
+}
 bool connected() {
   START;
   CHECK(s.snapshot().connection == Connection::CONNECTED);
@@ -463,6 +472,7 @@ int main() {
   const Test tests[] = {
 #define TEST(x) {#x, x}
       TEST(coherent),
+      TEST(remote_pending_preserves_playback_availability),
       TEST(connected),
       TEST(disconnected),
       TEST(playing),

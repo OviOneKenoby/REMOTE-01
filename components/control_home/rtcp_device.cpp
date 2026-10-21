@@ -225,8 +225,13 @@ bool RtcpDevice::poll(U64 now) {
     Scalar volume = Scalar::level(volume_rational(snapshot.volume));
     Scalar playback; playback.kind = ScalarKind::PLAYBACK;
     playback.playback = static_cast<control::Playback>(snapshot.playback);
-    return publish("volume.level", Value<Scalar>::of(volume), snapshot.sequence, now, false) &&
-           publish("playback.state", Value<Scalar>::of(playback), snapshot.sequence, now, true);
+    // These are independent observations. A rejected volume sample must not
+    // suppress the fresh playback sample and temporarily disable HOME control.
+    const bool volume_ok = publish("volume.level", Value<Scalar>::of(volume),
+                                   snapshot.sequence, now, false);
+    const bool playback_ok = publish("playback.state", Value<Scalar>::of(playback),
+                                     snapshot.sequence, now, true);
+    return volume_ok && playback_ok;
   }
   if (event == rtcp_client::Client::Event::now_playing) {
     const auto &value = client_.now_playing();

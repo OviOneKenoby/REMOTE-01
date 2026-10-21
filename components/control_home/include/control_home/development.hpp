@@ -6,6 +6,16 @@
 
 // DEVELOPMENT ONLY / MOCK ONLY. Never included by HOME or its public API.
 namespace control_home::development {
+inline Snapshot present_snapshot(Snapshot value, bool pending,
+                                 bool remote_transport) {
+  // RTCP/CCM already serializes commands. Transport busy state must not be
+  // presented as loss of an otherwise fresh playback capability. The
+  // synthetic development adapter still needs its legacy single-operation
+  // gate because it cannot accept a second command while delayed.
+  if (pending && !remote_transport)
+    value.previous = value.toggle = value.next = false;
+  return value;
+}
 class Device final : public control::Adapter {
   control::Core *core_ = nullptr;
   control::ingress::Boundary *boundary_ = nullptr;
@@ -65,11 +75,7 @@ struct Session {
     return facade.volume_resolution(token);
   }
   Snapshot snapshot() const {
-    auto value = facade.snapshot();
-    if (pending()) {
-      value.previous = value.toggle = value.next = false;
-    }
-    return value;
+    return present_snapshot(facade.snapshot(), pending(), remote_mode);
   }
   bool poll(control::U64 now) { return !remote_mode || remote.poll(now); }
   void suspend() { if (remote_mode) rtcp.suspend(); }

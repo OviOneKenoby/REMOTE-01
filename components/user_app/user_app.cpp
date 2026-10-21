@@ -112,8 +112,10 @@ static void home_refresh(lv_timer_t *)
 	using control_home::Connection;
 	home_text(home.status, s.connection == Connection::CONNECTED ? "CONNECTED" :
 	                      s.connection == Connection::UNAVAILABLE ? "UNAVAILABLE" : "UNKNOWN");
-	home_text(home.title, s.title[0] ? s.title : "--");
-	home_text(home.subtitle, s.subtitle[0] ? s.subtitle : "--");
+	// CCM retains media.title=StreamTitle and media.subtitle=station. HOME's
+	// accepted visual hierarchy presents the station in the large upper label.
+	home_text(home.title, s.subtitle[0] ? s.subtitle : "--");
+	home_text(home.subtitle, s.title[0] ? s.title : "--");
 	home_text(home.playback, s.playback == Playback::PLAYING ? LV_SYMBOL_PLAY " PLAYING" :
 	                        s.playback == Playback::PAUSED ? LV_SYMBOL_PAUSE " PAUSED" :
 	                        s.playback == Playback::CONFLICT ? "CONFLICT" :

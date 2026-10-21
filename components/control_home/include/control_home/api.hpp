@@ -240,10 +240,16 @@ struct Channel {
     return true;
   }
   void publish(const Snapshot &value, std::uint64_t now = 0) {
-    const bool invalidated =
-        value.connection != Connection::CONNECTED ||
-        value.session != latest.session ||
-        value.capability_revision != latest.capability_revision;
+    // Capability revisions are target-wide. D-009 playback-context updates
+    // may advance that revision without changing the volume contract. Keep an
+    // admitted volume target across such unrelated revisions, but retain the
+    // hard fences for connection/session loss and loss of volume authority.
+    const bool volume_context_valid =
+        value.connection == Connection::CONNECTED && value.session &&
+        value.session == latest.session && value.capability_revision &&
+        value.volume_set && value.volume_known;
+    const bool invalidated = !volume_context_valid;
+    const auto active_token = volume_token;
     const bool target_reached =
         volume_outstanding && value.volume_set && value.volume_known &&
         value.volume == volume_target;
@@ -251,6 +257,7 @@ struct Channel {
         volume_outstanding && volume_confirmed && value.volume_set &&
         value.volume_known && value.volume != latest.volume &&
         value.volume != volume_target;
+    const bool cancelled = invalidated || authoritative_divergence;
     if (invalidated)
       cancel_volume();
     else if (authoritative_divergence)
@@ -270,10 +277,23 @@ struct Channel {
       // Compact in FIFO order in the same caller-held critical section.
       unsigned kept = 0;
       for (unsigned i = 0; i < count; ++i) {
-        const auto intent = queue[(head + i) % capacity];
-        if (intent.session == value.session &&
-            intent.capability_revision == value.capability_revision &&
-            enabled(value, intent.action))
+        auto intent = queue[(head + i) % capacity];
+        if (intent.token == active_token &&
+            (cancelled || target_reached))
+          continue;
+        if (intent.token == volume_token && volume_outstanding &&
+            volume_context_valid && intent.volume != value.volume) {
+          // The queued command has not crossed the owner boundary yet. Refresh
+          // its capture fence to the current target-wide revision; Facade will
+          // still perform the full CCM capture/admission check at dispatch.
+          intent.session = value.session;
+          intent.capability_revision = value.capability_revision;
+          intent.action = intent.volume > value.volume ? Action::VOLUME_UP
+                                                       : Action::VOLUME_DOWN;
+          queue[(head + kept++) % capacity] = intent;
+        } else if (intent.session == value.session &&
+                   intent.capability_revision == value.capability_revision &&
+                   enabled(value, intent.action))
           queue[(head + kept++) % capacity] = intent;
         else
           ++rejected;
