@@ -90,13 +90,35 @@ bool no_boot_command() {
   router.sample(0, true, true, true, [&](Action) { ++emitted; return true; });
   CHECK(emitted == 0); return true;
 }
+bool bounded_pipeline_diagnostics() {
+  remote_encoder::Router router; unsigned emitted = 0;
+  auto emit = [&](Action) { ++emitted; return emitted != 3; };
+  std::uint64_t t = 10;
+  router.sample(t, false, false, true, emit);
+  const std::uint8_t positive[] = {1,3,2,0};
+  const std::uint8_t negative[] = {2,3,1,0};
+  for(unsigned cycle=0;cycle<20;++cycle)
+    for(auto ab:positive) { t += cycle==7 ? 25 : 2; router.sample(t,(ab&2)!=0,(ab&1)!=0,true,emit); }
+  for(unsigned cycle=0;cycle<10;++cycle)
+    for(auto ab:negative) { t += 2; router.sample(t,(ab&2)!=0,(ab&1)!=0,true,emit); }
+  // A skipped diagonal transition is classified and resynchronizes without
+  // inventing a detent.
+  t += 2; router.sample(t,true,true,true,emit);
+  const auto view=router.view();
+  CHECK(view.detents==30&&view.positive==20&&view.negative==10);
+  CHECK(view.invalid==1&&view.rejected==1);
+  CHECK(view.sample_last_ms==2&&view.sample_max_ms==25);
+  CHECK(view.transitions==121&&emitted==30);
+  return true;
+}
 }
 int main() {
   std::setbuf(stdout, nullptr);
   struct Test { const char *name; bool (*run)(); } tests[] = {
       {"routing", routing}, {"ready_and_bounds", ready_and_bounds},
       {"core_volume", core_volume}, {"stale_and_disconnect", stale_and_disconnect},
-      {"no_boot_command", no_boot_command}};
+      {"no_boot_command", no_boot_command},
+      {"bounded_pipeline_diagnostics", bounded_pipeline_diagnostics}};
   unsigned pass = 0;
   for (auto test : tests) { std::printf("RUN %s\n", test.name); if (!test.run()) return 1; ++pass; }
   std::printf("ENCODER VOLUME SUMMARY PASS=%u FAIL=0 assertions=%u\n", pass, assertions);

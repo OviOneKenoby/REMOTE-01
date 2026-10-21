@@ -15,6 +15,7 @@ checks = {
     "existing_controls": "static_cast<control_home::Action>" in ui and "playback_symbols" in ui,
     "existing_text_widgets": "home_text(home.title" in ui and "home_text(home.subtitle" in ui,
     "station_large_streamtitle_small": 'home_text(home.title, s.subtitle[0] ? s.subtitle : "--")' in ui and 'home_text(home.subtitle, s.title[0] ? s.title : "--")' in ui,
+    "streamtitle_bounded_dot": 'home.subtitle = remote01_single_line(page, "--", &lv_font_montserrat_14, muted, 12, 290, 148,' in ui and 'LV_LABEL_LONG_DOT, LV_TEXT_ALIGN_LEFT);' in ui,
     "independent_snapshot_fields": 'const bool volume_ok = publish("volume.level"' in adapter and 'const bool playback_ok = publish("playback.state"' in adapter,
     "lvgl_owner_timer": "lv_timer_create(home_refresh" in ui,
     "playback_precondition": "intent.action == Action::TOGGLE || intent.action == Action::PREVIOUS" in facade,

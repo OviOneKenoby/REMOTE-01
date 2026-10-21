@@ -77,6 +77,10 @@ struct Channel {
   bool desired_volume_valid = false;
   std::uint8_t desired_volume = 0;
   std::uint64_t volume_attempts = 0, volume_accepted = 0;
+  std::uint64_t volume_queued = 0, volume_completed = 0, volume_failed = 0,
+                volume_cancelled = 0, authoritative_updates = 0,
+                cancel_session = 0, cancel_capability = 0,
+                cancel_authority = 0, cancel_divergence = 0;
   std::uint64_t last_input_ms = 0, last_target_queued_ms = 0,
                 last_authoritative_ms = 0;
   VolumeAdmission last_volume_admission = VolumeAdmission::NONE;
@@ -103,7 +107,28 @@ struct Channel {
     queue[(head + count++) % capacity] = intent;
     return true;
   }
-  void cancel_volume() {
+  static void increment(std::uint64_t &value) {
+    if (value != UINT64_MAX) ++value;
+  }
+  enum class CancelReason : std::uint8_t {
+    NONE,
+    SESSION,
+    CAPABILITY,
+    AUTHORITY,
+    DIVERGENCE
+  };
+  void cancel_volume(CancelReason reason = CancelReason::NONE) {
+    if (reason != CancelReason::NONE &&
+        (volume_outstanding || desired_volume_valid)) {
+      increment(volume_cancelled);
+      switch (reason) {
+      case CancelReason::SESSION: increment(cancel_session); break;
+      case CancelReason::CAPABILITY: increment(cancel_capability); break;
+      case CancelReason::AUTHORITY: increment(cancel_authority); break;
+      case CancelReason::DIVERGENCE: increment(cancel_divergence); break;
+      case CancelReason::NONE: break;
+      }
+    }
     volume_outstanding = false;
     volume_confirmed = false;
     volume_target = 0;
@@ -157,6 +182,7 @@ struct Channel {
       return false;
     }
     issued = token;
+    increment(volume_queued);
     volume_outstanding = true;
     volume_confirmed = false;
     volume_target = target;
@@ -186,7 +212,7 @@ struct Channel {
     const bool volume = action == Action::VOLUME_DOWN ||
                         action == Action::VOLUME_UP;
     if (volume) {
-      ++volume_attempts;
+      increment(volume_attempts);
       last_volume_admission = volume_admission(action);
       if (last_volume_admission != VolumeAdmission::ACCEPTED) {
         ++rejected;
@@ -202,7 +228,7 @@ struct Channel {
           int(base) + (action == Action::VOLUME_UP ? 1 : -1));
       desired_volume_valid = true;
       last_input_ms = now;
-      ++volume_accepted;
+      increment(volume_accepted);
       if (volume_outstanding && retarget_queued_volume()) {
         if (generation != UINT64_MAX) ++generation;
         return true;
@@ -220,11 +246,13 @@ struct Channel {
     if (!volume_outstanding || !token || token != volume_token)
       return false;
     if (resolution == VolumeResolution::DEFINITE_FAILURE) {
+      increment(volume_failed);
       cancel_volume();
       if (generation != UINT64_MAX) ++generation;
       return true;
     }
     if (resolution == VolumeResolution::CONFIRMED && !volume_confirmed) {
+      increment(volume_completed);
       volume_confirmed = true;
       if (generation != UINT64_MAX) ++generation;
       return true;
@@ -240,6 +268,7 @@ struct Channel {
     return true;
   }
   void publish(const Snapshot &value, std::uint64_t now = 0) {
+    if (value.volume_known) increment(authoritative_updates);
     // Capability revisions are target-wide. D-009 playback-context updates
     // may advance that revision without changing the volume contract. Keep an
     // admitted volume target across such unrelated revisions, but retain the
@@ -258,13 +287,20 @@ struct Channel {
         value.volume_known && value.volume != latest.volume &&
         value.volume != volume_target;
     const bool cancelled = invalidated || authoritative_divergence;
-    if (invalidated)
-      cancel_volume();
+    if (invalidated) {
+      const auto reason =
+          value.connection != Connection::CONNECTED || !value.session ||
+                  value.session != latest.session
+              ? CancelReason::SESSION
+              : !value.capability_revision ? CancelReason::CAPABILITY
+                                           : CancelReason::AUTHORITY;
+      cancel_volume(reason);
+    }
     else if (authoritative_divergence)
       // A fresh post-result value different from the submitted target is a
       // legitimate external change. Reconcile to it; never overwrite it with
       // a locally accumulated successor based on obsolete authority.
-      cancel_volume();
+      cancel_volume(CancelReason::DIVERGENCE);
     else if (target_reached) {
       volume_outstanding = false;
       volume_confirmed = false;
@@ -316,6 +352,10 @@ struct Channel {
 // Zero-wait enqueue; false means rejected, never retained for later replay.
 bool request(Action);
 void record_encoder_state(std::uint64_t transitions, std::uint64_t detents,
+                          std::uint64_t invalid, std::uint64_t positive,
+                          std::uint64_t negative, std::uint64_t rejected,
+                          std::uint32_t sample_last_ms,
+                          std::uint32_t sample_max_ms,
                           std::int8_t last_delta);
 // Copies the latest coherent value. Owned by caller, valid after later updates.
 bool read(Snapshot &, std::uint64_t &generation);

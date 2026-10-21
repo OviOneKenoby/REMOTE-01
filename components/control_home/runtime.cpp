@@ -24,6 +24,9 @@ bool started = false;
 std::size_t live = 0, allocations = 0, frees = 0, failures = 0;
 bool corrupt = false;
 std::uint64_t encoder_transitions = 0, encoder_detents = 0;
+std::uint64_t encoder_invalid = 0, encoder_positive = 0,
+              encoder_negative = 0, encoder_rejected = 0;
+std::uint32_t encoder_sample_last_ms = 0, encoder_sample_max_ms = 0;
 std::uint8_t encoder_last_delta = 0;
 void observer(void *p, std::size_t bytes, bool allocated) {
   if (xTaskGetCurrentTaskHandle() != owner)
@@ -148,11 +151,15 @@ void task(void *) {
       heap_caps_get_info(&internal,MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT);heap_caps_get_info(&external,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
       unsigned qr;portENTER_CRITICAL(&mux);qr=unsigned(channel.rejected);portEXIT_CRITICAL(&mux);
       auto q=s->boundary.inbox.counts();const auto &c=s->boundary.counts;
-      std::uint64_t transitions,detents;std::uint8_t last_delta;Channel local;
-      portENTER_CRITICAL(&mux);transitions=encoder_transitions;detents=encoder_detents;last_delta=encoder_last_delta;local=channel;portEXIT_CRITICAL(&mux);
+      std::uint64_t transitions,detents,invalid,positive,negative,encoder_rejects;
+      std::uint32_t sample_last_ms,sample_max_ms;std::uint8_t last_delta;Channel local;
+      portENTER_CRITICAL(&mux);transitions=encoder_transitions;detents=encoder_detents;invalid=encoder_invalid;positive=encoder_positive;negative=encoder_negative;encoder_rejects=encoder_rejected;sample_last_ms=encoder_sample_last_ms;sample_max_ms=encoder_sample_max_ms;last_delta=encoder_last_delta;local=channel;portEXIT_CRITICAL(&mux);
       const auto &rd=s->rtcp.diagnostic();const auto &rc=rd.counters;
-      d.values={ds.session,ds.capability_revision,s->dispatches(),control::Memory::used,allocations,frees,failures,corrupt||live!=control::Memory::used,xTaskGetCurrentTaskHandle()==owner,qr,uxTaskGetStackHighWaterMark(nullptr),internal.total_free_bytes,internal.minimum_free_bytes,internal.largest_free_block,external.total_free_bytes,external.minimum_free_bytes,external.largest_free_block,q.posted,q.rejected,q.overflow,q.busy,c.applied,c.stale,c.invalid,c.refused,c.lifecycle,c.discarded,
-        transitions,detents,last_delta,local.volume_attempts,local.volume_accepted,unsigned(local.last_volume_admission),local.latest.connection==Connection::CONNECTED,local.latest.volume_known,local.latest.volume_set,local.latest.volume,local.latest.volume==0,local.latest.volume>=100,local.volume_outstanding};
+      d.values={ds.session,ds.capability_revision,s->dispatches(),control::Memory::used,allocations,frees,failures,corrupt||live!=control::Memory::used,xTaskGetCurrentTaskHandle()==owner,qr,uxTaskGetStackHighWaterMark(nullptr),internal.total_free_bytes,internal.minimum_free_bytes,internal.largest_free_block,external.total_free_bytes,external.minimum_free_bytes,external.largest_free_block,q.posted,q.rejected,q.overflow,q.busy,c.applied,c.stale,c.invalid,c.refused,c.lifecycle,c.discarded};
+      const auto u32=[](std::uint64_t value){return std::uint32_t(value>UINT32_MAX?UINT32_MAX:value);};
+      const auto u16=[](std::uint64_t value){return std::uint16_t(value>UINT16_MAX?UINT16_MAX:value);};
+      d.control_values={u32(transitions),u32(detents),last_delta,u32(local.volume_attempts),u32(local.volume_accepted),unsigned(local.last_volume_admission),local.latest.connection==Connection::CONNECTED,local.latest.volume_known,local.latest.volume_set,local.latest.volume,local.latest.volume==0,local.latest.volume>=100,local.volume_outstanding};
+      d.input_values={u16(invalid),u16(positive),u16(negative),u16(encoder_rejects),u16(sample_last_ms),u16(sample_max_ms),u16(local.volume_queued),u16(local.volume_completed),u16(local.volume_failed),u16(local.volume_cancelled),u16(local.authoritative_updates),u16(local.cancel_session),u16(local.cancel_capability),u16(local.cancel_authority),u16(local.cancel_divergence)};
       const auto q32=[](std::uint32_t value){const auto units=(std::uint64_t(value)+31)/32;return std::uint8_t(units>255?255:units);};
       d.rtcp.set_stage_failure(std::uint8_t(rd.stage),std::uint8_t(rd.failure));d.rtcp.error=std::int16_t(rd.error);d.rtcp.server_hello_bytes=std::uint8_t(rd.server_hello_bytes);d.rtcp.close_reason=std::uint8_t(rd.close_reason);d.rtcp.close_count=std::uint8_t(rd.close_count>255?255:rd.close_count);
       d.rtcp.last_poll_32ms=q32(rd.last_poll_interval_ms);d.rtcp.max_poll_32ms=q32(rd.max_poll_interval_ms);d.rtcp.timeout_elapsed_32ms=q32(rd.last_response_timeout_elapsed_ms);d.rtcp.timeout_state=rd.last_response_timeout_state;d.rtcp.timeout_queued_bytes=rd.last_response_timeout_queued_bytes<0?UINT16_MAX:std::uint16_t(rd.last_response_timeout_queued_bytes>=UINT16_MAX?UINT16_MAX-1:rd.last_response_timeout_queued_bytes);d.rtcp.timeout_unread_count=std::uint8_t(rd.response_timeouts_with_unread>255?255:rd.response_timeouts_with_unread);
@@ -291,10 +298,20 @@ bool request(Action action) {
   return accepted;
 }
 void record_encoder_state(std::uint64_t transitions, std::uint64_t detents,
+                          std::uint64_t invalid, std::uint64_t positive,
+                          std::uint64_t negative, std::uint64_t rejected,
+                          std::uint32_t sample_last_ms,
+                          std::uint32_t sample_max_ms,
                           std::int8_t last_delta) {
   portENTER_CRITICAL(&mux);
   encoder_transitions = transitions;
   encoder_detents = detents;
+  encoder_invalid = invalid;
+  encoder_positive = positive;
+  encoder_negative = negative;
+  encoder_rejected = rejected;
+  encoder_sample_last_ms = sample_last_ms;
+  encoder_sample_max_ms = sample_max_ms;
   encoder_last_delta = last_delta > 0 ? 2 : last_delta < 0 ? 1 : 0;
   portEXIT_CRITICAL(&mux);
 }

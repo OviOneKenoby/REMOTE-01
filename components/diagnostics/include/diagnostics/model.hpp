@@ -26,7 +26,17 @@ struct RtcpDiagnostic {
   std::uint8_t failure()const{return stage_failure>>4;}
 };
 static_assert(sizeof(RtcpDiagnostic)==24);
-struct Core { U64 time=0; std::array<U64,40> values{}; RtcpDiagnostic rtcp; };
+struct Core {
+  U64 time=0;
+  // Existing resource/owner fields retain their 64-bit representation. The
+  // high-rate control diagnostics are saturating boot-local counters.
+  std::array<U64,27> values{};
+  std::array<std::uint32_t,13> control_values{};
+  // Stable order is documented by status_json: six encoder fields followed
+  // by nine volume-pipeline fields. Compact storage preserves the 1 KiB cap.
+  std::array<std::uint16_t,15> input_values{};
+  RtcpDiagnostic rtcp;
+};
 struct ExternalPower {unsigned raw=0,mv=0,state=0,valid=0,calibrated=0;std::int32_t error=0;U64 read_errors=0;};
 struct Power { U64 time=0; std::array<U64,23> values{}; std::uint32_t resets[4][16]{}; ExternalPower external; };
 struct Network { U64 time=0; std::array<U64,16> values{}; char ip[16]{}, ssid[33]{}; std::int8_t rssi=0; bool http_dns_off=false; };

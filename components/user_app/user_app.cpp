@@ -56,6 +56,10 @@ void encoder_task(void *) {
 		if (!(encoder == published)) {
 			published = encoder;
 			control_home::record_encoder_state(encoder.transitions, encoder.detents,
+			                                   encoder.invalid, encoder.positive,
+			                                   encoder.negative, encoder.rejected,
+			                                   encoder.sample_last_ms,
+			                                   encoder.sample_max_ms,
 			                                   encoder.last_delta);
 		}
 		std::uint8_t pressed = 0;
@@ -227,7 +231,7 @@ static void remote01_mockup_create(void)
 	home.title = remote01_single_line(page, "--", &lv_font_montserrat_20, text, 12, 262, 148,
 	                     LV_LABEL_LONG_DOT, LV_TEXT_ALIGN_LEFT);
 	home.subtitle = remote01_single_line(page, "--", &lv_font_montserrat_14, muted, 12, 290, 148,
-	                     LV_LABEL_LONG_CLIP, LV_TEXT_ALIGN_LEFT);
+	                     LV_LABEL_LONG_DOT, LV_TEXT_ALIGN_LEFT);
 	home.playback = remote01_single_line(page, "UNKNOWN", &lv_font_montserrat_12, accent, 12, 316, 148,
 	                                    LV_LABEL_LONG_CLIP, LV_TEXT_ALIGN_LEFT);
 

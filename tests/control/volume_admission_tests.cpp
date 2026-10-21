@@ -325,6 +325,49 @@ bool d009_capability_revision_does_not_drop_accumulated_target() {
         reversal.latest.volume==49);
   return true;
 }
+bool diagnostic_counters_classify_pipeline() {
+  Channel c;c.publish(ready(50),1);
+  CHECK(c.authoritative_updates==1);
+  CHECK(c.request(Action::VOLUME_DOWN,2));
+  Intent first;CHECK(c.pop(first)&&c.volume_queued==1);
+  CHECK(c.resolve(first.token,VolumeResolution::CONFIRMED));
+  CHECK(c.volume_completed==1&&c.volume_failed==0);
+  auto applied=ready(49);c.publish(applied,3);
+  CHECK(c.authoritative_updates==2&&!c.volume_outstanding);
+
+  CHECK(c.request(Action::VOLUME_DOWN,4));
+  Intent failed;CHECK(c.pop(failed));
+  CHECK(c.resolve(failed.token,VolumeResolution::DEFINITE_FAILURE));
+  CHECK(c.volume_failed==1&&c.volume_cancelled==0);
+
+  CHECK(c.request(Action::VOLUME_DOWN,5));
+  Intent session;CHECK(c.pop(session));
+  auto disconnected=applied;disconnected.connection=Connection::UNAVAILABLE;
+  c.publish(disconnected,6);
+  CHECK(c.volume_cancelled==1&&c.cancel_session==1);
+
+  Channel authority;authority.publish(ready(50),1);
+  CHECK(authority.request(Action::VOLUME_DOWN,2));
+  Intent pending;CHECK(authority.pop(pending));
+  auto unavailable=ready(50);unavailable.volume_set=false;
+  authority.publish(unavailable,3);
+  CHECK(authority.volume_cancelled==1&&authority.cancel_authority==1);
+
+  Channel capability;capability.publish(ready(50),1);
+  CHECK(capability.request(Action::VOLUME_DOWN,2));
+  CHECK(capability.pop(pending));
+  auto missing=ready(50);missing.capability_revision=0;
+  capability.publish(missing,3);
+  CHECK(capability.cancel_capability==1);
+
+  Channel external;external.publish(ready(50),1);
+  CHECK(external.request(Action::VOLUME_DOWN,2));
+  CHECK(external.pop(pending));
+  CHECK(external.resolve(pending.token,VolumeResolution::CONFIRMED));
+  auto changed=ready(51);external.publish(changed,3);
+  CHECK(external.volume_cancelled==1&&external.cancel_divergence==1);
+  return true;
+}
 }
 
 int main() {
@@ -336,9 +379,10 @@ int main() {
                           external_change_and_invalidation_do_not_replay(),
                           in_flight_reversal_and_external_authority(),
                           confirmed_result_does_not_discard_newer_accumulated_target(),
-                          d009_capability_revision_does_not_drop_accumulated_target()};
+                          d009_capability_revision_does_not_drop_accumulated_target(),
+                          diagnostic_counters_classify_pipeline()};
   unsigned pass = 0; for (bool result : results) pass += result;
   std::printf("VOLUME ADMISSION SUMMARY PASS=%u FAIL=%u assertions=%u\n",
-              pass, 10 - pass, assertions);
-  return pass == 10 ? 0 : 1;
+              pass, 11 - pass, assertions);
+  return pass == 11 ? 0 : 1;
 }
