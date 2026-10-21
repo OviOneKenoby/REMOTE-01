@@ -1,6 +1,6 @@
 # A-REMOTE-013 / D-009 REMOTE handoff
 
-Status: **SOFTWARE VERIFIED / HARDWARE NOT RUN**  
+Status: **SOFTWARE VERIFIED / HARDWARE NOT RUN**
 Date: 2026-10-21
 
 ## Source and dependency
