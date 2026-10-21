@@ -271,7 +271,7 @@ CapabilityDescriptor MockAdapter::readable(const Id &bid, std::string_view f) {
   c.evidence.push(contract_evidence());
   c.value_schema = single(f == "volume.mute"    ? SchemaNode::Kind::BOOL
                           : f == "volume.level" ? SchemaNode::Kind::RATIONAL
-                          : (f == "media.title" || f == "media.subtitle") ? SchemaNode::Kind::STRING
+                          : (f == "media.title" || f == "media.artist" || f == "media.subtitle") ? SchemaNode::Kind::STRING
                                                 : SchemaNode::Kind::ENUM);
   auto &schema = c.value_schema.value.nodes[0];
   if (f == "volume.level") {

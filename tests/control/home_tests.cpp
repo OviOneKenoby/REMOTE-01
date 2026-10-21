@@ -117,6 +117,10 @@ bool previous() {
         std::strcmp(s.snapshot().title, "Mock Three") == 0);
   CHECK(s.device.mock.last.value.request_id ==
         s.store.records[0].get()->request.request_id);
+  CHECK(s.store.records[0].get()->request.media_context_generation.present &&
+        s.store.records[0].get()->request.preconditions.size() == 1 &&
+        s.store.records[0].get()->request.preconditions[0].field_id.view() ==
+            "playback.state");
   return true;
 }
 bool next() {
@@ -124,6 +128,8 @@ bool next() {
   CHECK(s.handle(intent(s, 1, Action::NEXT), 11));
   CHECK(s.device.mock.dispatches == 1 &&
         std::strcmp(s.snapshot().title, "Mock Two") == 0);
+  CHECK(s.store.records[0].get()->request.media_context_generation.present &&
+        s.store.records[0].get()->request.preconditions.size() == 1);
   return true;
 }
 bool play() {

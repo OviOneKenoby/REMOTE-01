@@ -152,7 +152,8 @@ bool Facade::handle(Intent intent, U64 now, bool accepting) {
       core_.capture(q, device_, target_, op, arguments, now + 3000, now);
   if (capture.error.present)
     return false;
-  if (intent.action == Action::TOGGLE) {
+  if (intent.action == Action::TOGGLE || intent.action == Action::PREVIOUS ||
+      intent.action == Action::NEXT) {
     const auto *o = selected("playback.state");
     if (!o || !q.preconditions.push({Text::literal("playback.state"),
                                      o->observation_id, o->value}))
