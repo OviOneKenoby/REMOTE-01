@@ -1,5 +1,47 @@
 # Changelog
 
+## 2026-10-21 - A-REMOTE-013 D-009 hardware-regression correction
+
+The first D-009 REMOTE application was installed and read back exactly at
+2,575,168 bytes with SHA-256
+`d9c13a6ce030b9ab2a4db02fad1c5afcf80eee364f0046665a9dcb1652698d76`.
+Hardware confirmed authenticated TUNER connection, station and combined ICY
+StreamTitle updates, and HOME Play/Pause. It also exposed three REMOTE
+regressions: rapid encoder input lost accumulated volume targets, every volume
+request temporarily dimmed the playback controls, and the station/StreamTitle
+labels were presented in the opposite visual positions.
+
+The bounded correction at source
+`5b3c7c08d06fe0395409090221594f9e5bbd8ace` preserves an admitted volume
+target across unrelated target-wide D-009 capability revisions while retaining
+connection, session, authority, external-divergence and no-replay fences.
+Queued volume intent is refreshed to the current capability revision before it
+crosses the owner boundary. RTCP pending state no longer masquerades as loss
+of fresh playback capability, and volume/playback snapshot observations are
+published independently. The existing HOME widgets now present station name
+in the large upper label and the combined StreamTitle in the smaller lower
+label; CCM field semantics, geometry and generated UI resources are unchanged.
+
+Focused verification passed: volume admission 10/10 with 267 assertions,
+HOME/Core 42/42 with 3,565 assertions, RTCP D-009 8/8 with 44 assertions, and
+D-009 source-boundary policy 14/14. This includes rapid in-flight accumulation,
+successor delivery, direction reversal, external divergence, session/lifecycle
+cancellation, pending playback presentation, independent snapshot admission,
+metadata mapping, and existing malformed/over-limit UTF-8 handling. The single
+authorized `remote01` production build passed.
+
+The private corrected application is 2,575,408 bytes with SHA-256
+`250f55bd4ce0edab9c77e59b227c2c7c9d5b3bfbd2780795dc3dd654203b80a7`;
+the ELF SHA-256 is
+`1e55ee1e6f06ab9ef38a20a7f05b5f53feb2e7e49ec93375f077ba070b2da508`.
+Static RAM remains 56,356 bytes and 3 MiB slot headroom is 570,320 bytes.
+Relative to the installed D-009 candidate this is +240 application bytes,
+unchanged static RAM, and -240 bytes headroom. Hardware retesting of the
+corrected application remains required; it has not been flashed or claimed as
+hardware validated. The installed candidate and the accepted A-REMOTE-012
+rollback (`b6053c04c03114a24a59f178da4eb03d4bada77faded43b6009667579c21d5da`)
+remain preserved.
+
 ## 2026-10-21 - A-REMOTE-013 D-009 REMOTE software candidate
 
 Implemented the frozen RTCP/1 D-009 playback and now-playing profile on top of
