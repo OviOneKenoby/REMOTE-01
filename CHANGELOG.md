@@ -1,5 +1,46 @@
 # Changelog
 
+## 2026-10-21 - A-REMOTE-013 D-009 hardware-regression round 2
+
+Owner testing of the first correction superseded its encoder conclusion. Rapid
+rotation remained intermittent: many physical detents sometimes produced only
+one or two displayed volume steps. Direction reversal, Play/Pause availability,
+Play/Pause execution, and station/StreamTitle assignment passed. Long combined
+StreamTitle text still exceeded the physical presentation boundary.
+
+The encoder decoder, GPIO configuration, 2 ms sampling task, and command path
+are unchanged from the owner-accepted A-REMOTE-012 implementation. Existing
+diagnostics could count sampled transitions, decoded detents, and admitted
+intents, but could not distinguish skipped/invalid quadrature transitions,
+scheduler gaps, local admission rejection, or later command cancellation. No
+new decoder or CCM behavior change is justified by the available evidence.
+Bounded diagnostics now expose invalid transitions, direction counts, rejected
+emissions, last/maximum sample intervals, and the queued/completed/failed/
+cancelled/authority volume pipeline. The counters allocate no hot-path memory,
+perform no per-transition logging, and retain the 1,024-byte snapshot limit.
+
+The lower HOME metadata widget used clip-only long-text handling while the
+upper station widget used bounded ellipsis. The existing 148-pixel lower widget
+now uses `LV_LABEL_LONG_DOT`; its coordinates, font, assignment, carousel,
+artwork, navigation, buffers, and validated UTF-8 ingestion remain unchanged.
+
+Focused verification passed: encoder 6/6 with 30 assertions; volume admission
+11/11 with 290 assertions; diagnostics 9/9 with 9,096 assertions and 1,000
+cycles; HOME 42/42 with 3,565 assertions; ingress/UTF-8 18/18 with 22,189
+assertions and 1,000 stress iterations; D-009 policy 15/15; metadata UI bounds
+8/8. One `remote01` production build passed at source
+`434b1359ba78ebe517f7dfe47423067a99b745f8`.
+
+The private diagnostic candidate is 2,577,504 bytes with SHA-256
+`8c529cc5c16ca3e0a3487f02b975187285eddcdd348ba7ae703d5ccc93b2b4c2`;
+ELF SHA-256 is
+`978a36934c5106d01a7d61870ec92cf355fec6222f8d2556fd9c18b82ea35d7e`.
+Static RAM is 56,460 bytes, the diagnostics snapshot is 1,008 bytes, and 3 MiB
+slot headroom is 568,224 bytes. This is +2,096 application bytes, +104 static
+RAM bytes, and -2,096 bytes headroom versus the installed correction. Hardware
+installation and reproduction remain separately authorized and pending; the
+encoder regression is not declared solved.
+
 ## 2026-10-21 - A-REMOTE-013 D-009 hardware-regression correction
 
 The first D-009 REMOTE application was installed and read back exactly at
