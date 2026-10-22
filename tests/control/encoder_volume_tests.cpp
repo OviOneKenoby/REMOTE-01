@@ -153,6 +153,60 @@ bool failure_sources_are_distinct() {
   CHECK(stale.mock.dispatches == 0);
   return true;
 }
+bool transport_busy_retains_coalesced_target() {
+  Channel c; Snapshot s; s.connection = Connection::CONNECTED;
+  s.session = s.capability_revision = 1; s.volume_known = s.volume_set = true;
+  s.volume = 70; c.publish(s);
+
+  // The first detent crosses the owner boundary. Nine more arrive while its
+  // correlated result and authoritative snapshot are still outstanding.
+  CHECK(c.request(Action::VOLUME_UP, 1));
+  Intent first; CHECK(c.pop(first, true) && first.volume == 71);
+  for (unsigned n = 0; n < 9; ++n)
+    CHECK(c.request(Action::VOLUME_UP, 2 + n));
+  CHECK(c.resolve(first.token, VolumeResolution::CONFIRMED));
+  s.volume = 71; c.publish(s, 20);
+
+  // An RTCP metadata/snapshot exchange may own the record lane here. The
+  // successor remains queued, rather than becoming a definite failure.
+  Intent successor;
+  CHECK(!c.pop(successor, false));
+  CHECK(c.count == 1 && c.volume_failed == 0 && c.view().desired_volume == 80);
+  CHECK(c.pop(successor, true) && successor.volume == 80);
+  CHECK(c.resolve(successor.token, VolumeResolution::CONFIRMED));
+  s.volume = 80; c.publish(s, 30);
+  CHECK(c.view().volume == 80 && !c.view().volume_pending);
+  CHECK(c.volume_completed == 2 && c.volume_failed == 0);
+
+  Channel d; s.volume = 80; d.publish(s);
+  CHECK(d.request(Action::VOLUME_DOWN, 31));
+  CHECK(d.pop(first, true) && first.volume == 79);
+  for (unsigned n = 0; n < 9; ++n)
+    CHECK(d.request(Action::VOLUME_DOWN, 32 + n));
+  CHECK(d.resolve(first.token, VolumeResolution::CONFIRMED));
+  s.volume = 79; d.publish(s, 42);
+  CHECK(!d.pop(successor, false));
+  CHECK(d.pop(successor, true) && successor.volume == 70);
+  CHECK(d.resolve(successor.token, VolumeResolution::CONFIRMED));
+  s.volume = 70; d.publish(s, 50);
+  CHECK(d.view().volume == 70 && d.volume_completed == 2 &&
+        d.volume_failed == 0);
+
+  // Rapid reversal preserves the algebraic target while the lane is busy.
+  Channel r; s.volume = 70; r.publish(s);
+  CHECK(r.request(Action::VOLUME_UP, 60));
+  CHECK(r.pop(first, true) && first.volume == 71);
+  for (unsigned n = 0; n < 4; ++n) CHECK(r.request(Action::VOLUME_UP, 61 + n));
+  for (unsigned n = 0; n < 2; ++n) CHECK(r.request(Action::VOLUME_DOWN, 65 + n));
+  CHECK(r.resolve(first.token, VolumeResolution::CONFIRMED));
+  s.volume = 71; r.publish(s, 70);
+  CHECK(!r.pop(successor, false));
+  CHECK(r.pop(successor, true) && successor.volume == 73);
+  CHECK(r.resolve(successor.token, VolumeResolution::CONFIRMED));
+  s.volume = 73; r.publish(s, 80);
+  CHECK(r.view().volume == 73 && r.volume_failed == 0);
+  return true;
+}
 }
 int main() {
   std::setbuf(stdout, nullptr);
@@ -162,7 +216,8 @@ int main() {
       {"no_boot_command", no_boot_command},
       {"bounded_pipeline_diagnostics", bounded_pipeline_diagnostics},
       {"same_session_capability_revision_race", same_session_capability_revision_race},
-      {"failure_sources_are_distinct", failure_sources_are_distinct}};
+      {"failure_sources_are_distinct", failure_sources_are_distinct},
+      {"transport_busy_retains_coalesced_target", transport_busy_retains_coalesced_target}};
   unsigned pass = 0;
   for (auto test : tests) { std::printf("RUN %s\n", test.name); if (!test.run()) return 1; ++pass; }
   std::printf("ENCODER VOLUME SUMMARY PASS=%u FAIL=0 assertions=%u\n", pass, assertions);

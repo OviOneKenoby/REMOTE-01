@@ -36,7 +36,8 @@ public:
   control::Text version()const override{return control::Text::literal("rtcp/1+ccm/1.1.0");}
   void dispatch(const control::Dispatch&,control::AdapterSink&)override;
   bool install(control::Core&,control::ingress::Boundary&,const control::Id&,const control::Id&,const control::Id&,control::U64);
-  bool poll(control::U64);
+  bool poll(control::U64,bool command_waiting=false);
+  bool command_ready()const{return client_.command_ready();}
   bool pending()const{return pending_.present;}
   std::uint64_t dispatches()const{return dispatches_;}
 };

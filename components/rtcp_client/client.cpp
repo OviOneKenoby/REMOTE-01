@@ -47,7 +47,7 @@ case Awaited::none:break;
 if(e==Event::none){diagnostic_.fail(DiagnosticFailure::identity);return Event::disconnected;}awaiting_=false;awaited_=Awaited::none;deadline_=0;rx_used_=0;rx_need_=28;if((e==Event::identity||e==Event::capabilities)&&!queue_next()){diagnostic_.fail(DiagnosticFailure::send);return Event::disconnected;}if(e==Event::capabilities)diagnostic_.stage=DiagnosticStage::complete;return e;}
 bool Client::set_volume(std::uint64_t id,std::uint32_t n,std::uint32_t d){if(state_!=State::ready||pending_request_||awaiting_)return false;std::uint8_t p[17]{};auto z=wire::volume_set(id,n,d,p);if(!z||!send_plain(p,z))return false;pending_request_=id;awaiting_=true;awaited_=Awaited::result;return true;}
 bool Client::playback(std::uint64_t id,wire::PlaybackOperation operation,std::uint8_t expected,std::uint64_t generation){if(state_!=State::ready||pending_request_||awaiting_||!capabilities_.supports(operation))return false;std::uint8_t p[19]{};auto z=wire::playback_command(id,operation,expected,generation,p);if(!z||!send_plain(p,z))return false;pending_request_=id;awaiting_=true;awaited_=Awaited::result;return true;}
-Client::Event Client::poll(std::uint64_t now){
+Client::Event Client::poll(std::uint64_t now,bool command_waiting){
   diagnostic_.polled(now);
   if(state_==State::disabled)return Event::none;
   network_manager::Status net{};
@@ -136,11 +136,11 @@ Client::Event Client::poll(std::uint64_t now){
   if(state_>=State::authenticated){
     auto e=accept_record();
     if(e==Event::disconnected){close(close_reason(diagnostic_.failure),true,diagnostic_.error);return e;}
-    if(state_==State::ready&&!pending_request_&&!awaiting_&&now_playing_due_&&!tx_used_){
+    if(!command_waiting&&state_==State::ready&&!pending_request_&&!awaiting_&&now_playing_due_&&!tx_used_){
       std::uint8_t p[1];auto z=wire::now_playing_request(p);
       if(!send_plain(p,z)){diagnostic_.fail(DiagnosticFailure::send);close(CloseReason::send_failed);return Event::disconnected;}
       awaiting_=true;awaited_=Awaited::now_playing;now_playing_due_=false;
-    }else if(state_==State::ready&&!pending_request_&&!awaiting_&&now>=snapshot_at_&&!tx_used_){
+    }else if(!command_waiting&&state_==State::ready&&!pending_request_&&!awaiting_&&now>=snapshot_at_&&!tx_used_){
       std::uint8_t p[1];auto z=wire::snapshot_request(p);
       if(!send_plain(p,z)){diagnostic_.fail(DiagnosticFailure::send);close(CloseReason::send_failed);return Event::disconnected;}
       awaiting_=true;awaited_=Awaited::snapshot;snapshot_at_=now+1000;

@@ -259,8 +259,8 @@ struct Channel {
     }
     return false;
   }
-  bool pop(Intent &out) {
-    if (!count)
+  bool pop(Intent &out, bool command_ready = true) {
+    if (!command_ready || !count)
       return false;
     out = queue[head];
     head = (head + 1) % capacity;

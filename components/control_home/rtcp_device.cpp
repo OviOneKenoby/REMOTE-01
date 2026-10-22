@@ -206,8 +206,8 @@ void RtcpDevice::dispatch(const Dispatch &dispatch, AdapterSink &sink) {
   sink.publish(result); pending_ = result;
 }
 
-bool RtcpDevice::poll(U64 now) {
-  const auto event = client_.poll(now);
+bool RtcpDevice::poll(U64 now, bool command_waiting) {
+  const auto event = client_.poll(now, command_waiting);
   if (event == rtcp_client::Client::Event::none) return true;
   if (event == rtcp_client::Client::Event::connected) {
     media_fence_.reset(); pending_ = {};

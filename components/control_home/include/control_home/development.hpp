@@ -83,7 +83,10 @@ struct Session {
   Snapshot snapshot() const {
     return present_snapshot(facade.snapshot(), pending(), remote_mode);
   }
-  bool poll(control::U64 now) { return !remote_mode || remote.poll(now); }
+  bool poll(control::U64 now, bool command_waiting = false) {
+    return !remote_mode || remote.poll(now, command_waiting);
+  }
+  bool command_ready() const { return !remote_mode || remote.command_ready(); }
   void suspend() { if (remote_mode) rtcp.suspend(); }
   bool pending() const {
     return remote_mode ? remote.pending() : device.pending;

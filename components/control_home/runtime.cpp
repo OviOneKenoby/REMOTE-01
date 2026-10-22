@@ -191,7 +191,11 @@ void task(void *) {
                static_cast<unsigned long long>(s->snapshot().session));
     }
     s->core.tick(time);
-    if (!s->poll(time))
+    bool command_waiting;
+    portENTER_CRITICAL(&mux);
+    command_waiting = channel.count != 0;
+    portEXIT_CRITICAL(&mux);
+    if (!s->poll(time, command_waiting))
       ESP_LOGW("A011_RTCP", "adapter_event_rejected=1");
     // At most one external inbox event per turn, on the same Core owner.
     s->boundary.process_one(time);
@@ -250,7 +254,10 @@ void task(void *) {
     Intent intent;
     bool present;
     portENTER_CRITICAL(&mux);
-    present = channel.pop(intent);
+    // Read-only RTCP snapshot/metadata exchanges temporarily occupy the
+    // single authenticated record lane. Keep the bounded intent queued until
+    // that lane is free instead of misclassifying it as a command failure.
+    present = channel.pop(intent, s->command_ready());
     portEXIT_CRITICAL(&mux);
     if (present) {
       bool accepted = s->handle(intent, time);

@@ -16,10 +16,11 @@ public:
   enum class Event{none,connected,disconnected,identity,capabilities,snapshot,now_playing,result};
   bool initialize();
   void suspend();
-  Event poll(std::uint64_t now_ms);
+  Event poll(std::uint64_t now_ms,bool command_waiting=false);
   bool set_volume(std::uint64_t request,std::uint32_t numerator,std::uint32_t denominator);
   bool playback(std::uint64_t request,wire::PlaybackOperation,std::uint8_t expected_state,
                 std::uint64_t media_generation);
+  bool command_ready()const{return state_==State::ready&&!pending_request_&&!awaiting_&&!tx_used_;}
   State state()const{return state_;} const wire::Identity&identity()const{return identity_;}
   const wire::Capabilities&capabilities()const{return capabilities_;}
   const wire::Snapshot&snapshot()const{return snapshot_;} const wire::Result&result()const{return result_;}
