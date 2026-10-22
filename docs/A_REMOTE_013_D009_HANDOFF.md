@@ -1,7 +1,7 @@
 # A-REMOTE-013 / D-009 REMOTE handoff
 
-Status: **ROUND 2 DIAGNOSTIC CANDIDATE SOFTWARE VERIFIED / HARDWARE PENDING**
-Date: 2026-10-21
+Status: **ROUND 3 CORRECTION SOFTWARE VERIFIED / HARDWARE PENDING**
+Date: 2026-10-22
 
 ## Source and dependency
 
@@ -12,6 +12,8 @@ Date: 2026-10-21
   `5b3c7c08d06fe0395409090221594f9e5bbd8ace`
 - Round 2 diagnostic/overflow source commit:
   `434b1359ba78ebe517f7dfe47423067a99b745f8`
+- Round 3 volume-admission/metadata-scroll source commit:
+  `3a2fda5887df8671467cf36917f607e6d1b69b11`
 - Stacked base: A-REMOTE-014 discovery branch
   `remote/a-remote-014-mdns-discovery` at
   `d32945b`
@@ -58,9 +60,43 @@ volume/playback presentation passed. Round 2 owner testing then found:
 These findings supersede the earlier encoder-resolution claim. They do not
 reopen the listed PASS behavior.
 
-## Round 2 evidence and changes
+## Round 3 demonstrated cause and correction
 
-### Encoder: root cause not yet confirmed
+Round 2 hardware evidence recorded 26 queued volume targets, 14 correlated
+completions, 12 definite failures, and zero cancellations. All 14 dispatched
+RTCP operations completed. The 12 additional failures therefore occurred
+locally before RTCP dispatch; they were not authenticated TUNER refusals.
+
+Source tracing and a deterministic host reproduction demonstrated the local
+race. An unrelated D-009 playback-context update can advance the target-wide
+capability revision after `Channel::pop()` and before `Facade::handle()`. The
+old Facade rejected that queued absolute volume target before re-capturing the
+current volume authority. The correction permits this revalidation only for a
+same-session absolute volume intent. It captures the current volume operation,
+fresh authoritative observation and precondition through Core before submit.
+All non-volume operations retain exact capability-revision matching. Session
+replacement, missing authority, Core admission, authenticated target refusal,
+deadlines, result correlation, one-command-in-flight behavior and no automatic
+retry remain enforced.
+
+The event ring now records a bounded volume-failure cause for local validation,
+capture/precondition, Core admission, authenticated target refusal, expiration,
+or guaranteed non-execution. No payload, secret, dynamic allocation, or
+per-transition log was added. `diagnostics::Snapshots` remains 1,008 bytes and
+continues to satisfy its 1,024-byte guard; added snapshot storage overhead is
+zero bytes.
+
+Both existing 148-pixel HOME metadata labels now use LVGL's clipped,
+bidirectional scroll mode. Speed is 25 pixels/second, with 1,000 ms initial and
+endpoint delays. New text resets to its first character. Scrolling is stopped
+outside HOME and while display commands are unavailable, so navigation and
+sleep/display-idle lifecycle do not leave background label animations. Widget
+identity, geometry, fonts, station/StreamTitle assignment, buffers, UTF-8
+validation, touch behavior and generated UI resources are unchanged.
+
+## Historical Round 2 evidence and changes (superseded where noted)
+
+### Encoder: Round 2 position before counter capture
 
 The physical GPIO2/GPIO5 sampling, quadrature model, 2 ms input task, HOME
 gating, Channel accumulation, single-in-flight RTCP path, and authoritative
@@ -71,9 +107,12 @@ sampled, decoded, and admitted detent across bursts, direction changes,
 capability revision changes, results, snapshots, failures, disconnect and
 sleep/wake fences.
 
-The installed evidence does not show whether failing physical turns were
-sampled, invalid, decoded, admitted, queued, or cancelled. Therefore no
-decoder, scheduling, CCM, RTCP, timeout, or retry behavior was changed.
+At that checkpoint, the installed evidence did not show whether failing
+physical turns were sampled, invalid, decoded, admitted, queued, or cancelled.
+Therefore no decoder, scheduling, CCM, RTCP, timeout, or retry behavior was
+changed.
+Round 3 counters later demonstrated the local pre-dispatch boundary described
+above; the decoder and RTCP protocol remain unchanged.
 
 The existing `/api/status` diagnostic now adds two fixed-order arrays:
 
@@ -92,15 +131,16 @@ use fixed storage, allocate nothing, block nowhere in the encoder path, and do
 not log per transition. `diagnostics::Snapshots` is 1,008 bytes, below the
 existing 1,024-byte limit.
 
-### StreamTitle overflow: corrected in presentation
+### StreamTitle overflow: Round 2 presentation change
 
 The lower 148-pixel StreamTitle label used `LV_LABEL_LONG_CLIP`, unlike the
 upper station label's bounded ellipsis mode. It now uses
 `LV_LABEL_LONG_DOT`. The label remains at x=12, width=148 on the 172-pixel
 screen, so its allocated right edge is x=160. Station/StreamTitle assignment,
 fonts, coordinates, buffers, UTF-8 validation, carousel, artwork and navigation
-are unchanged. Source/font-bound checks pass; physical display verification is
-still required.
+are unchanged. Round 3 supersedes ellipsis with the bounded bidirectional
+scrolling policy documented above. Physical display verification remains
+required.
 
 ## Verified regression causes and corrections
 
@@ -170,6 +210,20 @@ Round 2 focused verification:
 | HOME metadata physical bounds policy | 8/8 PASS |
 | Production environment | `remote01` PASS |
 
+Round 3 focused verification:
+
+| Check | Result |
+|---|---:|
+| Encoder routing and Facade revalidation | 8/8 PASS, 47 assertions |
+| Volume admission/coalescing/lifecycle | 11/11 PASS, 290 assertions |
+| Diagnostics schema/storage | 9/9 PASS, 9,096 assertions, 1,000 cycles |
+| HOME/Core integration | 42/42 PASS, 3,565 assertions |
+| RTCP D-009 codec/capability regression | 8/8 PASS, 44 assertions |
+| D-009 source policy | 15/15 PASS |
+| HOME metadata scrolling/lifecycle policy | 15/15 PASS |
+| UI volume binding regression | 1/1 PASS, 11 assertions |
+| Production environment | `remote01` PASS |
+
 No previously passing pairing or TUNER suites were repeated because their
 inputs did not change.
 
@@ -206,15 +260,37 @@ device data remain private and are not part of the public branch.
 - 3 MiB application-slot headroom: 568,224 bytes
 - Diagnostics snapshot: 1,008 bytes of the 1,024-byte limit
 
-Relative to the currently installed 2,575,408-byte correction, this is +2,096
-application bytes, +104 static RAM bytes, and -2,096 bytes headroom. The
-installed firmware remains the immediate rollback baseline with SHA-256
-`250f55bd4ce0edab9c77e59b227c2c7c9d5b3bfbd2780795dc3dd654203b80a7`.
+This Round 2 application was installed and independently read back before the
+owner collected the four counter snapshots. Relative to the earlier
+2,575,408-byte correction it is +2,096 application bytes, +104 static RAM
+bytes, and -2,096 bytes headroom. It remains the installed rollback baseline;
+the earlier correction and accepted A-REMOTE-012 application are also
+preserved.
+
+## Private Round 3 candidate identity
+
+- Source: `3a2fda5887df8671467cf36917f607e6d1b69b11`
+- Application size: 2,578,128 bytes
+- Application SHA-256:
+  `6ba73c80b774727cc137f5606b408f6cfc3ff0ea486ef879869453a5debb0383`
+- ELF SHA-256:
+  `e85165c88f1ec3410c1e9f304a4cd224a466bb3f95225045a2aeccb37d074ead`
+- Static RAM: 56,460 bytes
+- 3 MiB application-slot headroom: 567,600 bytes
+- Diagnostics snapshot: 1,008 bytes of the 1,024-byte limit
+
+Relative to the preserved Round 2 candidate, this is +624 application bytes,
+unchanged static RAM, and -624 bytes of slot headroom. The Round 2 binary and
+its SHA-256
+`8c529cc5c16ca3e0a3487f02b975187285eddcdd348ba7ae703d5ccc93b2b4c2`
+remain the immediate diagnostic rollback reference. All application images,
+ELFs, backups, credentials, pairing material and private device data remain
+private and are not part of the public branch.
 
 ## Hardware validation still required
 
 1. Reverify retained local and separate-storage rollback backups and exact
-   REMOTE identity, install only the Round 2 diagnostic application at the
+   REMOTE identity, install only the Round 3 application at the
    verified application offset, and independently hash its exact readback. The
    compatible TUNER D-009/discovery firmware is already installed and must not
    be rewritten for this correction.
@@ -226,9 +302,10 @@ installed firmware remains the immediate rollback baseline with SHA-256
    admission, dispatches, authoritative volume, and in-flight state. This
    distinguishes sampling/decoder loss from admission, queue, result or
    cancellation loss without per-transition logging.
-4. Display long ASCII and multibyte StreamTitle values and confirm the smaller
-   lower label ellipsizes inside the HOME content boundary. Malformed metadata
-   must remain rejected.
+4. Display long ASCII and multibyte station/StreamTitle values and confirm each
+   existing label scrolls back and forth within its HOME boundary, pauses at
+   both endpoints, restarts on new metadata, and stops across navigation and
+   sleep/display-idle transitions. Malformed metadata must remain rejected.
 5. Verify an actual station/source change still invalidates stale playback and
    metadata, and verify disconnect and SYSTEM_SLEEP/wake cancel pending local
    volume targets without replay.
@@ -238,4 +315,4 @@ installed firmware remains the immediate rollback baseline with SHA-256
 
 Rollback must use the preserved installed D-009 application, accepted
 A-REMOTE-012 application, or complete-flash backup for the affected device.
-No Round 2 flash, hardware access, or persistent mutation was performed.
+No Round 3 flash, hardware access, or persistent mutation was performed.

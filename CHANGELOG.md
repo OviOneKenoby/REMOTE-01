@@ -1,5 +1,50 @@
 # Changelog
 
+## 2026-10-22 - A-REMOTE-013 D-009 hardware-regression round 3
+
+Round 2 hardware counters resolved the remaining volume-loss boundary. Across
+26 queued targets, all 14 requests that crossed the RTCP boundary completed;
+the other 12 failed locally before dispatch. No authenticated TUNER refusal or
+volume cancellation was recorded. Source tracing reproduced a race in which an
+unrelated D-009 playback-context update advanced the target-wide capability
+revision after `Channel::pop()` but before `Facade::handle()`. The Facade then
+rejected a still-valid absolute volume target even though the authenticated
+session and fresh volume authority were unchanged.
+
+The Facade now revalidates same-session absolute volume targets against current
+volume authority and the current observation precondition. Non-volume commands
+retain exact capability-revision matching, and session fencing, strict Core
+admission, authenticated target refusals, one-command-in-flight behavior, and
+no automatic retry are unchanged. A bounded event detail distinguishes local
+admission/capture failures from authenticated target refusals and later
+terminal failures without enlarging `diagnostics::Snapshots`; added snapshot
+storage overhead is zero bytes.
+
+The existing 148-pixel station and StreamTitle labels now use LVGL's clipped,
+bidirectional `LV_LABEL_LONG_SCROLL` mode at 25 pixels/second with one-second
+endpoint pauses. Replacement metadata restarts at the first character, and
+scrolling stops outside HOME and while display commands are unavailable. The
+existing widgets, fonts, coordinates, assignment, buffers, UTF-8 validation,
+touch behavior, and carousel remain unchanged.
+
+Focused verification passed: encoder/Facade 8/8 with 47 assertions; volume
+admission 11/11 with 290 assertions; diagnostics 9/9 with 9,096 assertions and
+1,000 cycles; HOME/Core 42/42 with 3,565 assertions; RTCP D-009 8/8 with 44
+assertions; D-009 policy 15/15; HOME metadata policy 15/15; and UI volume
+binding 1/1 with 11 assertions. The single `remote01` production build passed
+at source `3a2fda5887df8671467cf36917f607e6d1b69b11`.
+
+The private Round 3 application is 2,578,128 bytes with SHA-256
+`6ba73c80b774727cc137f5606b408f6cfc3ff0ea486ef879869453a5debb0383`;
+ELF SHA-256 is
+`e85165c88f1ec3410c1e9f304a4cd224a466bb3f95225045a2aeccb37d074ead`.
+Static RAM is 56,460 bytes and the 3 MiB application slot retains 567,600
+bytes. This is +624 application bytes and -624 bytes of headroom versus the
+preserved Round 2 candidate, with unchanged static RAM. No hardware access or
+flash operation occurred. Hardware verification of rapid volume input,
+metadata scrolling, lifecycle behavior, and the remaining D-009 functions is
+still required; no hardware PASS is claimed.
+
 ## 2026-10-21 - A-REMOTE-013 D-009 hardware-regression round 2
 
 Owner testing of the first correction superseded its encoder conclusion. Rapid
