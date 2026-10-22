@@ -1,5 +1,52 @@
 # Changelog
 
+## 2026-10-22 - A-REMOTE-013 D-009 hardware-regression round 4
+
+Round 3 hardware testing decoded and admitted all ten rapid encoder detents,
+but completed only four volume operations; six ended as definite failures and
+the authoritative volume moved only four points. The read-only diagnostic
+event ring retained only `VOLUME_FAILURE` detail 13
+(`GUARANTEED_NO_EXECUTION`) for this failure class. No queue rejection,
+session/capability/authority/divergence cancellation, authenticated TUNER
+refusal, or RTCP session loss accompanied the rapid-test delta.
+
+Source tracing demonstrated the remaining deterministic race. After an
+authoritative snapshot reached one coalesced target, `Channel::publish()`
+queued the accumulated successor. Before the owner popped that successor,
+`Client::poll()` could occupy the single authenticated record lane with its
+automatic snapshot or D-009 now-playing request. `RtcpDevice::dispatch()` then
+called `Client::set_volume()` while `awaiting_` was true, received `false`, and
+reported `RTCP_NOT_SENT`; Core correctly closed the attempt as failed with
+guaranteed no execution. The operation therefore failed locally before any
+volume command reached TUNER.
+
+The owner loop now retains its bounded intent while the RTCP client is not
+command-ready. A waiting control also suppresses creation of another
+background snapshot/metadata request until the current authenticated exchange
+finishes, after which the original intent crosses the existing Facade/Core
+admission path once. This is pre-dispatch scheduling, not command retry. The
+one-command-in-flight invariant, three-second command deadline after capture,
+session and authority fences, disconnect/sleep cancellation, external-change
+reconciliation, correlated results, and RTCP wire/security behavior are
+unchanged.
+
+Focused verification passed: encoder/Facade/transport scheduling 9/9 with 94
+assertions; volume admission and lifecycle fencing 11/11 with 290 assertions;
+D-009 policy 15/15; and HOME metadata policy 15/15. The single `remote01`
+production build passed at source
+`bd15cc8906c244152ccadc1a6734bb9c1d4bf998`.
+
+The private Round 4 application is 2,578,304 bytes with SHA-256
+`1fa0432b8785bbfce8aecb22e3f5b747080898fdfd850eb4d93ac965b49a30b7`;
+ELF SHA-256 is
+`7fe9aaaebd2b61dddfc3a414fd41f89fc8f89d1500ae3bcef9ee7b9425cd9cd7`.
+Static RAM remains 56,460 bytes, the 3 MiB application slot retains 567,424
+bytes, `diagnostics::Snapshots` remains 1,008 bytes, and total diagnostics
+storage remains 8,176 bytes. No hardware access or flash operation occurred.
+The owner-verified HOME scrolling results remain PASS and that source was not
+changed. Rapid-volume hardware acceptance of this candidate remains pending;
+no hardware fix is claimed.
+
 ## 2026-10-22 - A-REMOTE-013 D-009 hardware-regression round 3
 
 Round 2 hardware counters resolved the remaining volume-loss boundary. Across

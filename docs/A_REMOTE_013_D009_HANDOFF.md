@@ -1,6 +1,6 @@
 # A-REMOTE-013 / D-009 REMOTE handoff
 
-Status: **ROUND 3 CORRECTION SOFTWARE VERIFIED / HARDWARE PENDING**
+Status: **ROUND 4 CORRECTION SOFTWARE VERIFIED / HARDWARE PENDING**
 Date: 2026-10-22
 
 ## Source and dependency
@@ -14,6 +14,8 @@ Date: 2026-10-22
   `434b1359ba78ebe517f7dfe47423067a99b745f8`
 - Round 3 volume-admission/metadata-scroll source commit:
   `3a2fda5887df8671467cf36917f607e6d1b69b11`
+- Round 4 RTCP command-readiness source commit:
+  `bd15cc8906c244152ccadc1a6734bb9c1d4bf998`
 - Stacked base: A-REMOTE-014 discovery branch
   `remote/a-remote-014-mdns-discovery` at
   `d32945b`
@@ -27,6 +29,83 @@ The coordination repository's earlier task text stating that REMOTE D-009 was
 not authorized or not started is historical. The owner subsequently authorized
 this private implementation, focused verification, one production build, and
 preparation of a reviewable PR. It does not establish hardware acceptance.
+
+## Round 4 rapid-volume failure and correction
+
+The Round 3 application was installed and independently read back at
+2,578,128 bytes with SHA-256
+`6ba73c80b774727cc137f5606b408f6cfc3ff0ea486ef879869453a5debb0383`.
+Owner testing verified HOME scrolling: the station scrolls when long, a short
+StreamTitle remains static, and a long StreamTitle scrolls. That work remains
+hardware PASS and was not changed in Round 4.
+
+Ten slow intended detents produced ten accepted intents, ten completed volume
+operations, zero failures and the expected 80 to 70 authoritative result. Ten
+rapid detents in the opposite direction produced ten decoded and accepted
+intents, but only four completions and six definite failures, ending at 74
+instead of 80. Session 4 and capability revision 63 were unchanged at the
+captured boundaries; queue rejection and every cancellation counter remained
+zero.
+
+The installed read-only event ring was retrieved through
+`/api/events?after=<cursor>`. Its retained volume-failure records all carried
+detail 13, `GUARANTEED_NO_EXECUTION`; no retained event classified an
+authenticated target refusal. `/api/status` exposes only aggregate volume
+counters, so the event endpoint is required for the bounded cause detail. A
+safe retrieval sequence is:
+
+```powershell
+$remoteIp = '<verified-REMOTE-LAN-IP>'
+$status = Invoke-RestMethod "http://$remoteIp/api/status" -TimeoutSec 3
+$cursor = [uint64]0
+$events = @()
+do {
+  $page = Invoke-RestMethod "http://$remoteIp/api/events?after=$cursor" -TimeoutSec 3
+  $events += $page.events
+  $previous = $cursor
+  $cursor = [uint64]$page.after
+} while ($cursor -ne $previous -and $cursor -lt ([uint64]$page.next - 1))
+$status.core | Select-Object session, capability_revision, dispatches, volume_diag
+$events | Where-Object { $_[2] -eq 10 } |
+  ForEach-Object { [pscustomobject]@{sequence=$_[0]; uptime_ms=$_[1]; event=$_[2]; detail=$_[3]} }
+```
+
+The causal sequence is source-proven. `Channel::publish()` queues the
+accumulated absolute successor when the prior authoritative target arrives.
+The owner loop calls `Client::poll()` before popping that successor. RTCP can
+then start a read-only snapshot or D-009 now-playing exchange. With `awaiting_`
+set, `Client::set_volume()` refuses the simultaneous command, the adapter
+reports `RTCP_NOT_SENT`, and Core records a failed attempt with guaranteed no
+execution. The six failures were REMOTE-local pre-transmission failures; they
+were not TUNER refusals and were not legitimate target supersession.
+
+Round 4 keeps the existing bounded intent queued until the RTCP client reports
+that its authenticated record lane is command-ready. If a command is waiting,
+polling completes the current read-only exchange without starting another
+background snapshot/metadata request first. The command then follows the same
+Facade capture, strict Core admission and correlated RTCP dispatch exactly
+once. No sent command is retried. Disconnect, session replacement, lost
+authority, sleep and external divergence retain their existing cancellation
+and stale-replay protections.
+
+Focused tests cover rapid +10, rapid -10, rapid direction reversal, slow
+single-detent behavior, multiple intents accumulated during one in-flight
+command, coalescing, transport-busy retention, same-session capability changes,
+external authority, authenticated refusal, definite local failure,
+disconnect/sleep cancellation, stale replay and final authoritative
+reconciliation. Results: encoder/Facade/transport 9/9 (94 assertions), volume
+admission/lifecycle 11/11 (290 assertions), D-009 policy 15/15, and HOME
+metadata policy 15/15.
+
+The production build passed. The private application is 2,578,304 bytes,
+SHA-256
+`1fa0432b8785bbfce8aecb22e3f5b747080898fdfd850eb4d93ac965b49a30b7`;
+the ELF SHA-256 is
+`7fe9aaaebd2b61dddfc3a414fd41f89fc8f89d1500ae3bcef9ee7b9425cd9cd7`.
+Static RAM is 56,460 bytes, slot headroom is 567,424 bytes,
+`diagnostics::Snapshots` is 1,008 bytes and total diagnostic storage is 8,176
+bytes. No hardware operation occurred. Installation and physical slow/rapid,
+reversal, boundary, disconnect and sleep/wake validation remain owner-gated.
 
 ## Installed-candidate hardware checkpoint
 
@@ -139,8 +218,9 @@ upper station label's bounded ellipsis mode. It now uses
 screen, so its allocated right edge is x=160. Station/StreamTitle assignment,
 fonts, coordinates, buffers, UTF-8 validation, carousel, artwork and navigation
 are unchanged. Round 3 supersedes ellipsis with the bounded bidirectional
-scrolling policy documented above. Physical display verification remains
-required.
+scrolling policy documented above. Owner testing of the Round 3 application
+verified long station and StreamTitle scrolling and static short StreamTitle
+presentation; that display scope is hardware PASS.
 
 ## Verified regression causes and corrections
 
@@ -263,9 +343,9 @@ device data remain private and are not part of the public branch.
 This Round 2 application was installed and independently read back before the
 owner collected the four counter snapshots. Relative to the earlier
 2,575,408-byte correction it is +2,096 application bytes, +104 static RAM
-bytes, and -2,096 bytes headroom. It remains the installed rollback baseline;
+bytes, and -2,096 bytes headroom. It remains a preserved rollback candidate;
 the earlier correction and accepted A-REMOTE-012 application are also
-preserved.
+preserved. Round 3 subsequently superseded it on hardware.
 
 ## Private Round 3 candidate identity
 
@@ -283,14 +363,31 @@ Relative to the preserved Round 2 candidate, this is +624 application bytes,
 unchanged static RAM, and -624 bytes of slot headroom. The Round 2 binary and
 its SHA-256
 `8c529cc5c16ca3e0a3487f02b975187285eddcdd348ba7ae703d5ccc93b2b4c2`
-remain the immediate diagnostic rollback reference. All application images,
+remain a preserved secondary rollback reference. All application images,
 ELFs, backups, credentials, pairing material and private device data remain
 private and are not part of the public branch.
+
+## Private Round 4 candidate identity
+
+- Source: `bd15cc8906c244152ccadc1a6734bb9c1d4bf998`
+- Application size: 2,578,304 bytes
+- Application SHA-256:
+  `1fa0432b8785bbfce8aecb22e3f5b747080898fdfd850eb4d93ac965b49a30b7`
+- ELF SHA-256:
+  `7fe9aaaebd2b61dddfc3a414fd41f89fc8f89d1500ae3bcef9ee7b9425cd9cd7`
+- Static RAM: 56,460 bytes
+- 3 MiB application-slot headroom: 567,424 bytes
+- Diagnostics snapshot/storage: 1,008 / 8,176 bytes
+
+This is +176 application bytes and -176 bytes of slot headroom versus the
+installed Round 3 application, with unchanged static RAM and diagnostic
+storage. The Round 3 application remains the immediate installed rollback
+reference. This private artifact is not published in the repository.
 
 ## Hardware validation still required
 
 1. Reverify retained local and separate-storage rollback backups and exact
-   REMOTE identity, install only the Round 3 application at the
+   REMOTE identity, install only the Round 4 application at the
    verified application offset, and independently hash its exact readback. The
    compatible TUNER D-009/discovery firmware is already installed and must not
    be rewritten for this correction.
@@ -302,17 +399,13 @@ private and are not part of the public branch.
    admission, dispatches, authoritative volume, and in-flight state. This
    distinguishes sampling/decoder loss from admission, queue, result or
    cancellation loss without per-transition logging.
-4. Display long ASCII and multibyte station/StreamTitle values and confirm each
-   existing label scrolls back and forth within its HOME boundary, pauses at
-   both endpoints, restarts on new metadata, and stops across navigation and
-   sleep/display-idle transitions. Malformed metadata must remain rejected.
-5. Verify an actual station/source change still invalidates stale playback and
+4. Verify an actual station/source change still invalidates stale playback and
    metadata, and verify disconnect and SYSTEM_SLEEP/wake cancel pending local
    volume targets without replay.
-6. Complete the still-unrun D-009 scope: fixed saved-list Previous/Next and the
+5. Complete the still-unrun D-009 scope: fixed saved-list Previous/Next and the
    documented refusal in Favorites/discovered and Bluetooth contexts, plus
    MP3/A2DP/web-manager coexistence.
 
 Rollback must use the preserved installed D-009 application, accepted
 A-REMOTE-012 application, or complete-flash backup for the affected device.
-No Round 3 flash, hardware access, or persistent mutation was performed.
+No Round 4 flash, hardware access, or persistent mutation was performed.
