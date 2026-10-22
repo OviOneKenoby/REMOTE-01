@@ -75,6 +75,26 @@ bool idle_wake_and_fail_safe() {
   m.state = State::CRITICAL_SHUTDOWN; m.tick(900000, true, External::ABSENT); CHECK(m.state == State::CRITICAL_SHUTDOWN);
   return true;
 }
+bool encoder_activity_display_policy() {
+  Machine m(0);
+  // Activity intervals below the existing 30 s display timeout keep ACTIVE.
+  for (Time now : {29000ull, 58000ull, 87000ull}) {
+    m.tick(now, true, External::ABSENT);
+    CHECK(m.state == State::ACTIVE);
+    m.activity(now);
+  }
+  m.tick(116999, true, External::ABSENT);
+  CHECK(m.state == State::ACTIVE);
+  m.tick(117000, true, External::ABSENT);
+  CHECK(m.state == State::DISPLAY_IDLE);
+  // The runtime maps the shared physical-activity counter to this existing
+  // display-idle wake path. It does not configure a SYSTEM_SLEEP wake source.
+  m.wake(118000, Wake::TOUCH);
+  CHECK(m.state == State::ACTIVE && m.reason == Wake::TOUCH && m.wakes == 1);
+  m.tick(148000, true, External::ABSENT);
+  CHECK(m.state == State::DISPLAY_IDLE);
+  return true;
+}
 bool first_touch_consumed() {
   TouchGate g;
   CHECK(g.accept(true, true, false, false)); CHECK(!g.accept(false, true, false, false));
@@ -327,7 +347,7 @@ int main(int argc, char **argv) {
   const Test tests[] = {
 #define TEST(x) {#x, x}
     TEST(battery_truth_and_faults), TEST(battery_hysteresis), TEST(critical_qualification_and_sources), TEST(exact_threshold_convergence),
-    TEST(idle_wake_and_fail_safe), TEST(automatic_sleep_external_independent), TEST(first_touch_consumed), TEST(expander_display_and_release_faults), TEST(motion_config_and_ack), TEST(motion_failure_matrix),
+    TEST(idle_wake_and_fail_safe), TEST(encoder_activity_display_policy), TEST(automatic_sleep_external_independent), TEST(first_touch_consumed), TEST(expander_display_and_release_faults), TEST(motion_config_and_ack), TEST(motion_failure_matrix),
     TEST(owner_session_fence), TEST(capabilities_and_disconnect_preserved), TEST(pending_refuses_sleep),
     TEST(wrong_owner_and_shutdown_recovery), TEST(repeated_power_cycles)
     , TEST(reset_record_validation_and_torn_write), TEST(reset_history_bounded_and_wrap),

@@ -66,6 +66,7 @@ static_assert(std::is_trivially_copyable_v<Snapshot>);
 // Caller serializes access. ESP implementation uses a short critical section.
 struct Channel {
   static constexpr unsigned capacity = 8;
+  static constexpr std::uint8_t volume_step = 2;
   std::array<Intent, capacity> queue{};
   unsigned head = 0, count = 0;
   std::uint64_t issued = 0, generation = 0, rejected = 0;
@@ -224,8 +225,12 @@ struct Channel {
     }
     if (volume) {
       const auto base = desired_volume_valid ? desired_volume : latest.volume;
-      desired_volume = static_cast<std::uint8_t>(
-          int(base) + (action == Action::VOLUME_UP ? 1 : -1));
+      desired_volume = action == Action::VOLUME_UP
+                           ? static_cast<std::uint8_t>(
+                                 base > 100 - volume_step ? 100
+                                                          : base + volume_step)
+                           : static_cast<std::uint8_t>(
+                                 base < volume_step ? 0 : base - volume_step);
       desired_volume_valid = true;
       last_input_ms = now;
       increment(volume_accepted);

@@ -51,7 +51,8 @@ void encoder_task(void *) {
 		              encoder_home.load(std::memory_order_relaxed),
 		              [](control_home::Action action) {
 			              return control_home::request(action);
-		              });
+		              },
+		              [] { power_management::activity(); });
 		const auto encoder = router.view();
 		if (!(encoder == published)) {
 			published = encoder;

@@ -52,12 +52,12 @@ bool ready_and_bounds() {
   s.session = s.capability_revision = 1; s.volume_known = s.volume_set = true;
   s.volume = 68; c.publish(s);
   CHECK(c.request(Action::VOLUME_UP));
-  Intent i; CHECK(c.pop(i) && i.volume == 69);
+  Intent i; CHECK(c.pop(i) && i.volume == 70);
   CHECK(c.request(Action::VOLUME_UP));
-  s.volume = 69; c.publish(s);
-  CHECK(c.pop(i) && i.volume == 70);
   s.volume = 70; c.publish(s);
-  CHECK(c.request(Action::VOLUME_DOWN)); CHECK(c.pop(i) && i.volume == 69);
+  CHECK(c.pop(i) && i.volume == 72);
+  s.volume = 72; c.publish(s);
+  CHECK(c.request(Action::VOLUME_DOWN)); CHECK(c.pop(i) && i.volume == 70);
   s.connection = Connection::UNAVAILABLE; c.publish(s);
   CHECK(!c.request(Action::VOLUME_DOWN));
   s.connection = Connection::CONNECTED; s.session = 2; s.volume = 0; c.publish(s);
@@ -89,6 +89,33 @@ bool no_boot_command() {
   remote_encoder::Router router; unsigned emitted = 0;
   router.sample(0, true, true, true, [&](Action) { ++emitted; return true; });
   CHECK(emitted == 0); return true;
+}
+bool completed_cycles_and_activity() {
+  remote_encoder::Router router; unsigned emitted = 0, activity = 0;
+  auto emit = [&](Action) { ++emitted; return true; };
+  auto active = [&] { ++activity; };
+  std::uint64_t t = 0;
+  router.sample(t++, false, false, true, emit, active);
+  const std::uint8_t positive[] = {1, 3, 2, 0};
+  for (unsigned cycle = 0; cycle < 9; ++cycle)
+    for (auto ab : positive)
+      router.sample(t++, (ab & 2) != 0, (ab & 1) != 0, true, emit,
+                    active);
+  // Match the observed 39-transition case: one ambiguous diagonal followed
+  // by a two-quarter partial cycle cannot invent a tenth detent.
+  for (auto ab : {std::uint8_t(3), std::uint8_t(2), std::uint8_t(0)})
+    router.sample(t++, (ab & 2) != 0, (ab & 1) != 0, true, emit, active);
+  auto view = router.view();
+  CHECK(view.transitions == 39 && view.detents == 9);
+  CHECK(view.invalid == 1 && view.detents == 9);
+  CHECK(emitted == 9 && activity == 9);
+  // HOME gates the volume intent, not physical activity.
+  router.sample(t++, false, true, false, emit, active);
+  router.sample(t++, true, true, false, emit, active);
+  router.sample(t++, true, false, false, emit, active);
+  router.sample(t++, false, false, false, emit, active);
+  CHECK(router.view().detents == 10 && emitted == 9 && activity == 10);
+  return true;
 }
 bool bounded_pipeline_diagnostics() {
   remote_encoder::Router router; unsigned emitted = 0;
@@ -161,50 +188,50 @@ bool transport_busy_retains_coalesced_target() {
   // The first detent crosses the owner boundary. Nine more arrive while its
   // correlated result and authoritative snapshot are still outstanding.
   CHECK(c.request(Action::VOLUME_UP, 1));
-  Intent first; CHECK(c.pop(first, true) && first.volume == 71);
+  Intent first; CHECK(c.pop(first, true) && first.volume == 72);
   for (unsigned n = 0; n < 9; ++n)
     CHECK(c.request(Action::VOLUME_UP, 2 + n));
   CHECK(c.resolve(first.token, VolumeResolution::CONFIRMED));
-  s.volume = 71; c.publish(s, 20);
+  s.volume = 72; c.publish(s, 20);
 
   // An RTCP metadata/snapshot exchange may own the record lane here. The
   // successor remains queued, rather than becoming a definite failure.
   Intent successor;
   CHECK(!c.pop(successor, false));
-  CHECK(c.count == 1 && c.volume_failed == 0 && c.view().desired_volume == 80);
-  CHECK(c.pop(successor, true) && successor.volume == 80);
+  CHECK(c.count == 1 && c.volume_failed == 0 && c.view().desired_volume == 90);
+  CHECK(c.pop(successor, true) && successor.volume == 90);
   CHECK(c.resolve(successor.token, VolumeResolution::CONFIRMED));
-  s.volume = 80; c.publish(s, 30);
-  CHECK(c.view().volume == 80 && !c.view().volume_pending);
+  s.volume = 90; c.publish(s, 30);
+  CHECK(c.view().volume == 90 && !c.view().volume_pending);
   CHECK(c.volume_completed == 2 && c.volume_failed == 0);
 
   Channel d; s.volume = 80; d.publish(s);
   CHECK(d.request(Action::VOLUME_DOWN, 31));
-  CHECK(d.pop(first, true) && first.volume == 79);
+  CHECK(d.pop(first, true) && first.volume == 78);
   for (unsigned n = 0; n < 9; ++n)
     CHECK(d.request(Action::VOLUME_DOWN, 32 + n));
   CHECK(d.resolve(first.token, VolumeResolution::CONFIRMED));
-  s.volume = 79; d.publish(s, 42);
+  s.volume = 78; d.publish(s, 42);
   CHECK(!d.pop(successor, false));
-  CHECK(d.pop(successor, true) && successor.volume == 70);
+  CHECK(d.pop(successor, true) && successor.volume == 60);
   CHECK(d.resolve(successor.token, VolumeResolution::CONFIRMED));
-  s.volume = 70; d.publish(s, 50);
-  CHECK(d.view().volume == 70 && d.volume_completed == 2 &&
+  s.volume = 60; d.publish(s, 50);
+  CHECK(d.view().volume == 60 && d.volume_completed == 2 &&
         d.volume_failed == 0);
 
   // Rapid reversal preserves the algebraic target while the lane is busy.
   Channel r; s.volume = 70; r.publish(s);
   CHECK(r.request(Action::VOLUME_UP, 60));
-  CHECK(r.pop(first, true) && first.volume == 71);
+  CHECK(r.pop(first, true) && first.volume == 72);
   for (unsigned n = 0; n < 4; ++n) CHECK(r.request(Action::VOLUME_UP, 61 + n));
   for (unsigned n = 0; n < 2; ++n) CHECK(r.request(Action::VOLUME_DOWN, 65 + n));
   CHECK(r.resolve(first.token, VolumeResolution::CONFIRMED));
-  s.volume = 71; r.publish(s, 70);
+  s.volume = 72; r.publish(s, 70);
   CHECK(!r.pop(successor, false));
-  CHECK(r.pop(successor, true) && successor.volume == 73);
+  CHECK(r.pop(successor, true) && successor.volume == 76);
   CHECK(r.resolve(successor.token, VolumeResolution::CONFIRMED));
-  s.volume = 73; r.publish(s, 80);
-  CHECK(r.view().volume == 73 && r.volume_failed == 0);
+  s.volume = 76; r.publish(s, 80);
+  CHECK(r.view().volume == 76 && r.volume_failed == 0);
   return true;
 }
 }
@@ -214,6 +241,7 @@ int main() {
       {"routing", routing}, {"ready_and_bounds", ready_and_bounds},
       {"core_volume", core_volume}, {"stale_and_disconnect", stale_and_disconnect},
       {"no_boot_command", no_boot_command},
+      {"completed_cycles_and_activity", completed_cycles_and_activity},
       {"bounded_pipeline_diagnostics", bounded_pipeline_diagnostics},
       {"same_session_capability_revision_race", same_session_capability_revision_race},
       {"failure_sources_are_distinct", failure_sources_are_distinct},

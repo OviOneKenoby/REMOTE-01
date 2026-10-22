@@ -324,7 +324,7 @@ bool pending_keeps_volume_accumulator_available() {
   channel.publish(s.snapshot());
   CHECK(channel.latest.volume_set);
   for(unsigned i=0;i<4;++i)CHECK(channel.request(Action::VOLUME_DOWN));
-  CHECK(channel.desired_volume==63&&channel.count==0&&channel.volume_outstanding);
+  CHECK(channel.desired_volume==58&&channel.count==0&&channel.volume_outstanding);
   return true;
 }
 bool expired_field() {

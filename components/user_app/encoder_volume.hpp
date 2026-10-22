@@ -24,8 +24,9 @@ class Router {
   }
 
 public:
-  template <typename Emit>
-  void sample(std::uint64_t time_ms, bool a, bool b, bool home, Emit emit) {
+  template <typename Emit, typename Activity>
+  void sample(std::uint64_t time_ms, bool a, bool b, bool home, Emit emit,
+              Activity activity) {
     const physical_input::Sample sample{
         time_ms, 0, static_cast<std::uint8_t>((a ? 2 : 0) | (b ? 1 : 0))};
     if (!initialized_) {
@@ -59,11 +60,16 @@ public:
         view_.last_delta = event.delta;
         if (event.delta > 0) increment(view_.positive);
         else increment(view_.negative);
+        activity();
         if (home && !emit(event.delta > 0 ? control_home::Action::VOLUME_UP
                                          : control_home::Action::VOLUME_DOWN))
           increment(view_.rejected);
       }
     }
+  }
+  template <typename Emit>
+  void sample(std::uint64_t time_ms, bool a, bool b, bool home, Emit emit) {
+    sample(time_ms, a, b, home, emit, [] {});
   }
   View view() const { return view_; }
 };
