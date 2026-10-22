@@ -258,6 +258,10 @@ void task(void *) {
         portENTER_CRITICAL(&mux);
         channel.resolve(intent.token, VolumeResolution::DEFINITE_FAILURE);
         portEXIT_CRITICAL(&mux);
+        if (intent.action == Action::VOLUME_DOWN ||
+            intent.action == Action::VOLUME_UP)
+          diagnostics::event(time, diagnostics::Event::VOLUME_FAILURE,
+                             unsigned(s->last_volume_failure()));
       }
       if(!accepted)diagnostics::event(time,diagnostics::Event::CORE_REFUSED,unsigned(intent.action));
       ESP_LOGI("UC_RUNTIME", "intent=%llu action=%u accepted=%u dispatches=%u first_input_to_owner_ms=%llu latest_input_to_owner_ms=%llu target=%u",
@@ -274,6 +278,9 @@ void task(void *) {
     portEXIT_CRITICAL(&mux);
     if (outstanding_token) {
       const auto resolution = s->volume_resolution(outstanding_token);
+      if (resolution == VolumeResolution::DEFINITE_FAILURE)
+        diagnostics::event(time, diagnostics::Event::VOLUME_FAILURE,
+                           unsigned(s->volume_failure(outstanding_token)));
       portENTER_CRITICAL(&mux);
       channel.resolve(outstanding_token, resolution);
       portEXIT_CRITICAL(&mux);

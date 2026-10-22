@@ -111,6 +111,48 @@ bool bounded_pipeline_diagnostics() {
   CHECK(view.transitions==121&&emitted==30);
   return true;
 }
+bool same_session_capability_revision_race() {
+  Fixture f;
+  auto queued = intent(f, 1, Action::VOLUME_DOWN, 67);
+  const auto old_revision = queued.capability_revision;
+  auto cap = MockAdapter::operation(f.b, "playback.next",
+                                    Feedback::CORRELATED_RESULT);
+  cap.availability = Availability::CONTEXT_UNAVAILABLE;
+  CHECK(!f.core.capability(f.d, f.t, cap, 1).present);
+  CHECK(f.facade.snapshot().capability_revision > old_revision);
+  // The absolute volume target is re-captured against current authority in
+  // the same authenticated session; it is not discarded as locally stale.
+  CHECK(f.facade.handle(queued, 2));
+  CHECK(f.mock.dispatches == 1 && f.mock.last_numeric.present);
+  CHECK((f.mock.last_numeric.value == Rational{67, 100}));
+  CHECK(f.facade.last_volume_failure() == VolumeFailureCause::NONE);
+  return true;
+}
+bool failure_sources_are_distinct() {
+  Fixture local;
+  auto rejected = intent(local, 1, Action::VOLUME_DOWN, 67);
+  CHECK(!local.facade.handle(rejected, 1, false));
+  CHECK(local.facade.last_volume_failure() ==
+        VolumeFailureCause::NOT_ACCEPTING);
+  CHECK(local.mock.dispatches == 0);
+
+  Fixture target;
+  target.mock.mode = MockAdapter::Mode::REJECT;
+  auto refused = intent(target, 1, Action::VOLUME_DOWN, 67);
+  CHECK(!target.facade.handle(refused, 1));
+  CHECK(target.facade.last_volume_failure() ==
+        VolumeFailureCause::TARGET_REFUSAL);
+  CHECK(target.mock.dispatches == 1);
+
+  Fixture stale;
+  auto old = intent(stale, 1, Action::VOLUME_DOWN, 67);
+  CHECK(!stale.core.reconnect(stale.b, 1).present);
+  CHECK(stale.facade.snapshot().session != old.session);
+  CHECK(!stale.facade.handle(old, 2));
+  CHECK(stale.facade.last_volume_failure() == VolumeFailureCause::SESSION);
+  CHECK(stale.mock.dispatches == 0);
+  return true;
+}
 }
 int main() {
   std::setbuf(stdout, nullptr);
@@ -118,7 +160,9 @@ int main() {
       {"routing", routing}, {"ready_and_bounds", ready_and_bounds},
       {"core_volume", core_volume}, {"stale_and_disconnect", stale_and_disconnect},
       {"no_boot_command", no_boot_command},
-      {"bounded_pipeline_diagnostics", bounded_pipeline_diagnostics}};
+      {"bounded_pipeline_diagnostics", bounded_pipeline_diagnostics},
+      {"same_session_capability_revision_race", same_session_capability_revision_race},
+      {"failure_sources_are_distinct", failure_sources_are_distinct}};
   unsigned pass = 0;
   for (auto test : tests) { std::printf("RUN %s\n", test.name); if (!test.run()) return 1; ++pass; }
   std::printf("ENCODER VOLUME SUMMARY PASS=%u FAIL=0 assertions=%u\n", pass, assertions);

@@ -42,7 +42,7 @@ struct Power { U64 time=0; std::array<U64,23> values{}; std::uint32_t resets[4][
 struct Network { U64 time=0; std::array<U64,16> values{}; char ip[16]{}, ssid[33]{}; std::int8_t rssi=0; bool http_dns_off=false; };
 struct Snapshots { Core core; Power power; Network network; };
 static_assert(sizeof(Snapshots)<=1024);
-enum class Event : unsigned { BOOT, NETWORK, NETWORK_ERROR, POWER, POWER_ERROR, CORE, CORE_REFUSED, REBOOT_REQUEST, REBOOT_REFUSED, REBOOT_EXECUTE };
+enum class Event : unsigned { BOOT, NETWORK, NETWORK_ERROR, POWER, POWER_ERROR, CORE, CORE_REFUSED, REBOOT_REQUEST, REBOOT_REFUSED, REBOOT_EXECUTE, VOLUME_FAILURE };
 struct Entry { U64 sequence=0,time=0; Event event{}; unsigned detail=0; std::array<unsigned char,104> reserved{}; };
 static_assert(sizeof(Entry)==128);
 struct Ring {

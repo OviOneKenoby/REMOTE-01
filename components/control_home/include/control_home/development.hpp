@@ -74,6 +74,12 @@ struct Session {
   VolumeResolution volume_resolution(std::uint64_t token) const {
     return facade.volume_resolution(token);
   }
+  VolumeFailureCause last_volume_failure() const {
+    return facade.last_volume_failure();
+  }
+  VolumeFailureCause volume_failure(std::uint64_t token) const {
+    return facade.volume_failure(token);
+  }
   Snapshot snapshot() const {
     return present_snapshot(facade.snapshot(), pending(), remote_mode);
   }
