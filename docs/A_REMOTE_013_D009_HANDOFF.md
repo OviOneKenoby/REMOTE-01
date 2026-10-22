@@ -1,6 +1,6 @@
 # A-REMOTE-013 / D-009 REMOTE handoff
 
-Status: **ROUND 4 CORRECTION SOFTWARE VERIFIED / HARDWARE PENDING**
+Status: **ROUND 5 SOFTWARE VERIFIED / HARDWARE PENDING**
 Date: 2026-10-22
 
 ## Source and dependency
@@ -16,6 +16,8 @@ Date: 2026-10-22
   `3a2fda5887df8671467cf36917f607e6d1b69b11`
 - Round 4 RTCP command-readiness source commit:
   `bd15cc8906c244152ccadc1a6734bb9c1d4bf998`
+- Round 5 volume-step/display-activity source commit:
+  `bfce47816a8b2b8a92f41d76c6a4bc4975d25361`
 - Stacked base: A-REMOTE-014 discovery branch
   `remote/a-remote-014-mdns-discovery` at
   `d32945b`
@@ -29,6 +31,78 @@ The coordination repository's earlier task text stating that REMOTE D-009 was
 not authorized or not started is historical. The owner subsequently authorized
 this private implementation, focused verification, one production build, and
 preparation of a reviewable PR. It does not establish hardware acceptance.
+
+## Round 5 encoder, volume-step and display-activity result
+
+The Round 4 application was installed at `0x10000` and independently read back
+as 2,578,304 bytes with SHA-256
+`1fa0432b8785bbfce8aecb22e3f5b747080898fdfd850eb4d93ac965b49a30b7`.
+Boot, retained Wi-Fi and authenticated RTCP synchronization passed. It remains
+the installed rollback baseline for Round 5.
+
+### A - encoder reliability: NOT CONFIRMED
+
+GPIO2/GPIO5 are inputs with internal pull-ups and are sampled every 2 ms by the
+existing serialized input task. The quadrature model preserves partial quarter
+cycles, cancels reversal algebraically, emits only at plus or minus four valid
+transitions, and resets an ambiguous diagonal without generating a detent. A
+deterministic fixture reproduces exactly 39 transitions, 9 detents and 1
+invalid transition as nine complete cycles, one diagonal and a remaining
+two-quarter partial cycle. This matches the recorded counters but cannot prove
+which electrical edges corresponded to the owner's approximate mechanical
+count.
+
+No decoder, polling, GPIO, pull-up, threshold or direction change was made. A
+minimal remaining diagnosis is a two-channel logic-analyzer capture on
+GPIO2/GPIO5 during ten slow detents: compare every stable AB state with the
+transition/detent/invalid counter deltas. A valid complete cycle missing from
+firmware would demonstrate acquisition loss; an absent edge, diagonal or
+incomplete cycle would locate the issue before the decoder.
+
+### B - fixed two-percentage-point volume step
+
+`control_home::Channel::request()` applies the fixed step at the local desired
+absolute-target accumulator. Each accepted positive/negative detent contributes
+plus/minus two percentage points and clamps at 0/100. No acceleration is used.
+The RTCP wire still carries the existing absolute normalized volume. Round 4
+command readiness, bounded coalescing, one in-flight command, strict admission,
+external-authority reconciliation and lifecycle cancellation remain intact.
+
+### C - encoder display activity
+
+The encoder router invokes `power_management::activity()` only for a decoded
+`ENCODER_CYCLE`. It increments the existing atomic physical-activity counter
+used by touch. The POWER task owns the inactivity refresh and display-idle
+wake, so the encoder task never calls LVGL or display hardware. Invalid
+transitions and partial cycles do not refresh activity.
+
+This applies to ACTIVE and DISPLAY_IDLE. SYSTEM_SLEEP retains its GPIO8 motion
+wake policy; GPIO2/GPIO5 are not new wake sources, and encoder rotation is not
+claimed to wake the sleeping MCU.
+
+### Round 5 verification and private candidate
+
+- Encoder/volume/activity routing: 10/10 PASS, 98 assertions.
+- Volume admission/coalescing/lifecycle: 12/12 PASS, 323 assertions.
+- Physical input: 19/19 PASS, 24,627 assertions, 1,000 cycles.
+- POWER lifecycle: 20/20 PASS, 19,244 assertions, 1,000 cycles.
+- HOME/Core: 42/42 PASS, 3,565 assertions.
+- RTCP D-009: 8/8 PASS, 44 assertions.
+- D-009 policy: 15/15 PASS.
+- Encoder activity policy: 9/9 PASS.
+- HOME metadata policy: 15/15 PASS.
+- UI volume binding: 1/1 PASS, 11 assertions.
+- Production `remote01`: PASS, one build.
+- Application: 2,578,352 bytes; SHA-256
+  `6eb44ff4137d8c11f44dc5e0fed0a7061f77b172d4a38982e5219bbd7454e278`.
+- ELF SHA-256:
+  `9499b13b9c4f6fc3ece4c19d75b4303c13ab06639e4b66f0e4e1cfd0128d4acf`.
+- Static RAM: 56,460 bytes.
+- 3 MiB slot headroom: 567,376 bytes.
+- Diagnostics snapshot/storage: 1,008/8,176 bytes, unchanged.
+
+The application and ELF remain private. Round 5 performed no hardware access,
+flash, NVS, pairing, partition, credential or TUNER operation.
 
 ## Round 4 rapid-volume failure and correction
 
@@ -379,33 +453,33 @@ private and are not part of the public branch.
 - 3 MiB application-slot headroom: 567,424 bytes
 - Diagnostics snapshot/storage: 1,008 / 8,176 bytes
 
-This is +176 application bytes and -176 bytes of slot headroom versus the
-installed Round 3 application, with unchanged static RAM and diagnostic
-storage. The Round 3 application remains the immediate installed rollback
-reference. This private artifact is not published in the repository.
+This is +176 application bytes and -176 bytes of slot headroom versus Round 3,
+with unchanged static RAM and diagnostic storage. Installation and exact-span
+readback passed; Round 4 is the installed baseline and Round 3 remains a
+preserved secondary rollback reference. This private artifact is not published
+in the repository.
 
-## Hardware validation still required
+## Round 5 hardware validation still required
 
-1. Reverify retained local and separate-storage rollback backups and exact
-   REMOTE identity, install only the Round 4 application at the
-   verified application offset, and independently hash its exact readback. The
-   compatible TUNER D-009/discovery firmware is already installed and must not
-   be rewritten for this correction.
-2. Reproduce the original checkpoint: authenticated discovery, identity and
-   capabilities, then verify station/StreamTitle placement and Play/Pause.
-3. Before input, save `/api/status`; then execute known counts of slow and
-   rapid detents in each direction and save status immediately. Compare raw
-   transitions/detents, both diagnostic arrays, intents/accepted intents,
-   admission, dispatches, authoritative volume, and in-flight state. This
-   distinguishes sampling/decoder loss from admission, queue, result or
-   cancellation loss without per-transition logging.
-4. Verify an actual station/source change still invalidates stale playback and
-   metadata, and verify disconnect and SYSTEM_SLEEP/wake cancel pending local
-   volume targets without replay.
-5. Complete the still-unrun D-009 scope: fixed saved-list Previous/Next and the
-   documented refusal in Favorites/discovered and Bluetooth contexts, plus
-   MP3/A2DP/web-manager coexistence.
+1. Reverify rollback backups and REMOTE identity, install only the Round 5
+   application at `0x10000`, and independently hash the exact readback. Do not
+   rewrite the compatible TUNER.
+2. Confirm retained Wi-Fi/pairing, authenticated discovery/RTCP, authoritative
+   volume/playback and the accepted HOME metadata behavior.
+3. From a safe mid-range value, verify one clockwise/counterclockwise detent is
+   exactly plus/minus two points; then verify ten slow and ten rapid detents,
+   reversal, 1-to-0 and 99-to-100 clamping with before/after counters.
+4. Keep REMOTE ACTIVE and rotate at intervals below 30 seconds: the display
+   must remain on. Stop and verify the normal existing timeout. From
+   DISPLAY_IDLE, rotate once and verify the existing display wake behavior and
+   one volume intent. Do not claim or test encoder wake from SYSTEM_SLEEP.
+5. If mechanical and decoded detent counts still differ, collect the bounded
+   two-channel GPIO2/GPIO5 logic-analyzer trace described above; do not tune the
+   decoder without that evidence.
+6. Preserve lifecycle safety by confirming disconnect and SYSTEM_SLEEP/wake
+   cancel pending volume targets without stale replay. Complete the remaining
+   D-009 saved-list Previous/Next/refusal and MP3/A2DP/web-manager checks.
 
-Rollback must use the preserved installed D-009 application, accepted
-A-REMOTE-012 application, or complete-flash backup for the affected device.
-No Round 4 flash, hardware access, or persistent mutation was performed.
+Rollback may use the installed Round 4 application, preserved Round 3 or
+A-REMOTE-012 applications, or the verified full-flash backup. Round 5 has no
+hardware PASS until owner commissioning completes these checks.

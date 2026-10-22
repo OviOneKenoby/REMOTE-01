@@ -1,5 +1,60 @@
 # Changelog
 
+## 2026-10-22 - A-REMOTE-013 D-009 hardware-regression round 5
+
+Round 4 was installed application-only and independently read back with the
+expected 2,578,304-byte SHA-256 identity. Boot, retained Wi-Fi and authenticated
+RTCP synchronization passed. Subsequent owner observations found that manually
+counted rotations sometimes produced nine decoded detents from approximately
+ten physical detents, requested a fixed two-percentage-point volume step, and
+found encoder use did not refresh display inactivity.
+
+**A - encoder reliability:** source and deterministic tests do not establish a
+decoder defect. GPIO2/GPIO5 remain input-only with internal pull-ups and a 2 ms
+polling task. The decoder preserves partial quarter cycles, emits only after a
+complete four-transition cycle, cancels opposing partial motion, and rejects a
+diagonal transition without inventing a detent. The measured 39 transitions,
+9 detents and 1 invalid transition are reproducible as nine complete cycles,
+one ambiguous diagonal and a two-quarter incomplete cycle. Manually counted
+mechanical detents are not waveform evidence, so the decoder, threshold,
+sampling rate and direction mapping are unchanged. A logic-analyzer capture of
+GPIO2/GPIO5 is still required to distinguish missed electrical transitions
+from an incomplete or ambiguous physical cycle.
+
+**B - fixed volume step:** `control_home::Channel` now applies exactly two
+percentage points per accepted `VOLUME_UP`/`VOLUME_DOWN` intent at the local
+desired-target accumulator. It clamps to 0..100 while preserving absolute RTCP
+volume semantics, bounded coalescing, one command in flight, command readiness,
+session/capability fences, reconciliation and no automatic retry. Slow and
+rapid sequences with identical detent counts converge on the same target.
+
+**C - display activity:** each valid decoded encoder cycle now increments the
+same thread-safe physical-activity counter used by touch. The POWER owner
+refreshes the existing 30-second display-idle timer or follows the existing
+display-idle wake path; invalid transitions do neither. No LVGL call is made
+from the encoder task, and no new timer, queue, allocation or wake source was
+added. GPIO2/GPIO5 are not SYSTEM_SLEEP wake sources, so encoder rotation is
+not claimed to wake a fully sleeping ESP32-S3.
+
+Focused verification passed: encoder routing/decoder/activity and RTCP
+coalescing 10/10 with 98 assertions; volume admission, fixed-step bounds,
+reconciliation and lifecycle fencing 12/12 with 323 assertions; physical input
+19/19 with 24,627 assertions and 1,000 cycles; POWER 20/20 with 19,244
+assertions and 1,000 cycles; HOME/Core 42/42 with 3,565 assertions; RTCP D-009
+8/8 with 44 assertions; D-009 policy 15/15; encoder activity policy 9/9; HOME
+metadata policy 15/15; and UI volume binding 1/1 with 11 assertions. The single
+`remote01` production build passed at source
+`bfce47816a8b2b8a92f41d76c6a4bc4975d25361`.
+
+The private Round 5 application is 2,578,352 bytes with SHA-256
+`6eb44ff4137d8c11f44dc5e0fed0a7061f77b172d4a38982e5219bbd7454e278`;
+ELF SHA-256 is
+`9499b13b9c4f6fc3ece4c19d75b4303c13ab06639e4b66f0e4e1cfd0128d4acf`.
+Static RAM remains 56,460 bytes, the 3 MiB application slot retains 567,376
+bytes, and diagnostics snapshot/storage remain 1,008/8,176 bytes. No hardware
+access or flash operation occurred in Round 5. Encoder reliability, the fixed
+step and display activity remain hardware pending.
+
 ## 2026-10-22 - A-REMOTE-013 D-009 hardware-regression round 4
 
 Round 3 hardware testing decoded and admitted all ten rapid encoder detents,
