@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-10-23 - A-REMOTE-013 D-009 Round 5 partial hardware pass
+
+Installed the exact 2,578,352-byte Round 5 application once at `0x10000` on
+the verified 16 MiB REMOTE ESP32-S3. Independent exact-span readback matched
+SHA-256
+`6eb44ff4137d8c11f44dc5e0fed0a7061f77b172d4a38982e5219bbd7454e278`.
+Stored Wi-Fi, secure pairing and authenticated RTCP were retained; authoritative
+volume and the existing HOME UI recovered normally.
+
+Owner-observed hardware PASS covers carousel navigation, brightness, touch,
+HOME index 2, encoder volume, bidirectional radio Play/Pause state/control,
+station and combined StreamTitle presentation/scrolling/invalidation, discovered
+context Previous/Next withdrawal, TUNER-restart invalidation/reconnect, A2DP
+coexistence and return to radio. Bluetooth metadata and AVRCP are outside D-009.
+Fixed saved-list Previous/Next/wrap, forced invalid-command Favorites proof,
+REMOTE sleep/wake/restart and representative resource/stability acceptance
+remain untested. The session is closed as PARTIAL HARDWARE PASS; A-REMOTE-013
+hardware acceptance remains pending. See
+[the Round 5 report](docs/A_REMOTE_013_D009_ROUND5_HARDWARE_VALIDATION.md).
+
 ## 2026-10-22 - A-REMOTE-013 D-009 hardware-regression round 5
 
 Round 4 was installed application-only and independently read back with the

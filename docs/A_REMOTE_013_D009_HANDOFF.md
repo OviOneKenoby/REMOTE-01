@@ -1,7 +1,27 @@
 # A-REMOTE-013 / D-009 REMOTE handoff
 
-Status: **ROUND 5 SOFTWARE VERIFIED / HARDWARE PENDING**
-Date: 2026-10-22
+Status: **ROUND 5 TEST SESSION CLOSED / PARTIAL HARDWARE PASS**
+Date: 2026-10-23
+
+## Round 5 hardware-session closure
+
+The exact 2,578,352-byte Round 5 application was installed application-only at
+`0x10000`; independent readback matched SHA-256
+`6eb44ff4137d8c11f44dc5e0fed0a7061f77b172d4a38982e5219bbd7454e278`.
+Wi-Fi, pairing, authenticated RTCP and authoritative volume were retained.
+
+Owner-observed PASS covers the existing carousel/brightness/touch/HOME UI,
+encoder volume, radio Play/Pause in both directions, station and combined
+StreamTitle presentation/scrolling/invalidation, discovered-context control
+withdrawal, TUNER-restart invalidation/reconnect, A2DP coexistence and return
+to radio. Bluetooth metadata and AVRCP remain outside D-009. Fixed-list
+Previous/Next/wrap, any forced-invalid-command Favorites proof, REMOTE
+sleep/wake/restart and representative resource/stability measurements remain
+unexecuted. The detailed evidence and limits are in
+[the Round 5 validation report](A_REMOTE_013_D009_ROUND5_HARDWARE_VALIDATION.md).
+
+Overall A-REMOTE-013 remains **HARDWARE ACCEPTANCE PENDING**. PR #4 remains
+open and retains its intentional A-REMOTE-014 discovery dependency.
 
 ## Source and dependency
 
