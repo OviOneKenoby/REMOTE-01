@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-10-23 - BTX/1.0 REMOTE Phase 6B installation
+
+Installed the exact 2,582,432-byte BTX/1.0 application at `0x10000` on the
+verified REMOTE ESP32-S3. The single application-only write completed and an
+independent 2,582,432-byte readback matched SHA-256
+`5d84f83b8e9e6f860e7cd807a270eeee697ed42dc361bbb1e1022f639dc4206b`.
+Boot diagnostics reported embedded build `5b32cbb` and the expected ELF
+SHA-256. Stored Wi-Fi and pairing were retained; Wi-Fi connected without a
+reconnect or error, and RTCP completed authentication and identity acceptance.
+
+The bounded automated checkpoint did not obtain a fresh authoritative volume
+observation: RTCP was authenticated and transport-connected, but
+`volume_known` and `volume_set` remained unavailable. BTX negotiation is not
+separately exposed by the existing status interface. Installation/readback is
+verified; control, Bluetooth negotiation/metadata, physical controls and
+coexistence remain pending owner validation. No TUNER access or write occurred.
+
 ## 2026-10-23 - BTX/1.0 REMOTE software implementation
 
 Implemented the approved authenticated BTX/1.0 extension on the verified

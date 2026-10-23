@@ -1,7 +1,25 @@
 # BTX/1.0 REMOTE implementation and handoff
 
-Status: **SOFTWARE PASS / HARDWARE PENDING**  
+Status: **SOFTWARE PASS / INSTALLATION VERIFIED / HARDWARE PARTIAL**
 Date: 2026-10-23
+
+## Phase 6B installation checkpoint
+
+The verified REMOTE ESP32-S3 candidate was installed once, application-only at
+`0x10000`. The write completed successfully. An independent readback covered
+exactly 2,582,432 bytes and matched the approved application SHA-256
+`5d84f83b8e9e6f860e7cd807a270eeee697ed42dc361bbb1e1022f639dc4206b`.
+Boot diagnostics confirmed build `5b32cbb` and ELF SHA-256
+`e4139e2a50d3b6a439c19ade8792a98c2fc67ff9417e57e02df0a9977100ee57`.
+
+Stored Wi-Fi configuration and pairing were retained. Wi-Fi connected with no
+reported reconnect or error, and RTCP reached authenticated identity acceptance
+without a current transport error. During the bounded automated observation,
+the authoritative volume observation and `volume.set` authority were not yet
+available. The existing status API does not expose a distinct BTX negotiation
+result. Therefore installation and authentication are verified, while volume,
+BTX negotiation, metadata, commands, physical controls and coexistence remain
+pending. TUNER was not accessed or modified.
 
 ## Baseline and authority
 
@@ -120,7 +138,7 @@ limit. The temporary UI snapshot increase is 192 bytes, within the approved
 now-playing object. There is no new task, network queue, transport buffer,
 unbounded storage or new dynamic metadata-allocation path.
 
-The firmware and ELF remain private and are not committed. The installed Round
+The firmware and ELF remain private and are not committed. The preserved Round
 5 application remains the rollback baseline: 2,578,352 bytes, SHA-256
 `6eb44ff4137d8c11f44dc5e0fed0a7061f77b172d4a38982e5219bbd7454e278`.
 
@@ -151,5 +169,6 @@ The firmware and ELF remain private and are not committed. The installed Round
     reset or material resource regression.
 
 Hardware BTX command execution, phone-specific AVRCP availability, metadata
-behavior across real phone/player combinations and coexistence remain pending.
-No hardware operation was performed during this software phase.
+behavior across real phone/player combinations, physical controls and
+coexistence remain pending. Phase 6B installed and independently verified the
+REMOTE application; it did not access or modify TUNER.
