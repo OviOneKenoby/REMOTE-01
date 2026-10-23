@@ -12,6 +12,14 @@ bool admitted(const Reply &reply) {
          reply.result->lifecycle != Lifecycle::REJECTED &&
          reply.result->lifecycle != Lifecycle::EXPIRED_BEFORE_SEND;
 }
+VolumeFailureCause rejection(const Reply &reply) {
+  if (reply.result && reply.result->error.present &&
+      reply.result->error.value.rejection_origin.present &&
+      reply.result->error.value.rejection_origin.value ==
+          RejectionOrigin::TARGET)
+    return VolumeFailureCause::TARGET_REFUSAL;
+  return VolumeFailureCause::CORE_ADMISSION;
+}
 } // namespace
 const StateObservation *Facade::selected(const char *name) const {
   const auto *f = core_.field(device_, target_, name);
@@ -93,24 +101,40 @@ Snapshot Facade::snapshot() const {
   return out;
 }
 bool Facade::handle(Intent intent, U64 now, bool accepting) {
+  last_volume_failure_ = VolumeFailureCause::NONE;
+  const bool volume = intent.action == Action::VOLUME_DOWN ||
+                      intent.action == Action::VOLUME_UP;
+  auto refuse = [&](VolumeFailureCause cause) {
+    if (volume) last_volume_failure_ = cause;
+    return false;
+  };
   // Maintenance first: freshness must be evaluated at owner processing time.
   core_.tick(now);
   if (!intent.token || intent.token < watermark_)
-    return false;
+    return refuse(VolumeFailureCause::TOKEN);
   if (intent.token == watermark_) {
     if (!accepting || !(intent == last_intent_) || !last_request_.present)
-      return false;
+      return refuse(!accepting ? VolumeFailureCause::NOT_ACCEPTING
+                               : VolumeFailureCause::TOKEN);
     auto reply = core_.submit(last_request_.value, now);
-    return admitted(reply);
+    if (!admitted(reply)) return refuse(rejection(reply));
+    return true;
   }
   watermark_ = intent.token;
   last_intent_ = intent;
   last_request_ = {};
   auto s = snapshot();
-  if (!accepting || !intent.session || !intent.capability_revision ||
-      intent.session != s.session ||
-      intent.capability_revision != s.capability_revision)
-    return false;
+  if (!accepting) return refuse(VolumeFailureCause::NOT_ACCEPTING);
+  if (!intent.session || !intent.capability_revision)
+    return refuse(VolumeFailureCause::SCOPE);
+  if (intent.session != s.session)
+    return refuse(VolumeFailureCause::SESSION);
+  // D-009 playback-context changes advance a target-wide capability revision.
+  // A queued absolute volume target remains safe in the same authenticated
+  // session because capture below rebinds it to current volume authority and
+  // its current observation precondition. Other operations retain exact scope.
+  if (intent.capability_revision != s.capability_revision && !volume)
+    return refuse(VolumeFailureCause::CAPABILITY);
   const char *op = nullptr;
   switch (intent.action) {
   case Action::PREVIOUS:
@@ -137,8 +161,9 @@ bool Facade::handle(Intent intent, U64 now, bool accepting) {
     break;
   }
   }
-  if (!op || now > UINT64_MAX - 3000)
-    return false;
+  if (!op) return refuse(VolumeFailureCause::TARGET);
+  if (now > UINT64_MAX - 3000)
+    return refuse(VolumeFailureCause::DEADLINE);
   CommandRequest q;
   control::Arguments arguments;
   if (intent.action == Action::VOLUME_DOWN ||
@@ -146,28 +171,30 @@ bool Facade::handle(Intent intent, U64 now, bool accepting) {
     if (!arguments.fields.push(
             {control::Text::literal("level"),
              control::Scalar::level(volume_rational(intent.volume))}))
-      return false;
+      return refuse(VolumeFailureCause::CAPTURE);
   }
   auto capture =
       core_.capture(q, device_, target_, op, arguments, now + 3000, now);
   if (capture.error.present)
-    return false;
-  if (intent.action == Action::TOGGLE) {
+    return refuse(VolumeFailureCause::CAPTURE);
+  if (intent.action == Action::TOGGLE || intent.action == Action::PREVIOUS ||
+      intent.action == Action::NEXT) {
     const auto *o = selected("playback.state");
     if (!o || !q.preconditions.push({Text::literal("playback.state"),
                                      o->observation_id, o->value}))
-      return false;
+      return refuse(VolumeFailureCause::PRECONDITION);
   }
   if (intent.action == Action::VOLUME_DOWN ||
       intent.action == Action::VOLUME_UP) {
     const auto *o = selected("volume.level");
     if (!o || !q.preconditions.push({control::Text::literal("volume.level"),
                                      o->observation_id, o->value}))
-      return false;
+      return refuse(VolumeFailureCause::PRECONDITION);
   }
   last_request_ = q;
   auto reply = core_.submit(q, now);
-  return admitted(reply);
+  if (!admitted(reply)) return refuse(rejection(reply));
+  return true;
 }
 VolumeResolution Facade::volume_resolution(std::uint64_t token) const {
   if (!token || token != last_intent_.token || !last_request_.present)
@@ -188,5 +215,26 @@ VolumeResolution Facade::volume_resolution(std::uint64_t token) const {
       return VolumeResolution::DEFINITE_FAILURE;
   }
   return VolumeResolution::UNCERTAIN;
+}
+VolumeFailureCause Facade::volume_failure(std::uint64_t token) const {
+  if (!token || token != last_intent_.token || !last_request_.present)
+    return VolumeFailureCause::TOKEN;
+  const auto *result = core_.result(last_request_.value.request_id);
+  if (!result || !result->terminal) return VolumeFailureCause::NONE;
+  if (result->lifecycle == Lifecycle::EXPIRED_BEFORE_SEND)
+    return VolumeFailureCause::EXPIRED_BEFORE_SEND;
+  if (result->lifecycle == Lifecycle::REJECTED) {
+    if (result->error.present && result->error.value.rejection_origin.present &&
+        result->error.value.rejection_origin.value == RejectionOrigin::TARGET)
+      return VolumeFailureCause::TARGET_REFUSAL;
+    return VolumeFailureCause::CORE_ADMISSION;
+  }
+  if (result->lifecycle == Lifecycle::FAILED) {
+    bool no_execution = result->attempts.size() != 0;
+    for (const auto &attempt : result->attempts)
+      no_execution = no_execution && attempt.guaranteed_no_execution;
+    if (no_execution) return VolumeFailureCause::GUARANTEED_NO_EXECUTION;
+  }
+  return VolumeFailureCause::NONE;
 }
 } // namespace control_home

@@ -7,6 +7,9 @@ namespace power_management {
 enum class Request { NONE, SLEEP, SHUTDOWN };
 struct BatteryView { bool valid = false, simulated = false; unsigned millivolts = 0; };
 bool touch(bool pressed);
+// Thread-safe physical input activity. It refreshes/wakes display-idle through
+// the same POWER-owned counter as touch, but adds no SYSTEM_SLEEP wake source.
+void activity();
 bool commands_allowed();
 BatteryView battery_view();
 ExternalView external_view();

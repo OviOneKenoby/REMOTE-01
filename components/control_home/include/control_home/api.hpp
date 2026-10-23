@@ -66,6 +66,7 @@ static_assert(std::is_trivially_copyable_v<Snapshot>);
 // Caller serializes access. ESP implementation uses a short critical section.
 struct Channel {
   static constexpr unsigned capacity = 8;
+  static constexpr std::uint8_t volume_step = 2;
   std::array<Intent, capacity> queue{};
   unsigned head = 0, count = 0;
   std::uint64_t issued = 0, generation = 0, rejected = 0;
@@ -77,6 +78,10 @@ struct Channel {
   bool desired_volume_valid = false;
   std::uint8_t desired_volume = 0;
   std::uint64_t volume_attempts = 0, volume_accepted = 0;
+  std::uint64_t volume_queued = 0, volume_completed = 0, volume_failed = 0,
+                volume_cancelled = 0, authoritative_updates = 0,
+                cancel_session = 0, cancel_capability = 0,
+                cancel_authority = 0, cancel_divergence = 0;
   std::uint64_t last_input_ms = 0, last_target_queued_ms = 0,
                 last_authoritative_ms = 0;
   VolumeAdmission last_volume_admission = VolumeAdmission::NONE;
@@ -103,7 +108,28 @@ struct Channel {
     queue[(head + count++) % capacity] = intent;
     return true;
   }
-  void cancel_volume() {
+  static void increment(std::uint64_t &value) {
+    if (value != UINT64_MAX) ++value;
+  }
+  enum class CancelReason : std::uint8_t {
+    NONE,
+    SESSION,
+    CAPABILITY,
+    AUTHORITY,
+    DIVERGENCE
+  };
+  void cancel_volume(CancelReason reason = CancelReason::NONE) {
+    if (reason != CancelReason::NONE &&
+        (volume_outstanding || desired_volume_valid)) {
+      increment(volume_cancelled);
+      switch (reason) {
+      case CancelReason::SESSION: increment(cancel_session); break;
+      case CancelReason::CAPABILITY: increment(cancel_capability); break;
+      case CancelReason::AUTHORITY: increment(cancel_authority); break;
+      case CancelReason::DIVERGENCE: increment(cancel_divergence); break;
+      case CancelReason::NONE: break;
+      }
+    }
     volume_outstanding = false;
     volume_confirmed = false;
     volume_target = 0;
@@ -157,6 +183,7 @@ struct Channel {
       return false;
     }
     issued = token;
+    increment(volume_queued);
     volume_outstanding = true;
     volume_confirmed = false;
     volume_target = target;
@@ -186,7 +213,7 @@ struct Channel {
     const bool volume = action == Action::VOLUME_DOWN ||
                         action == Action::VOLUME_UP;
     if (volume) {
-      ++volume_attempts;
+      increment(volume_attempts);
       last_volume_admission = volume_admission(action);
       if (last_volume_admission != VolumeAdmission::ACCEPTED) {
         ++rejected;
@@ -198,11 +225,15 @@ struct Channel {
     }
     if (volume) {
       const auto base = desired_volume_valid ? desired_volume : latest.volume;
-      desired_volume = static_cast<std::uint8_t>(
-          int(base) + (action == Action::VOLUME_UP ? 1 : -1));
+      desired_volume = action == Action::VOLUME_UP
+                           ? static_cast<std::uint8_t>(
+                                 base > 100 - volume_step ? 100
+                                                          : base + volume_step)
+                           : static_cast<std::uint8_t>(
+                                 base < volume_step ? 0 : base - volume_step);
       desired_volume_valid = true;
       last_input_ms = now;
-      ++volume_accepted;
+      increment(volume_accepted);
       if (volume_outstanding && retarget_queued_volume()) {
         if (generation != UINT64_MAX) ++generation;
         return true;
@@ -220,19 +251,21 @@ struct Channel {
     if (!volume_outstanding || !token || token != volume_token)
       return false;
     if (resolution == VolumeResolution::DEFINITE_FAILURE) {
+      increment(volume_failed);
       cancel_volume();
       if (generation != UINT64_MAX) ++generation;
       return true;
     }
     if (resolution == VolumeResolution::CONFIRMED && !volume_confirmed) {
+      increment(volume_completed);
       volume_confirmed = true;
       if (generation != UINT64_MAX) ++generation;
       return true;
     }
     return false;
   }
-  bool pop(Intent &out) {
-    if (!count)
+  bool pop(Intent &out, bool command_ready = true) {
+    if (!command_ready || !count)
       return false;
     out = queue[head];
     head = (head + 1) % capacity;
@@ -240,10 +273,17 @@ struct Channel {
     return true;
   }
   void publish(const Snapshot &value, std::uint64_t now = 0) {
-    const bool invalidated =
-        value.connection != Connection::CONNECTED ||
-        value.session != latest.session ||
-        value.capability_revision != latest.capability_revision;
+    if (value.volume_known) increment(authoritative_updates);
+    // Capability revisions are target-wide. D-009 playback-context updates
+    // may advance that revision without changing the volume contract. Keep an
+    // admitted volume target across such unrelated revisions, but retain the
+    // hard fences for connection/session loss and loss of volume authority.
+    const bool volume_context_valid =
+        value.connection == Connection::CONNECTED && value.session &&
+        value.session == latest.session && value.capability_revision &&
+        value.volume_set && value.volume_known;
+    const bool invalidated = !volume_context_valid;
+    const auto active_token = volume_token;
     const bool target_reached =
         volume_outstanding && value.volume_set && value.volume_known &&
         value.volume == volume_target;
@@ -251,13 +291,21 @@ struct Channel {
         volume_outstanding && volume_confirmed && value.volume_set &&
         value.volume_known && value.volume != latest.volume &&
         value.volume != volume_target;
-    if (invalidated)
-      cancel_volume();
+    const bool cancelled = invalidated || authoritative_divergence;
+    if (invalidated) {
+      const auto reason =
+          value.connection != Connection::CONNECTED || !value.session ||
+                  value.session != latest.session
+              ? CancelReason::SESSION
+              : !value.capability_revision ? CancelReason::CAPABILITY
+                                           : CancelReason::AUTHORITY;
+      cancel_volume(reason);
+    }
     else if (authoritative_divergence)
       // A fresh post-result value different from the submitted target is a
       // legitimate external change. Reconcile to it; never overwrite it with
       // a locally accumulated successor based on obsolete authority.
-      cancel_volume();
+      cancel_volume(CancelReason::DIVERGENCE);
     else if (target_reached) {
       volume_outstanding = false;
       volume_confirmed = false;
@@ -270,10 +318,23 @@ struct Channel {
       // Compact in FIFO order in the same caller-held critical section.
       unsigned kept = 0;
       for (unsigned i = 0; i < count; ++i) {
-        const auto intent = queue[(head + i) % capacity];
-        if (intent.session == value.session &&
-            intent.capability_revision == value.capability_revision &&
-            enabled(value, intent.action))
+        auto intent = queue[(head + i) % capacity];
+        if (intent.token == active_token &&
+            (cancelled || target_reached))
+          continue;
+        if (intent.token == volume_token && volume_outstanding &&
+            volume_context_valid && intent.volume != value.volume) {
+          // The queued command has not crossed the owner boundary yet. Refresh
+          // its capture fence to the current target-wide revision; Facade will
+          // still perform the full CCM capture/admission check at dispatch.
+          intent.session = value.session;
+          intent.capability_revision = value.capability_revision;
+          intent.action = intent.volume > value.volume ? Action::VOLUME_UP
+                                                       : Action::VOLUME_DOWN;
+          queue[(head + kept++) % capacity] = intent;
+        } else if (intent.session == value.session &&
+                   intent.capability_revision == value.capability_revision &&
+                   enabled(value, intent.action))
           queue[(head + kept++) % capacity] = intent;
         else
           ++rejected;
@@ -296,6 +357,10 @@ struct Channel {
 // Zero-wait enqueue; false means rejected, never retained for later replay.
 bool request(Action);
 void record_encoder_state(std::uint64_t transitions, std::uint64_t detents,
+                          std::uint64_t invalid, std::uint64_t positive,
+                          std::uint64_t negative, std::uint64_t rejected,
+                          std::uint32_t sample_last_ms,
+                          std::uint32_t sample_max_ms,
                           std::int8_t last_delta);
 // Copies the latest coherent value. Owned by caller, valid after later updates.
 bool read(Snapshot &, std::uint64_t &generation);

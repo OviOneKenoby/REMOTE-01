@@ -34,6 +34,15 @@ bool coherent() {
   CHECK(x.previous && x.toggle && x.next);
   return true;
 }
+bool remote_pending_preserves_playback_availability() {
+  Snapshot value;
+  value.previous = value.toggle = value.next = true;
+  auto remote = development::present_snapshot(value, true, true);
+  CHECK(remote.previous && remote.toggle && remote.next);
+  auto synthetic = development::present_snapshot(value, true, false);
+  CHECK(!synthetic.previous && !synthetic.toggle && !synthetic.next);
+  return true;
+}
 bool connected() {
   START;
   CHECK(s.snapshot().connection == Connection::CONNECTED);
@@ -117,6 +126,10 @@ bool previous() {
         std::strcmp(s.snapshot().title, "Mock Three") == 0);
   CHECK(s.device.mock.last.value.request_id ==
         s.store.records[0].get()->request.request_id);
+  CHECK(s.store.records[0].get()->request.media_context_generation.present &&
+        s.store.records[0].get()->request.preconditions.size() == 1 &&
+        s.store.records[0].get()->request.preconditions[0].field_id.view() ==
+            "playback.state");
   return true;
 }
 bool next() {
@@ -124,6 +137,8 @@ bool next() {
   CHECK(s.handle(intent(s, 1, Action::NEXT), 11));
   CHECK(s.device.mock.dispatches == 1 &&
         std::strcmp(s.snapshot().title, "Mock Two") == 0);
+  CHECK(s.store.records[0].get()->request.media_context_generation.present &&
+        s.store.records[0].get()->request.preconditions.size() == 1);
   return true;
 }
 bool play() {
@@ -309,7 +324,7 @@ bool pending_keeps_volume_accumulator_available() {
   channel.publish(s.snapshot());
   CHECK(channel.latest.volume_set);
   for(unsigned i=0;i<4;++i)CHECK(channel.request(Action::VOLUME_DOWN));
-  CHECK(channel.desired_volume==63&&channel.count==0&&channel.volume_outstanding);
+  CHECK(channel.desired_volume==58&&channel.count==0&&channel.volume_outstanding);
   return true;
 }
 bool expired_field() {
@@ -457,6 +472,7 @@ int main() {
   const Test tests[] = {
 #define TEST(x) {#x, x}
       TEST(coherent),
+      TEST(remote_pending_preserves_playback_availability),
       TEST(connected),
       TEST(disconnected),
       TEST(playing),

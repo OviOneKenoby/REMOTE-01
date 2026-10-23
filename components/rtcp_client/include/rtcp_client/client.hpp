@@ -13,24 +13,30 @@ namespace rtcp_client {
 class Client {
 public:
   enum class State{disabled,disconnected,connecting,server_hello,authenticated,identity,capabilities,ready};
-  enum class Event{none,connected,disconnected,identity,capabilities,snapshot,result};
+  enum class Event{none,connected,disconnected,identity,capabilities,snapshot,now_playing,result};
   bool initialize();
   void suspend();
-  Event poll(std::uint64_t now_ms);
+  Event poll(std::uint64_t now_ms,bool command_waiting=false);
   bool set_volume(std::uint64_t request,std::uint32_t numerator,std::uint32_t denominator);
+  bool playback(std::uint64_t request,wire::PlaybackOperation,std::uint8_t expected_state,
+                std::uint64_t media_generation);
+  bool command_ready()const{return state_==State::ready&&!pending_request_&&!awaiting_&&!tx_used_;}
   State state()const{return state_;} const wire::Identity&identity()const{return identity_;}
   const wire::Capabilities&capabilities()const{return capabilities_;}
   const wire::Snapshot&snapshot()const{return snapshot_;} const wire::Result&result()const{return result_;}
+  const wire::NowPlaying&now_playing()const{return now_playing_;}
   std::uint64_t session_generation()const{return association_.session_generation;}
   const Diagnostic&diagnostic()const{return diagnostic_;}
   static constexpr std::size_t static_buffer_bytes(){return 556*2;}
 private:
+  enum class Awaited:std::uint8_t{none,identity,capabilities,snapshot,now_playing,result};
   Association association_{};State state_{State::disabled};int socket_{-1};std::uint64_t retry_at_{0},snapshot_at_{0},deadline_{0};bool awaiting_{false};
   std::array<std::uint8_t,556>rx_{},tx_{};std::size_t rx_used_{0},rx_need_{56},tx_used_{0},tx_sent_{0};
   std::array<std::uint8_t,40>ch_{};std::array<std::uint8_t,56>sh_{};std::array<std::uint8_t,16>cn_{},sn_{};
   std::array<std::uint8_t,16>c2s_key_{},s2c_key_{};std::array<std::uint8_t,4>c2s_prefix_{},s2c_prefix_{};
   std::array<std::uint8_t,8>session_id_{};std::uint64_t tx_counter_{1},rx_counter_{1},pending_request_{0};
-  wire::Identity identity_{};wire::Capabilities capabilities_{};wire::Snapshot snapshot_{};wire::Result result_{};
+  wire::Identity identity_{};wire::Capabilities capabilities_{};wire::Snapshot snapshot_{};wire::NowPlaying now_playing_{};wire::Result result_{};
+  Awaited awaited_{Awaited::none};bool now_playing_due_{false};
   Diagnostic diagnostic_{};NetworkStatusGate network_status_{};
   EndpointSelection endpoints_{};std::uint64_t discovery_at_{0};
   DiscoveryBatch pending_discovery_{};bool pending_discovery_present_{false};bool discovery_ready_{false};

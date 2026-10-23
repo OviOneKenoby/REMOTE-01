@@ -1,5 +1,295 @@
 # Changelog
 
+## 2026-10-23 - A-REMOTE-013 D-009 Round 5 partial hardware pass
+
+Installed the exact 2,578,352-byte Round 5 application once at `0x10000` on
+the verified 16 MiB REMOTE ESP32-S3. Independent exact-span readback matched
+SHA-256
+`6eb44ff4137d8c11f44dc5e0fed0a7061f77b172d4a38982e5219bbd7454e278`.
+Stored Wi-Fi, secure pairing and authenticated RTCP were retained; authoritative
+volume and the existing HOME UI recovered normally.
+
+Owner-observed hardware PASS covers carousel navigation, brightness, touch,
+HOME index 2, encoder volume, bidirectional radio Play/Pause state/control,
+station and combined StreamTitle presentation/scrolling/invalidation, discovered
+context Previous/Next withdrawal, TUNER-restart invalidation/reconnect, A2DP
+coexistence and return to radio. Bluetooth metadata and AVRCP are outside D-009.
+Fixed saved-list Previous/Next/wrap, forced invalid-command Favorites proof,
+REMOTE sleep/wake/restart and representative resource/stability acceptance
+remain untested. The session is closed as PARTIAL HARDWARE PASS; A-REMOTE-013
+hardware acceptance remains pending. See
+[the Round 5 report](docs/A_REMOTE_013_D009_ROUND5_HARDWARE_VALIDATION.md).
+
+## 2026-10-22 - A-REMOTE-013 D-009 hardware-regression round 5
+
+Round 4 was installed application-only and independently read back with the
+expected 2,578,304-byte SHA-256 identity. Boot, retained Wi-Fi and authenticated
+RTCP synchronization passed. Subsequent owner observations found that manually
+counted rotations sometimes produced nine decoded detents from approximately
+ten physical detents, requested a fixed two-percentage-point volume step, and
+found encoder use did not refresh display inactivity.
+
+**A - encoder reliability:** source and deterministic tests do not establish a
+decoder defect. GPIO2/GPIO5 remain input-only with internal pull-ups and a 2 ms
+polling task. The decoder preserves partial quarter cycles, emits only after a
+complete four-transition cycle, cancels opposing partial motion, and rejects a
+diagonal transition without inventing a detent. The measured 39 transitions,
+9 detents and 1 invalid transition are reproducible as nine complete cycles,
+one ambiguous diagonal and a two-quarter incomplete cycle. Manually counted
+mechanical detents are not waveform evidence, so the decoder, threshold,
+sampling rate and direction mapping are unchanged. A logic-analyzer capture of
+GPIO2/GPIO5 is still required to distinguish missed electrical transitions
+from an incomplete or ambiguous physical cycle.
+
+**B - fixed volume step:** `control_home::Channel` now applies exactly two
+percentage points per accepted `VOLUME_UP`/`VOLUME_DOWN` intent at the local
+desired-target accumulator. It clamps to 0..100 while preserving absolute RTCP
+volume semantics, bounded coalescing, one command in flight, command readiness,
+session/capability fences, reconciliation and no automatic retry. Slow and
+rapid sequences with identical detent counts converge on the same target.
+
+**C - display activity:** each valid decoded encoder cycle now increments the
+same thread-safe physical-activity counter used by touch. The POWER owner
+refreshes the existing 30-second display-idle timer or follows the existing
+display-idle wake path; invalid transitions do neither. No LVGL call is made
+from the encoder task, and no new timer, queue, allocation or wake source was
+added. GPIO2/GPIO5 are not SYSTEM_SLEEP wake sources, so encoder rotation is
+not claimed to wake a fully sleeping ESP32-S3.
+
+Focused verification passed: encoder routing/decoder/activity and RTCP
+coalescing 10/10 with 98 assertions; volume admission, fixed-step bounds,
+reconciliation and lifecycle fencing 12/12 with 323 assertions; physical input
+19/19 with 24,627 assertions and 1,000 cycles; POWER 20/20 with 19,244
+assertions and 1,000 cycles; HOME/Core 42/42 with 3,565 assertions; RTCP D-009
+8/8 with 44 assertions; D-009 policy 15/15; encoder activity policy 9/9; HOME
+metadata policy 15/15; and UI volume binding 1/1 with 11 assertions. The single
+`remote01` production build passed at source
+`bfce47816a8b2b8a92f41d76c6a4bc4975d25361`.
+
+The private Round 5 application is 2,578,352 bytes with SHA-256
+`6eb44ff4137d8c11f44dc5e0fed0a7061f77b172d4a38982e5219bbd7454e278`;
+ELF SHA-256 is
+`9499b13b9c4f6fc3ece4c19d75b4303c13ab06639e4b66f0e4e1cfd0128d4acf`.
+Static RAM remains 56,460 bytes, the 3 MiB application slot retains 567,376
+bytes, and diagnostics snapshot/storage remain 1,008/8,176 bytes. No hardware
+access or flash operation occurred in Round 5. Encoder reliability, the fixed
+step and display activity remain hardware pending.
+
+## 2026-10-22 - A-REMOTE-013 D-009 hardware-regression round 4
+
+Round 3 hardware testing decoded and admitted all ten rapid encoder detents,
+but completed only four volume operations; six ended as definite failures and
+the authoritative volume moved only four points. The read-only diagnostic
+event ring retained only `VOLUME_FAILURE` detail 13
+(`GUARANTEED_NO_EXECUTION`) for this failure class. No queue rejection,
+session/capability/authority/divergence cancellation, authenticated TUNER
+refusal, or RTCP session loss accompanied the rapid-test delta.
+
+Source tracing demonstrated the remaining deterministic race. After an
+authoritative snapshot reached one coalesced target, `Channel::publish()`
+queued the accumulated successor. Before the owner popped that successor,
+`Client::poll()` could occupy the single authenticated record lane with its
+automatic snapshot or D-009 now-playing request. `RtcpDevice::dispatch()` then
+called `Client::set_volume()` while `awaiting_` was true, received `false`, and
+reported `RTCP_NOT_SENT`; Core correctly closed the attempt as failed with
+guaranteed no execution. The operation therefore failed locally before any
+volume command reached TUNER.
+
+The owner loop now retains its bounded intent while the RTCP client is not
+command-ready. A waiting control also suppresses creation of another
+background snapshot/metadata request until the current authenticated exchange
+finishes, after which the original intent crosses the existing Facade/Core
+admission path once. This is pre-dispatch scheduling, not command retry. The
+one-command-in-flight invariant, three-second command deadline after capture,
+session and authority fences, disconnect/sleep cancellation, external-change
+reconciliation, correlated results, and RTCP wire/security behavior are
+unchanged.
+
+Focused verification passed: encoder/Facade/transport scheduling 9/9 with 94
+assertions; volume admission and lifecycle fencing 11/11 with 290 assertions;
+D-009 policy 15/15; and HOME metadata policy 15/15. The single `remote01`
+production build passed at source
+`bd15cc8906c244152ccadc1a6734bb9c1d4bf998`.
+
+The private Round 4 application is 2,578,304 bytes with SHA-256
+`1fa0432b8785bbfce8aecb22e3f5b747080898fdfd850eb4d93ac965b49a30b7`;
+ELF SHA-256 is
+`7fe9aaaebd2b61dddfc3a414fd41f89fc8f89d1500ae3bcef9ee7b9425cd9cd7`.
+Static RAM remains 56,460 bytes, the 3 MiB application slot retains 567,424
+bytes, `diagnostics::Snapshots` remains 1,008 bytes, and total diagnostics
+storage remains 8,176 bytes. No hardware access or flash operation occurred.
+The owner-verified HOME scrolling results remain PASS and that source was not
+changed. Rapid-volume hardware acceptance of this candidate remains pending;
+no hardware fix is claimed.
+
+## 2026-10-22 - A-REMOTE-013 D-009 hardware-regression round 3
+
+Round 2 hardware counters resolved the remaining volume-loss boundary. Across
+26 queued targets, all 14 requests that crossed the RTCP boundary completed;
+the other 12 failed locally before dispatch. No authenticated TUNER refusal or
+volume cancellation was recorded. Source tracing reproduced a race in which an
+unrelated D-009 playback-context update advanced the target-wide capability
+revision after `Channel::pop()` but before `Facade::handle()`. The Facade then
+rejected a still-valid absolute volume target even though the authenticated
+session and fresh volume authority were unchanged.
+
+The Facade now revalidates same-session absolute volume targets against current
+volume authority and the current observation precondition. Non-volume commands
+retain exact capability-revision matching, and session fencing, strict Core
+admission, authenticated target refusals, one-command-in-flight behavior, and
+no automatic retry are unchanged. A bounded event detail distinguishes local
+admission/capture failures from authenticated target refusals and later
+terminal failures without enlarging `diagnostics::Snapshots`; added snapshot
+storage overhead is zero bytes.
+
+The existing 148-pixel station and StreamTitle labels now use LVGL's clipped,
+bidirectional `LV_LABEL_LONG_SCROLL` mode at 25 pixels/second with one-second
+endpoint pauses. Replacement metadata restarts at the first character, and
+scrolling stops outside HOME and while display commands are unavailable. The
+existing widgets, fonts, coordinates, assignment, buffers, UTF-8 validation,
+touch behavior, and carousel remain unchanged.
+
+Focused verification passed: encoder/Facade 8/8 with 47 assertions; volume
+admission 11/11 with 290 assertions; diagnostics 9/9 with 9,096 assertions and
+1,000 cycles; HOME/Core 42/42 with 3,565 assertions; RTCP D-009 8/8 with 44
+assertions; D-009 policy 15/15; HOME metadata policy 15/15; and UI volume
+binding 1/1 with 11 assertions. The single `remote01` production build passed
+at source `3a2fda5887df8671467cf36917f607e6d1b69b11`.
+
+The private Round 3 application is 2,578,128 bytes with SHA-256
+`6ba73c80b774727cc137f5606b408f6cfc3ff0ea486ef879869453a5debb0383`;
+ELF SHA-256 is
+`e85165c88f1ec3410c1e9f304a4cd224a466bb3f95225045a2aeccb37d074ead`.
+Static RAM is 56,460 bytes and the 3 MiB application slot retains 567,600
+bytes. This is +624 application bytes and -624 bytes of headroom versus the
+preserved Round 2 candidate, with unchanged static RAM. No hardware access or
+flash operation occurred. Hardware verification of rapid volume input,
+metadata scrolling, lifecycle behavior, and the remaining D-009 functions is
+still required; no hardware PASS is claimed.
+
+## 2026-10-21 - A-REMOTE-013 D-009 hardware-regression round 2
+
+Owner testing of the first correction superseded its encoder conclusion. Rapid
+rotation remained intermittent: many physical detents sometimes produced only
+one or two displayed volume steps. Direction reversal, Play/Pause availability,
+Play/Pause execution, and station/StreamTitle assignment passed. Long combined
+StreamTitle text still exceeded the physical presentation boundary.
+
+The encoder decoder, GPIO configuration, 2 ms sampling task, and command path
+are unchanged from the owner-accepted A-REMOTE-012 implementation. Existing
+diagnostics could count sampled transitions, decoded detents, and admitted
+intents, but could not distinguish skipped/invalid quadrature transitions,
+scheduler gaps, local admission rejection, or later command cancellation. No
+new decoder or CCM behavior change is justified by the available evidence.
+Bounded diagnostics now expose invalid transitions, direction counts, rejected
+emissions, last/maximum sample intervals, and the queued/completed/failed/
+cancelled/authority volume pipeline. The counters allocate no hot-path memory,
+perform no per-transition logging, and retain the 1,024-byte snapshot limit.
+
+The lower HOME metadata widget used clip-only long-text handling while the
+upper station widget used bounded ellipsis. The existing 148-pixel lower widget
+now uses `LV_LABEL_LONG_DOT`; its coordinates, font, assignment, carousel,
+artwork, navigation, buffers, and validated UTF-8 ingestion remain unchanged.
+
+Focused verification passed: encoder 6/6 with 30 assertions; volume admission
+11/11 with 290 assertions; diagnostics 9/9 with 9,096 assertions and 1,000
+cycles; HOME 42/42 with 3,565 assertions; ingress/UTF-8 18/18 with 22,189
+assertions and 1,000 stress iterations; D-009 policy 15/15; metadata UI bounds
+8/8. One `remote01` production build passed at source
+`434b1359ba78ebe517f7dfe47423067a99b745f8`.
+
+The private diagnostic candidate is 2,577,504 bytes with SHA-256
+`8c529cc5c16ca3e0a3487f02b975187285eddcdd348ba7ae703d5ccc93b2b4c2`;
+ELF SHA-256 is
+`978a36934c5106d01a7d61870ec92cf355fec6222f8d2556fd9c18b82ea35d7e`.
+Static RAM is 56,460 bytes, the diagnostics snapshot is 1,008 bytes, and 3 MiB
+slot headroom is 568,224 bytes. This is +2,096 application bytes, +104 static
+RAM bytes, and -2,096 bytes headroom versus the installed correction. Hardware
+installation and reproduction remain separately authorized and pending; the
+encoder regression is not declared solved.
+
+## 2026-10-21 - A-REMOTE-013 D-009 hardware-regression correction
+
+The first D-009 REMOTE application was installed and read back exactly at
+2,575,168 bytes with SHA-256
+`d9c13a6ce030b9ab2a4db02fad1c5afcf80eee364f0046665a9dcb1652698d76`.
+Hardware confirmed authenticated TUNER connection, station and combined ICY
+StreamTitle updates, and HOME Play/Pause. It also exposed three REMOTE
+regressions: rapid encoder input lost accumulated volume targets, every volume
+request temporarily dimmed the playback controls, and the station/StreamTitle
+labels were presented in the opposite visual positions.
+
+The bounded correction at source
+`5b3c7c08d06fe0395409090221594f9e5bbd8ace` preserves an admitted volume
+target across unrelated target-wide D-009 capability revisions while retaining
+connection, session, authority, external-divergence and no-replay fences.
+Queued volume intent is refreshed to the current capability revision before it
+crosses the owner boundary. RTCP pending state no longer masquerades as loss
+of fresh playback capability, and volume/playback snapshot observations are
+published independently. The existing HOME widgets now present station name
+in the large upper label and the combined StreamTitle in the smaller lower
+label; CCM field semantics, geometry and generated UI resources are unchanged.
+
+Focused verification passed: volume admission 10/10 with 267 assertions,
+HOME/Core 42/42 with 3,565 assertions, RTCP D-009 8/8 with 44 assertions, and
+D-009 source-boundary policy 14/14. This includes rapid in-flight accumulation,
+successor delivery, direction reversal, external divergence, session/lifecycle
+cancellation, pending playback presentation, independent snapshot admission,
+metadata mapping, and existing malformed/over-limit UTF-8 handling. The single
+authorized `remote01` production build passed.
+
+The private corrected application is 2,575,408 bytes with SHA-256
+`250f55bd4ce0edab9c77e59b227c2c7c9d5b3bfbd2780795dc3dd654203b80a7`;
+the ELF SHA-256 is
+`1e55ee1e6f06ab9ef38a20a7f05b5f53feb2e7e49ec93375f077ba070b2da508`.
+Static RAM remains 56,356 bytes and 3 MiB slot headroom is 570,320 bytes.
+Relative to the installed D-009 candidate this is +240 application bytes,
+unchanged static RAM, and -240 bytes headroom. Hardware retesting of the
+corrected application remains required; it has not been flashed or claimed as
+hardware validated. The installed candidate and the accepted A-REMOTE-012
+rollback (`b6053c04c03114a24a59f178da4eb03d4bada77faded43b6009667579c21d5da`)
+remain preserved.
+
+## 2026-10-21 - A-REMOTE-013 D-009 REMOTE software candidate
+
+Implemented the frozen RTCP/1 D-009 playback and now-playing profile on top of
+the A-REMOTE-014 discovery candidate. RTCP message IDs 9-11, capability
+revision 2 feature gating, authenticated play/pause/previous/next commands,
+strict result correlation, fixed-list restrictions, and authoritative station
+and now-playing ingestion are integrated through the existing CCM Core and
+HOME screen at carousel index 2. Existing HOME controls and text widgets are
+reused without layout or generated-resource changes. Physical REMOTE buttons
+remain unassigned.
+
+The implementation preserves the 512-byte plaintext limit, 556-byte record
+buffers, one command in flight, session/generation fencing, no automatic
+command replay, existing volume responsiveness, and LVGL task ownership.
+Malformed or over-limit metadata is rejected, presentation remains bounded and
+UTF-8 safe, and stale metadata/pending commands are cleared across connection
+and session replacement.
+
+Focused verification passed: RTCP D-009 8/8 with 44 assertions; D-009 policy
+12/12; HOME 41/41 with 3,562 assertions; volume admission 9/9 with 238
+assertions; UI volume binding 1/1 with 11 assertions; power 19/19 with 19,236
+assertions and 1,000 stress iterations; ingress 18/18 with 22,189 assertions
+and 1,000 stress iterations. The single authorized `remote01` production build
+passed at source `1a29c4e3652fb3aeb7ef496b674691e78aca2d67`.
+
+The private application is 2,575,168 bytes with SHA-256
+`d9c13a6ce030b9ab2a4db02fad1c5afcf80eee364f0046665a9dcb1652698d76`,
+uses 56,356 bytes of static RAM, and leaves 570,560 bytes in the 3 MiB
+application slot. Relative to the accepted A-REMOTE-012 baseline, this is
++48,320 application bytes, +8,968 static RAM bytes, and -48,320 bytes of
+headroom. The generated partition table remains the accepted seven-entry image
+with SHA-256
+`a144343580dbdadace66fccc5969d7557de3d4c4f15a61e76db205cc26348184`.
+
+No firmware was flashed and no hardware, NVS, pairing, partition, credential,
+TUNER source, or protocol-security state changed. Hardware interoperability and
+rollback validation remain required. The coordination documents that still
+describe D-009 implementation as unstarted predate the owner's explicit REMOTE
+implementation authorization and are preserved as historical status.
+
 ## 2026-10-20 - A-REMOTE-014 authenticated RTCP endpoint discovery
 
 REMOTE now performs bounded native ESP-IDF mDNS/DNS-SD discovery for

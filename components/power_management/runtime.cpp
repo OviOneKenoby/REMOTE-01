@@ -461,8 +461,9 @@ void task(void *) {
   }
 }
 } // namespace
+void activity() { physical_activity.fetch_add(1); }
 bool touch(bool pressed) {
-  if (pressed) physical_activity.fetch_add(1);
+  if (pressed) activity();
   return touch_gate.accept(pressed, active.load(), consume_contact.exchange(false), settling.load());
 }
 bool commands_allowed() { return active.load() && request.load() == Request::NONE; }

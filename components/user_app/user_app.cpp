@@ -51,11 +51,16 @@ void encoder_task(void *) {
 		              encoder_home.load(std::memory_order_relaxed),
 		              [](control_home::Action action) {
 			              return control_home::request(action);
-		              });
+		              },
+		              [] { power_management::activity(); });
 		const auto encoder = router.view();
 		if (!(encoder == published)) {
 			published = encoder;
 			control_home::record_encoder_state(encoder.transitions, encoder.detents,
+			                                   encoder.invalid, encoder.positive,
+			                                   encoder.negative, encoder.rejected,
+			                                   encoder.sample_last_ms,
+			                                   encoder.sample_max_ms,
 			                                   encoder.last_delta);
 		}
 		std::uint8_t pressed = 0;
@@ -72,6 +77,24 @@ static void home_text(lv_obj_t *label, const char *text)
 	if (std::strcmp(lv_label_get_text(label), text) != 0) lv_label_set_text(label, text);
 }
 
+static void home_scrolling_text(lv_obj_t *label, const char *text, bool active)
+{
+	const auto wanted = active ? LV_LABEL_LONG_SCROLL : LV_LABEL_LONG_CLIP;
+	const bool changed = std::strcmp(lv_label_get_text(label), text) != 0;
+	if (!changed && lv_label_get_long_mode(label) == wanted) return;
+	// Switching modes deletes LVGL's old offset animation and resets its offset,
+	// so replacement metadata always starts with its first character visible.
+	lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
+	if (changed) lv_label_set_text(label, text);
+	if (!active) return;
+	lv_label_set_long_mode(label, LV_LABEL_LONG_SCROLL);
+	if (auto *animation = lv_anim_get(label, nullptr)) {
+		lv_anim_set_delay(animation, 1000);
+		lv_anim_set_playback_delay(animation, 1000);
+		lv_anim_set_repeat_delay(animation, 1000);
+	}
+}
+
 static void home_click(lv_event_t *event)
 {
 	// Bounded intent enqueue only. Core derives PLAY/PAUSE on its own owner.
@@ -81,9 +104,10 @@ static void home_click(lv_event_t *event)
 
 static void home_refresh(lv_timer_t *)
 {
-	encoder_home.store(home.page &&
-	                   lv_carousel_get_element_act(src_ui.screen_carousel_1) ==
-	                       home.page,
+	const bool home_active = home.page &&
+	                         lv_carousel_get_element_act(src_ui.screen_carousel_1) ==
+	                             home.page;
+	encoder_home.store(home_active,
 	                   std::memory_order_relaxed);
 	network_manager::Status network{};
 	(void)network_manager::read_status(network); // Never wait for NETWORK/HTTP.
@@ -112,8 +136,13 @@ static void home_refresh(lv_timer_t *)
 	using control_home::Connection;
 	home_text(home.status, s.connection == Connection::CONNECTED ? "CONNECTED" :
 	                      s.connection == Connection::UNAVAILABLE ? "UNAVAILABLE" : "UNKNOWN");
-	home_text(home.title, s.title[0] ? s.title : "--");
-	home_text(home.subtitle, s.subtitle[0] ? s.subtitle : "--");
+	// CCM retains media.title=StreamTitle and media.subtitle=station. HOME's
+	// accepted visual hierarchy presents the station in the large upper label.
+	const bool metadata_active = home_active && power_management::commands_allowed();
+	home_scrolling_text(home.title, s.subtitle[0] ? s.subtitle : "--",
+	                    metadata_active);
+	home_scrolling_text(home.subtitle, s.title[0] ? s.title : "--",
+	                    metadata_active);
 	home_text(home.playback, s.playback == Playback::PLAYING ? LV_SYMBOL_PLAY " PLAYING" :
 	                        s.playback == Playback::PAUSED ? LV_SYMBOL_PAUSE " PAUSED" :
 	                        s.playback == Playback::CONFLICT ? "CONFLICT" :
@@ -223,9 +252,11 @@ static void remote01_mockup_create(void)
 	lv_obj_align(artwork_caption, LV_ALIGN_CENTER, 0, 18);
 
 	home.title = remote01_single_line(page, "--", &lv_font_montserrat_20, text, 12, 262, 148,
-	                     LV_LABEL_LONG_DOT, LV_TEXT_ALIGN_LEFT);
+	                     LV_LABEL_LONG_SCROLL, LV_TEXT_ALIGN_LEFT);
+	lv_obj_set_style_anim_speed(home.title, 25, LV_PART_MAIN);
 	home.subtitle = remote01_single_line(page, "--", &lv_font_montserrat_14, muted, 12, 290, 148,
-	                     LV_LABEL_LONG_CLIP, LV_TEXT_ALIGN_LEFT);
+	                     LV_LABEL_LONG_SCROLL, LV_TEXT_ALIGN_LEFT);
+	lv_obj_set_style_anim_speed(home.subtitle, 25, LV_PART_MAIN);
 	home.playback = remote01_single_line(page, "UNKNOWN", &lv_font_montserrat_12, accent, 12, 316, 148,
 	                                    LV_LABEL_LONG_CLIP, LV_TEXT_ALIGN_LEFT);
 

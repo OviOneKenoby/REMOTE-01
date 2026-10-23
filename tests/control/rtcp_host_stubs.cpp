@@ -12,5 +12,5 @@ bool RtcpDevice::install(control::Core &, control::ingress::Boundary &,
                          const control::Id &, control::U64) {
   return false;
 }
-bool RtcpDevice::poll(control::U64) { return true; }
+bool RtcpDevice::poll(control::U64, bool) { return true; }
 } // namespace control_home
