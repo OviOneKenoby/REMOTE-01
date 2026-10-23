@@ -95,9 +95,12 @@ Snapshot Facade::snapshot() const {
   out.previous = available("playback.previous");
   out.next = available("playback.next");
   out.volume_set = out.volume_known && available("volume.set");
+  const bool bluetooth = std::strcmp(out.subtitle, "Bluetooth") == 0;
   out.toggle =
       (out.playback == Playback::PLAYING && available("playback.pause")) ||
-      (out.playback == Playback::PAUSED && available("playback.play"));
+      ((out.playback == Playback::PAUSED ||
+        (bluetooth && out.playback == Playback::OTHER)) &&
+       available("playback.play"));
   return out;
 }
 bool Facade::handle(Intent intent, U64 now, bool accepting) {

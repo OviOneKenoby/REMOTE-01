@@ -1,5 +1,69 @@
 # Changelog
 
+## 2026-10-23 - BTX/1.0 REMOTE Phase 6B installation
+
+Installed the exact 2,582,432-byte BTX/1.0 application at `0x10000` on the
+verified REMOTE ESP32-S3. The single application-only write completed and an
+independent 2,582,432-byte readback matched SHA-256
+`5d84f83b8e9e6f860e7cd807a270eeee697ed42dc361bbb1e1022f639dc4206b`.
+Boot diagnostics reported embedded build `5b32cbb` and the expected ELF
+SHA-256. Stored Wi-Fi and pairing were retained; Wi-Fi connected without a
+reconnect or error, and RTCP completed authentication and identity acceptance.
+
+The bounded automated checkpoint did not obtain a fresh authoritative volume
+observation: RTCP was authenticated and transport-connected, but
+`volume_known` and `volume_set` remained unavailable. BTX negotiation is not
+separately exposed by the existing status interface. Installation/readback is
+verified; control, Bluetooth negotiation/metadata, physical controls and
+coexistence remain pending owner validation. No TUNER access or write occurred.
+
+## 2026-10-23 - BTX/1.0 REMOTE software implementation
+
+Implemented the approved authenticated BTX/1.0 extension on the verified
+A-REMOTE-013 D-009 Round 5 baseline. The existing identity and first legacy
+capability exchange remain unchanged; REMOTE immediately performs the specified
+second authenticated capability probe. Exact ID 12 enables BTX for that
+session, a second legacy ID 4 cleanly retains D-009-only behavior, and malformed,
+unexpected or interrupted negotiation fails closed. Negotiated authority is
+cleared on disconnect, session replacement and sleep teardown.
+
+The RTCP codec now strictly validates IDs 12-15, including exact lengths,
+versions, feature and reserved bits, enums, capability/current-availability
+separation, canonical source/connection/playback combinations, bounded UTF-8
+metadata, sequence and generation fields. Bluetooth commands use ID 15 and the
+existing correlated ID 8 result. Existing authentication, replay protection,
+single request in flight, no automatic retry and D-009 radio semantics remain
+unchanged.
+
+HOME reuses its source and StreamTitle widgets. Bluetooth presents the literal
+`Bluetooth` and the approved artist/title mapping in the existing bidirectional
+scroll path; authoritative state changes and lifecycle invalidation clear stale
+metadata. Play, Pause, Previous and Next use fresh authenticated BTX authority.
+The existing source-independent volume path, fixed 2% detents, UI geometry,
+power behavior and radio controls are unchanged.
+
+Focused verification passed: BTX codec/negotiation 7/7 with 52 assertions;
+BTX integration policy 15/15; reference codec 17/17; HOME metadata policy
+15/15; D-009 policy 15/15; HOME/Core 42/42 with 3,565 assertions; encoder and
+volume routing 10/10 with 98 assertions; RTCP D-009 8/8 with 44 assertions;
+volume admission 12/12 with 323 assertions; RTCP freshness/admission 2/2 with
+221 assertions; POWER 20/20 with 19,244 assertions; and physical input 19/19
+with 24,627 assertions. Approved coordination and TUNER vectors were
+byte-identical, SHA-256
+`b09f93919e5f91a25531e40352e29043a0dd3f31461e3dd152be6b9bf10aaf34`.
+
+The exact clean `remote01` production build from source
+`5b32cbbeb554cd8a4d49094a5bd7c4797fd0b403` passed. The private application is
+2,582,432 bytes with SHA-256
+`5d84f83b8e9e6f860e7cd807a270eeee697ed42dc361bbb1e1022f639dc4206b`;
+ELF SHA-256 is
+`e4139e2a50d3b6a439c19ade8792a98c2fc67ff9417e57e02df0a9977100ee57`.
+Static RAM is 56,652 bytes and the 3 MiB slot retains 563,296 bytes. Measured
+bounded persistent-state growth is 232 bytes against the 320-byte limit; the
+temporary HOME snapshot grows 192 bytes against the 195-byte limit. No new
+task, transport buffer, unbounded queue or metadata allocation path was added.
+No hardware access or flash operation occurred; BTX hardware commissioning is
+still required. See [the BTX handoff](docs/BTX_1_0_REMOTE_IMPLEMENTATION.md).
 ## 2026-10-23 - A-REMOTE-013 D-009 Round 5 partial hardware pass
 
 Installed the exact 2,578,352-byte Round 5 application once at `0x10000` on
