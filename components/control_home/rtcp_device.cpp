@@ -1,4 +1,6 @@
 #include "control_home/rtcp_device.hpp"
+#include "control_home/btx_policy.hpp"
+#include <cstring>
 #include <string>
 
 namespace control_home {
@@ -28,6 +30,26 @@ Optional<std::uint8_t> expected_playback(const CommandRequest &request) {
         precondition.expected_value.present &&
         precondition.expected_value.value.kind == ScalarKind::PLAYBACK)
       return Optional<std::uint8_t>(std::uint8_t(precondition.expected_value.value.playback));
+  return {};
+}
+
+Optional<rtcp_client::wire::BtxPlayback> expected_btx_playback(
+    const CommandRequest &request) {
+  for (const auto &precondition : request.preconditions)
+    if (precondition.field_id.view() == "playback.state" &&
+        precondition.expected_value.present &&
+        precondition.expected_value.value.kind == ScalarKind::PLAYBACK) {
+      switch (precondition.expected_value.value.playback) {
+      case control::Playback::PLAYING:
+        return {rtcp_client::wire::BtxPlayback::playing};
+      case control::Playback::PAUSED:
+        return {rtcp_client::wire::BtxPlayback::paused};
+      case control::Playback::NOT_PLAYING:
+        return {rtcp_client::wire::BtxPlayback::stopped};
+      case control::Playback::BUFFERING:
+        return {rtcp_client::wire::BtxPlayback::unknown};
+      }
+    }
   return {};
 }
 
@@ -68,7 +90,9 @@ bool RtcpDevice::install(Core &core, ingress::Boundary &boundary, const Id &devi
     descriptor.availability = Availability::OFFLINE; descriptor.evidence.clear();
     descriptor.evidence.push(evidence("a013.operation", "correlated authenticated RTCP command"));
     descriptor.execution_evidence.value.mapping_reference = Text::literal(
-        std::string_view(name) == "volume.set" ? "RTCP/1 application type 7/8" : "RTCP/1 D-009 type 9/8");
+        std::string_view(name) == "volume.set"
+            ? "RTCP/1 application type 7/8"
+            : "RTCP/1 D-009 type 9/8 or negotiated BTX type 15/8");
     if (!boundary.capability(std::move(descriptor), now)) return false;
   }
   for (const auto *name : {"volume.level", "playback.state", "media.title",
@@ -136,6 +160,29 @@ bool RtcpDevice::context(const rtcp_client::wire::NowPlaying &value, U64 now) {
          capability(operation, "playback.next", state(c.next, value.flags & 0x80), now);
 }
 
+bool RtcpDevice::btx_context(const rtcp_client::wire::NowPlaying &value,
+                             U64 now) {
+  const auto &c = client_.btx_capabilities();
+  const bool bluetooth = value.btx_source ==
+                         std::uint8_t(rtcp_client::wire::BtxSource::bluetooth);
+  btx_authoritative_ = bluetooth;
+  btx_observed_at_ = bluetooth ? now : 0;
+  const auto state = [&](rtcp_client::wire::PlaybackOperation operation,
+                         std::uint8_t flag) {
+    return !c.supports(operation) ? Availability::UNKNOWN
+           : bluetooth && (value.btx_flags & flag) ? Availability::READY
+                                                   : Availability::CONTEXT_UNAVAILABLE;
+  };
+  return capability(operation, "playback.play",
+                    state(rtcp_client::wire::PlaybackOperation::play, 0x04), now) &&
+         capability(operation, "playback.pause",
+                    state(rtcp_client::wire::PlaybackOperation::pause, 0x08), now) &&
+         capability(operation, "playback.previous",
+                    state(rtcp_client::wire::PlaybackOperation::previous, 0x10), now) &&
+         capability(operation, "playback.next",
+                    state(rtcp_client::wire::PlaybackOperation::next, 0x20), now);
+}
+
 bool RtcpDevice::media(const d009::FenceDecision &decision, U64 now) {
   return decision.accepted && (!decision.new_context || boundary_->media_changed(now));
 }
@@ -162,7 +209,7 @@ bool RtcpDevice::publish(const char *name, Value<Scalar> value,
   observation.source_sequence = Sequence{Id("rtcp.tuner.sequence"), sequence};
   observation.freshness = freshness_policy();
   if (media_field) observation.media_context_generation = target->media_context_generation;
-  ProvenanceHop hop; hop.actor_id = identity(); hop.evidence_id = Id("a013.d009.observation");
+  ProvenanceHop hop; hop.actor_id = identity(); hop.evidence_id = Id("a013.rtcp.observation");
   observation.provenance.push(hop);
   return boundary_->observe(std::move(observation), now);
 }
@@ -189,12 +236,23 @@ void RtcpDevice::dispatch(const Dispatch &dispatch, AdapterSink &sink) {
     else if (op == "playback.next") wire_op = rtcp_client::wire::PlaybackOperation::next;
     else known = false;
     const auto expected = expected_playback(dispatch.request);
+    const auto btx_expected = expected_btx_playback(dispatch.request);
     auto *binding = core_->binding(binding_);
     auto *target = binding ? core_->target(binding->device_id, binding->target_id) : nullptr;
-    if (known && expected.present && target && dispatch.request.media_context_generation.present &&
-        dispatch.request.media_context_generation.value == target->media_context_generation && media_fence_.generation)
-      sent = client_.playback(dispatch.request.admission_ticket.serial, wire_op,
-                              expected.value, media_fence_.generation);
+    const auto &media = client_.now_playing();
+    const bool bluetooth = client_.btx_capabilities().negotiated &&
+                           media.btx_source == std::uint8_t(rtcp_client::wire::BtxSource::bluetooth);
+    if (known && target && dispatch.request.media_context_generation.present &&
+        dispatch.request.media_context_generation.value == target->media_context_generation &&
+        media_fence_.generation) {
+      if (bluetooth && btx_expected.present &&
+          std::uint8_t(btx_expected.value) == media.btx_playback)
+        sent = client_.bluetooth(dispatch.request.admission_ticket.serial, wire_op,
+                                 btx_expected.value, media_fence_.generation);
+      else if (!bluetooth && expected.present)
+        sent = client_.playback(dispatch.request.admission_ticket.serial, wire_op,
+                                expected.value, media_fence_.generation);
+    }
   }
   if (!sent) {
     result.signal = AdapterEvidence::Signal::FAIL; result.delivery = Delivery::NOT_SENT;
@@ -207,15 +265,21 @@ void RtcpDevice::dispatch(const Dispatch &dispatch, AdapterSink &sink) {
 }
 
 bool RtcpDevice::poll(U64 now, bool command_waiting) {
+  if (btx_authoritative_ && now >= btx_observed_at_ &&
+      now - btx_observed_at_ >= client_.btx_capabilities().freshness_ms) {
+    const rtcp_client::wire::NowPlaying expired{};
+    if (!btx_context(expired, now)) return false;
+  }
   const auto event = client_.poll(now, command_waiting);
   if (event == rtcp_client::Client::Event::none) return true;
   if (event == rtcp_client::Client::Event::connected) {
-    media_fence_.reset(); pending_ = {};
+    media_fence_.reset(); pending_ = {}; btx_authoritative_ = false; btx_observed_at_ = 0;
     if (!boundary_->reconnect(now) || !boundary_->reachability(Reachability::REACHABLE, now)) return false;
     availability(Availability::UNKNOWN, now); return true;
   }
   if (event == rtcp_client::Client::Event::disconnected) {
-    media_fence_.reset(); pending_ = {}; availability(Availability::OFFLINE, now);
+    media_fence_.reset(); pending_ = {}; btx_authoritative_ = false; btx_observed_at_ = 0;
+    availability(Availability::OFFLINE, now);
     return boundary_->reachability(Reachability::UNREACHABLE, now);
   }
   if (event == rtcp_client::Client::Event::capabilities) return negotiated(now);
@@ -229,8 +293,12 @@ bool RtcpDevice::poll(U64 now, bool command_waiting) {
     // suppress the fresh playback sample and temporarily disable HOME control.
     const bool volume_ok = publish("volume.level", Value<Scalar>::of(volume),
                                    snapshot.sequence, now, false);
-    const bool playback_ok = publish("playback.state", Value<Scalar>::of(playback),
-                                     snapshot.sequence, now, true);
+    const bool legacy_playback = !client_.btx_capabilities().negotiated ||
+        client_.now_playing().btx_source ==
+            std::uint8_t(rtcp_client::wire::BtxSource::radio);
+    const bool playback_ok = !legacy_playback ||
+        publish("playback.state", Value<Scalar>::of(playback),
+                snapshot.sequence, now, true);
     return volume_ok && playback_ok;
   }
   if (event == rtcp_client::Client::Event::now_playing) {
@@ -252,6 +320,39 @@ bool RtcpDevice::poll(U64 now, bool command_waiting) {
     return publish("media.subtitle", station, value.sequence, now, true) &&
            publish("media.title", title, value.sequence, now, true) &&
            publish("media.artist", artist, value.sequence, now, true);
+  }
+  if (event == rtcp_client::Client::Event::btx_state) {
+    auto &value = client_.now_playing();
+    if (!media(media_fence_.metadata(value.sequence, value.media_generation,
+                                     value.metadata_revision), now) ||
+        !btx_context(value, now))
+      return false;
+    const bool bluetooth = value.btx_source ==
+                           std::uint8_t(rtcp_client::wire::BtxSource::bluetooth);
+    const bool connected = value.btx_connection ==
+                           std::uint8_t(rtcp_client::wire::BtxConnection::connected);
+    Value<Scalar> playback = Value<Scalar>::absent(Absence::UNAVAILABLE);
+    if (bluetooth && connected && value.btx_playback) {
+      Scalar state; state.kind = ScalarKind::PLAYBACK;
+      state.playback = value.btx_playback == std::uint8_t(rtcp_client::wire::BtxPlayback::playing)
+                           ? control::Playback::PLAYING
+                       : value.btx_playback == std::uint8_t(rtcp_client::wire::BtxPlayback::paused)
+                           ? control::Playback::PAUSED
+                           : control::Playback::NOT_PLAYING;
+      playback = Value<Scalar>::of(state);
+    }
+    Value<Scalar> source = bluetooth
+                               ? text_value("Bluetooth", 9)
+                               : Value<Scalar>::absent(Absence::UNAVAILABLE);
+    Value<Scalar> title = Value<Scalar>::absent(Absence::UNAVAILABLE);
+    value.combined_size = std::uint16_t(btx::format_title(value, value.combined));
+    if (value.combined_size)
+      title = text_value(value.combined.data(), value.combined_size);
+    return publish("playback.state", playback, value.sequence, now, true) &&
+           publish("media.subtitle", source, value.sequence, now, true) &&
+           publish("media.title", title, value.sequence, now, true) &&
+           publish("media.artist", Value<Scalar>::absent(Absence::UNAVAILABLE),
+                   value.sequence, now, true);
   }
   if (event == rtcp_client::Client::Event::result && pending_.present) {
     auto result = pending_.value; const auto &wire_result = client_.result();

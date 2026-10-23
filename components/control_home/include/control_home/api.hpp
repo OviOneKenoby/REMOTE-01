@@ -52,7 +52,8 @@ struct Intent {
 struct Snapshot {
   Connection connection = Connection::UNKNOWN;
   Playback playback = Playback::UNKNOWN;
-  char title[32]{}, subtitle[32]{};
+  // BTX/1.0 maximum: 96-byte artist + " - " + 127-byte title + NUL.
+  char title[227]{}, subtitle[32]{};
   bool volume_known = false, volume_set = false, previous = false,
        toggle = false, next = false;
   std::uint8_t volume = 0;

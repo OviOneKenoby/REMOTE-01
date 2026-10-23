@@ -11,12 +11,15 @@ class RtcpDevice final:public control::Adapter{
   control::Id binding_;control::MockAdapter codec_;control::Optional<control::AdapterEvidence>pending_;
   control::U64 observations_=0;
   std::uint64_t dispatches_=0;
+  control::U64 btx_observed_at_=0;
+  bool btx_authoritative_=false;
   d009::MediaFence media_fence_{};
   control::Evidence evidence(const char*,const char*)const;
   void availability(control::Availability,control::U64);
   bool capability(control::CapabilityKey::Kind,const char*,control::Availability,control::U64);
   bool negotiated(control::U64);
   bool context(const rtcp_client::wire::NowPlaying&,control::U64);
+  bool btx_context(const rtcp_client::wire::NowPlaying&,control::U64);
   bool publish(const char*,control::Value<control::Scalar>,std::uint64_t,control::U64,bool);
   bool media(const d009::FenceDecision&,control::U64);
 public:
