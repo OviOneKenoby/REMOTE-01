@@ -1,6 +1,57 @@
 # REMOTE BTX hardware validation - 2026-10-25
 
-Status: **HARDWARE FAIL - OPEN UI/state-synchronization defect**
+Status: **HARDWARE FAIL PRESERVED; SOFTWARE CORRECTION VERIFIED / HARDWARE RETEST PENDING**
+
+## Offline ownership correction checkpoint
+
+Source analysis established that REMOTE accepted the correct D-009 Radio
+snapshot, then allowed the following non-Bluetooth BTX state record to publish
+an absent playback value and Bluetooth operation unavailability over the shared
+HOME model. TUNER data, RTCP authentication and wire parsing were correct.
+
+Implementation commit `596cb71be867e2b5ff6eb3f6c0dde52d6dd8a770`
+introduces explicit ownership at the existing adapter boundary:
+
+- Radio retains D-009 authority for playback, metadata and Radio operations.
+- Bluetooth retains BTX authority for Bluetooth state, metadata and operations.
+- Non-Bluetooth BTX generations never enter the D-009 media fence.
+- Separate bounded fences retain current-source command generation fencing.
+- A cached latest D-009 snapshot completes Bluetooth-to-Radio handover without
+  publishing an `UNKNOWN` BTX absence.
+- Disconnect/session replacement clears both fences and all cached/pending
+  state as before.
+
+Executable verification drove the real `RtcpDevice` handlers and CCM Facade:
+4/4 ownership cases passed with 92 assertions. Existing BTX wire 7/7 (52),
+D-009 wire 8/8 (44), HOME/Core 42/42 (3,565), BTX policy 15/15, D-009 policy
+16/16, HOME metadata 15/15, UI volume binding 1/1 (11), and RTCP
+freshness/volume admission 2/2 (221) also passed.
+
+The broad hardening run had one unrelated `utf8_snapshot_bounds` length failure.
+The exact same failure was reproduced in an isolated worktree at pre-correction
+commit `349c37982cebd908cd66408afa0d31182c5a8cbf` (25/26 cases passed), proving it
+was already present. No unrelated correction was made.
+
+Clean production build `remote01`: PASS, exit 0, zero warning/error lines.
+
+| Candidate item | Verified result |
+| --- | ---: |
+| Embedded build | `596cb71` |
+| Application size | 2,583,008 bytes |
+| Application SHA-256 | `fad87bb2f50142f3758945c5a2276a2535008aec4f32a5ec29f021faa95f3b3f` |
+| ELF size | 19,820,532 bytes |
+| ELF SHA-256 | `1bbb0cdc2eb1035c30d46e985369f855f7a10ee98d5bdefdfb592af10a08bd02` |
+| Static RAM | 56,652 / 327,680 bytes |
+| Linked flash | 2,582,509 bytes |
+| 3 MiB slot headroom | 562,720 bytes |
+| 8 MiB factory-partition headroom | 5,805,600 bytes |
+
+Private candidate:
+`C:\Users\RYZEN\Documents\BTX_PRIVATE_CANDIDATES\20261025T130324Z-remote-radio-ownership-596cb71`
+
+The previously installed application and fresh 16 MiB rollback backup remain
+unchanged and independently hash-verified. No hardware was accessed for this
+correction.
 
 ## Installed identities
 
@@ -67,8 +118,8 @@ analysis or correction was attempted in this task.
 | RTCP authentication/READY | PASS |
 | Authoritative volume and volume control availability | PASS |
 | Radio ABF TUNER playback | PASS |
-| Radio playback label after display-idle wake | FAIL (`UNKNOWN`) |
-| REMOTE Radio Play/Pause availability | FAIL (disabled) |
+| Radio playback label after display-idle wake | HARDWARE FAIL; corrected candidate retest pending |
+| REMOTE Radio Play/Pause availability | HARDWARE FAIL; corrected candidate retest pending |
 | Radio metadata presentation | NOT COMPLETED |
 | Bluetooth source/metadata/playback | NOT TESTED |
 | Bluetooth AVRCP controls | NOT TESTED |
@@ -77,7 +128,10 @@ analysis or correction was attempted in this task.
 
 ## Remaining work
 
-A separate source task must inspect authoritative playback-state mapping, RTCP
-snapshot/update handling and display-idle wake republishing. The corrected
-behavior must be software-verified and separately authorized for installation
-before hardware commissioning resumes.
+Install the exact corrected candidate only after separate owner authorization.
+With Radio ABF playing, observe at least three snapshot cycles, wake from
+display-idle, and require persistent `PLAYING` plus enabled Pause. Then perform
+one controlled Pause/Play and one Radio -> Bluetooth -> Radio transition,
+confirming current-source metadata, RTCP READY, volume synchronization and no
+stale replay. The historical hardware FAIL remains authoritative until this
+bounded retest passes.

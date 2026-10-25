@@ -1,5 +1,40 @@
 # Changelog
 
+## 2026-10-25 - BTX radio playback ownership correction
+
+Corrected the REMOTE adapter's mixed D-009/BTX ownership boundary. Authenticated
+BTX state records whose source is Radio no longer publish absent Bluetooth
+playback or metadata over fresh D-009 observations, and their independent
+generation is no longer admitted into the D-009 media fence. Bluetooth remains
+BTX-authoritative. Separate bounded D-009 and BTX fences preserve command
+generation fencing, while the latest D-009 snapshot supports a deterministic
+Bluetooth-to-Radio handover without an `UNKNOWN` overwrite. Disconnect and
+session replacement still clear both fences, cached state and pending work.
+
+The executable real-adapter regression passed 4/4 cases with 92 assertions,
+covering playing/paused/stopped Radio, repeated mixed responses, Bluetooth
+authority, bidirectional handover, independent generation domains,
+display-idle rendering continuity, reconnect invalidation and volume
+synchronization. Existing BTX wire tests passed 7/7 (52 assertions), D-009 wire
+tests 8/8 (44), HOME/Core 42/42 (3,565), BTX policy 15/15, D-009 policy 16/16,
+HOME metadata policy 15/15, UI volume binding 1/1 (11), and RTCP
+freshness/volume admission 2/2 (221). The broader hardening suite retained one
+unrelated UTF-8 snapshot-length assertion failure; an isolated build from the
+previous `349c379` commit reproduced the identical failure (25/26 cases), so no
+unrelated source was changed.
+
+The clean `remote01` build from implementation commit
+`596cb71be867e2b5ff6eb3f6c0dde52d6dd8a770` passed with no compiler/CMake
+warning or error lines. The application is 2,583,008 bytes, SHA-256
+`fad87bb2f50142f3758945c5a2276a2535008aec4f32a5ec29f021faa95f3b3f`;
+the 19,820,532-byte ELF SHA-256 is
+`1bbb0cdc2eb1035c30d46e985369f855f7a10ee98d5bdefdfb592af10a08bd02`.
+Static RAM remains 56,652 bytes. Each 3 MiB application slot retains 562,720
+bytes; the installed 8 MiB factory partition would retain 5,805,600 bytes.
+Embedded build identity is `596cb71`. This is an offline candidate only;
+hardware installation and the bounded Radio/Bluetooth/display-idle retest remain
+pending separate authorization.
+
 ## 2026-10-25 - BTX hardware installation verified; radio state/control regression
 
 Mandatory preflight identified REMOTE as the ESP32-S3 QFN56 revision 0.2
