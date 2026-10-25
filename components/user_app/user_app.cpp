@@ -6,6 +6,7 @@
 #include "lcd_bl_pwm_bsp.h"
 #include "control_home/api.hpp"
 #include "control_home/full_control.hpp"
+#include "control_home/full_control_navigation.hpp"
 #include "power_management/api.hpp"
 #include "network_manager/presentation.hpp"
 #include "encoder_volume.hpp"
@@ -31,11 +32,33 @@ struct HomeWidgets {
 
 struct TunerControlWidgets {
 	lv_obj_t *view = nullptr, *radio = nullptr, *bluetooth = nullptr;
+	lv_obj_t *menu_status = nullptr;
 	lv_obj_t *popup = nullptr, *popup_text = nullptr, *spinner = nullptr;
+	lv_obj_t *popup_confirm = nullptr, *popup_cancel = nullptr, *popup_ok = nullptr;
+	lv_obj_t *main_rows[4]{};
+	lv_obj_t *list_panel = nullptr, *list_title = nullptr, *list_area = nullptr;
+	lv_obj_t *empty_text = nullptr, *list_rows[15]{}, *list_labels[15]{};
+	char row_names[15][49]{};
 	lv_timer_t *timer = nullptr;
 	control_home::FullControlSnapshot state{};
+	control_home::CatalogSnapshot catalog{};
+	control_home::MenuSnapshot menu{};
+	control_home::Snapshot playback{};
+	control_home::navigation::Model navigation{};
+	control_home::navigation::Gesture gestures[15]{};
 	std::uint64_t generation = 0;
-	std::uint32_t success_until = 0;
+	std::uint64_t catalog_generation = 0, playback_generation = 0,
+	              menu_generation = 0;
+	std::uint64_t catalog_revision = 0;
+	std::uint32_t popup_until = 0;
+	std::uint16_t pending_token = 0;
+	std::uint8_t row_count = 0;
+	control_home::CatalogOperation pending_operation = control_home::CatalogOperation::PLAY;
+	control_home::CatalogCollection collection = control_home::CatalogCollection::SAVED;
+	bool awaiting_action = false, awaiting_playback = false;
+	bool return_home_after_popup = false;
+	bool delete_confirmation = false, disconnect_popup = false;
+	bool source_result_handled = false;
 	bool visible = false, last_commands_allowed = true;
 } tuner_control;
 
@@ -118,16 +141,39 @@ static void tuner_control_close()
 	if (!tuner_control.view) return;
 	lv_obj_add_flag(tuner_control.view, LV_OBJ_FLAG_HIDDEN);
 	tuner_control.visible = false;
-	tuner_control.success_until = 0;
+	tuner_control.navigation.exit();
+	tuner_control.popup_until = 0;
+	tuner_control.return_home_after_popup = false;
+	tuner_control.awaiting_action = false;
+	tuner_control.awaiting_playback = false;
 	lv_obj_add_flag(tuner_control.popup, LV_OBJ_FLAG_HIDDEN);
 }
 
-static void tuner_control_popup(const char *text, bool busy)
+static void tuner_control_popup(const char *text, bool busy,
+	                            bool confirm = false, bool ok = false)
 {
 	home_text(tuner_control.popup_text, text);
 	if (busy) lv_obj_clear_flag(tuner_control.spinner, LV_OBJ_FLAG_HIDDEN);
 	else lv_obj_add_flag(tuner_control.spinner, LV_OBJ_FLAG_HIDDEN);
+	if (confirm) {
+		lv_obj_clear_flag(tuner_control.popup_confirm, LV_OBJ_FLAG_HIDDEN);
+		lv_obj_clear_flag(tuner_control.popup_cancel, LV_OBJ_FLAG_HIDDEN);
+	} else {
+		lv_obj_add_flag(tuner_control.popup_confirm, LV_OBJ_FLAG_HIDDEN);
+		lv_obj_add_flag(tuner_control.popup_cancel, LV_OBJ_FLAG_HIDDEN);
+	}
+	if (ok) lv_obj_clear_flag(tuner_control.popup_ok, LV_OBJ_FLAG_HIDDEN);
+	else lv_obj_add_flag(tuner_control.popup_ok, LV_OBJ_FLAG_HIDDEN);
 	lv_obj_clear_flag(tuner_control.popup, LV_OBJ_FLAG_HIDDEN);
+	lv_obj_move_foreground(tuner_control.popup);
+}
+
+static void tuner_control_popup_hide()
+{
+	lv_obj_add_flag(tuner_control.popup, LV_OBJ_FLAG_HIDDEN);
+	tuner_control.delete_confirmation = false;
+	tuner_control.disconnect_popup = false;
+	tuner_control.popup_until = 0;
 }
 
 static const char *source_error(std::uint8_t error)
@@ -142,14 +188,40 @@ static const char *source_error(std::uint8_t error)
 	}
 }
 
+static const char *menu_mode_name(control_home::TunerMenuMode mode)
+{
+	switch (mode) {
+	case control_home::TunerMenuMode::STATION_SELECT: return "Station Select";
+	case control_home::TunerMenuMode::PLAYING_RADIO: return "Playing Radio";
+	case control_home::TunerMenuMode::BLUETOOTH: return "Bluetooth";
+	case control_home::TunerMenuMode::BROWSE_LETTER:
+	case control_home::TunerMenuMode::BROWSE_COUNTRY:
+	case control_home::TunerMenuMode::BROWSE_STATION_LETTER:
+	case control_home::TunerMenuMode::BROWSE_TAG:
+	case control_home::TunerMenuMode::BROWSE_RESULTS: return "Radio Browser";
+	case control_home::TunerMenuMode::FAVORITES: return "Favorites";
+	case control_home::TunerMenuMode::RECENT: return "Recent";
+	case control_home::TunerMenuMode::IDLE: return "Idle";
+	case control_home::TunerMenuMode::ERROR: return "Error";
+	case control_home::TunerMenuMode::OTHER: return "Other";
+	default: return "Unavailable";
+	}
+}
+
 static void tuner_control_exit_event(lv_event_t *) { tuner_control_close(); }
 static void tuner_control_back_event(lv_event_t *)
 {
 	if (!lv_obj_has_flag(tuner_control.popup, LV_OBJ_FLAG_HIDDEN)) {
-		lv_obj_add_flag(tuner_control.popup, LV_OBJ_FLAG_HIDDEN);
+		tuner_control_popup_hide();
 		return;
 	}
-	tuner_control_close();
+	const auto before = tuner_control.navigation.page;
+	tuner_control.navigation.back();
+	if (tuner_control.navigation.page == control_home::navigation::Page::HOME) {
+		tuner_control_close();
+	} else if (before != tuner_control.navigation.page) {
+		lv_obj_add_flag(tuner_control.list_panel, LV_OBJ_FLAG_HIDDEN);
+	}
 }
 
 static void tuner_control_source_event(lv_event_t *event)
@@ -163,6 +235,7 @@ static void tuner_control_source_event(lv_event_t *event)
 		tuner_control_popup("TUNER unavailable", false);
 		return;
 	}
+	tuner_control.source_result_handled = false;
 	tuner_control_popup(target == control_home::TunerSource::BLUETOOTH
 		? "Starting Bluetooth..." : "Switching to Radio...", true);
 }
@@ -170,11 +243,196 @@ static void tuner_control_source_event(lv_event_t *event)
 static void tuner_control_open_event(lv_event_t *)
 {
 	if (!tuner_control.view) return;
+	tuner_control.navigation.open_control();
+	lv_obj_add_flag(tuner_control.list_panel, LV_OBJ_FLAG_HIDDEN);
 	tuner_control.visible = true;
 	lv_obj_clear_flag(tuner_control.view, LV_OBJ_FLAG_HIDDEN);
 	lv_obj_move_foreground(tuner_control.view);
-	if (!tuner_control.state.connected)
-		tuner_control_popup("TUNER disconnected", false);
+	if (!tuner_control.state.connected) {
+		tuner_control.disconnect_popup = true;
+		tuner_control_popup("TUNER disconnected", false, false, true);
+	}
+}
+
+static void tuner_control_clear_rows()
+{
+	tuner_control.row_count = 0;
+	tuner_control.catalog_revision = 0;
+	for (auto *row : tuner_control.list_rows)
+		lv_obj_add_flag(row, LV_OBJ_FLAG_HIDDEN);
+	lv_obj_add_flag(tuner_control.empty_text, LV_OBJ_FLAG_HIDDEN);
+	lv_obj_scroll_to_y(tuner_control.list_area, 0, LV_ANIM_OFF);
+}
+
+static const char *catalog_title(control_home::CatalogCollection collection)
+{
+	switch (collection) {
+	case control_home::CatalogCollection::SAVED: return "SAVED STATIONS";
+	case control_home::CatalogCollection::FAVORITES: return "FAVORITES";
+	case control_home::CatalogCollection::RECENT: return "RECENT";
+	}
+	return "STATIONS";
+}
+
+static void tuner_control_open_catalog(control_home::CatalogCollection collection,
+	                                   bool from_home)
+{
+	if (!tuner_control.view) return;
+	tuner_control.visible = true;
+	lv_obj_clear_flag(tuner_control.view, LV_OBJ_FLAG_HIDDEN);
+	lv_obj_move_foreground(tuner_control.view);
+	tuner_control.collection = collection;
+	if (collection == control_home::CatalogCollection::SAVED)
+		tuner_control.navigation.open_saved();
+	else if (collection == control_home::CatalogCollection::FAVORITES)
+		tuner_control.navigation.open_favorites(from_home);
+	else
+		tuner_control.navigation.open_recent();
+	home_text(tuner_control.list_title, catalog_title(collection));
+	tuner_control_clear_rows();
+	lv_obj_clear_flag(tuner_control.list_panel, LV_OBJ_FLAG_HIDDEN);
+	if (!control_home::request_catalog(collection, 0))
+		tuner_control_popup("TUNER unavailable", false);
+}
+
+static void tuner_control_main_row_event(lv_event_t *event)
+{
+	const auto index = reinterpret_cast<std::uintptr_t>(lv_event_get_user_data(event));
+	if (index < 3)
+		tuner_control_open_catalog(static_cast<control_home::CatalogCollection>(index + 1), false);
+	else
+		tuner_control_popup("Radio Browser pending", false);
+}
+
+static void tuner_control_favorites_event(lv_event_t *)
+{
+	tuner_control_open_catalog(control_home::CatalogCollection::FAVORITES, true);
+}
+
+static void tuner_control_request_action(std::uint8_t row,
+	                                     control_home::CatalogOperation operation)
+{
+	if (row >= tuner_control.row_count || tuner_control.awaiting_action) return;
+	// Rows can span pages; their stable guarded token is stored as LVGL user data.
+	tuner_control.pending_token = static_cast<std::uint16_t>(
+		reinterpret_cast<std::uintptr_t>(lv_obj_get_user_data(tuner_control.list_rows[row])));
+	tuner_control.pending_operation = operation;
+	if (!control_home::request_catalog_action(operation, tuner_control.collection,
+	                                         tuner_control.pending_token,
+	                                         tuner_control.catalog_revision)) {
+		tuner_control_popup("TUNER busy", false);
+		return;
+	}
+	tuner_control.awaiting_action = true;
+	if (operation == control_home::CatalogOperation::PLAY) {
+		char message[72];
+		std::snprintf(message, sizeof message, "Tuning to %s...",
+		              tuner_control.row_names[row]);
+		tuner_control_popup(message, true);
+	} else if (operation == control_home::CatalogOperation::REMOVE) {
+		tuner_control_popup("Deleting...", true);
+	} else {
+		tuner_control_popup("Adding to Favorites...", true);
+	}
+}
+
+static void tuner_control_row_event(lv_event_t *event)
+{
+	const auto row = static_cast<std::uint8_t>(
+		reinterpret_cast<std::uintptr_t>(lv_event_get_user_data(event)));
+	if (row >= tuner_control.row_count) return;
+	auto &gesture = tuner_control.gestures[row];
+	const auto code = lv_event_get_code(event);
+	lv_point_t point{};
+	auto *input = lv_indev_get_act();
+	if (input) lv_indev_get_point(input, &point);
+	const auto now = lv_tick_get();
+	if (code == LV_EVENT_PRESSED) gesture.press(now, point.x, point.y);
+	else if (code == LV_EVENT_PRESSING) {
+		gesture.move(point.x, point.y);
+		if (gesture.hold(now) == control_home::navigation::GestureResult::LONG_PRESS) {
+			if (tuner_control.collection == control_home::CatalogCollection::RECENT)
+				tuner_control_request_action(row, control_home::CatalogOperation::ADD_FAVORITE);
+			else {
+				tuner_control.pending_token = static_cast<std::uint16_t>(
+					reinterpret_cast<std::uintptr_t>(lv_obj_get_user_data(tuner_control.list_rows[row])));
+				tuner_control.pending_operation = control_home::CatalogOperation::REMOVE;
+				tuner_control.delete_confirmation = true;
+				char message[80];
+				std::snprintf(message, sizeof message, "Delete %s?",
+				              tuner_control.row_names[row]);
+				tuner_control_popup(message, false, true);
+			}
+		}
+	} else if (code == LV_EVENT_SCROLL_BEGIN || code == LV_EVENT_PRESS_LOST) {
+		gesture.cancel();
+	} else if (code == LV_EVENT_RELEASED &&
+	           gesture.release(now) == control_home::navigation::GestureResult::SHORT_TAP) {
+		tuner_control_request_action(row, control_home::CatalogOperation::PLAY);
+	}
+}
+
+static void tuner_control_confirm_event(lv_event_t *)
+{
+	if (!tuner_control.delete_confirmation) return;
+	tuner_control.delete_confirmation = false;
+	if (!control_home::request_catalog_action(
+			control_home::CatalogOperation::REMOVE, tuner_control.collection,
+			tuner_control.pending_token, tuner_control.catalog_revision)) {
+		tuner_control_popup("TUNER busy", false);
+		return;
+	}
+	tuner_control.pending_operation = control_home::CatalogOperation::REMOVE;
+	tuner_control.awaiting_action = true;
+	tuner_control_popup("Deleting...", true);
+}
+
+static void tuner_control_cancel_event(lv_event_t *) { tuner_control_popup_hide(); }
+static void tuner_control_ok_event(lv_event_t *)
+{
+	const bool disconnected = tuner_control.disconnect_popup;
+	tuner_control_popup_hide();
+	if (disconnected) tuner_control_close();
+}
+
+static void tuner_control_apply_catalog()
+{
+	const auto &page = tuner_control.catalog;
+	if (page.collection != tuner_control.collection) return;
+	if (page.start == 0) {
+		tuner_control_clear_rows();
+		tuner_control.catalog_revision = page.revision;
+	} else if (page.revision != tuner_control.catalog_revision ||
+	           page.start != tuner_control.row_count) {
+		tuner_control_clear_rows();
+		(void)control_home::request_catalog(tuner_control.collection, 0);
+		return;
+	}
+	for (std::uint8_t i = 0; i < page.item_count && tuner_control.row_count < 15; ++i) {
+		const auto row = tuner_control.row_count++;
+		auto *object = tuner_control.list_rows[row];
+		auto *label = tuner_control.list_labels[row];
+		lv_obj_set_user_data(object, reinterpret_cast<void *>(
+			static_cast<std::uintptr_t>(page.items[i].token)));
+		std::snprintf(tuner_control.row_names[row],
+		              sizeof tuner_control.row_names[row], "%s",
+		              page.items[i].name.data());
+		char display[56];
+		std::snprintf(display, sizeof display, "%s%s",
+		              page.items[i].active ? LV_SYMBOL_PLAY " " : "",
+		              tuner_control.row_names[row]);
+		lv_label_set_text(label, display);
+		lv_obj_set_style_text_color(label,
+			page.items[i].active ? lv_color_hex(0xc2ff00) : lv_color_hex(0xf3f5f2),
+			LV_PART_MAIN);
+		lv_obj_set_style_border_width(object, page.items[i].active ? 2 : 0,
+		                              LV_PART_MAIN);
+		lv_obj_clear_flag(object, LV_OBJ_FLAG_HIDDEN);
+	}
+	if (page.count == 0) lv_obj_clear_flag(tuner_control.empty_text, LV_OBJ_FLAG_HIDDEN);
+	if (tuner_control.row_count < page.count)
+		(void)control_home::request_catalog(tuner_control.collection,
+		                                  tuner_control.row_count);
 }
 
 static void tuner_control_refresh(lv_timer_t *)
@@ -183,13 +441,31 @@ static void tuner_control_refresh(lv_timer_t *)
 	if (tuner_control.visible && !tuner_control.last_commands_allowed && commands_allowed)
 		tuner_control_close(); // Wake always resumes at HOME; no submenu replay.
 	tuner_control.last_commands_allowed = commands_allowed;
-	if (tuner_control.success_until &&
-	    static_cast<std::int32_t>(lv_tick_get() - tuner_control.success_until) >= 0) {
-		tuner_control_close();
-		return;
+	if (tuner_control.popup_until &&
+	    static_cast<std::int32_t>(lv_tick_get() - tuner_control.popup_until) >= 0) {
+		const bool close = tuner_control.return_home_after_popup;
+		tuner_control_popup_hide();
+		tuner_control.return_home_after_popup = false;
+		if (close) { tuner_control_close(); return; }
 	}
-	if (!control_home::full_control_read(tuner_control.state,
-	                                    tuner_control.generation)) return;
+	(void)control_home::full_control_read(tuner_control.state,
+	                                    tuner_control.generation);
+	(void)control_home::read(tuner_control.playback,
+	                       tuner_control.playback_generation);
+	if (control_home::menu_read(tuner_control.menu,
+	                           tuner_control.menu_generation)) {
+		char status[48];
+		if (tuner_control.menu.connected && tuner_control.menu.supported &&
+		    tuner_control.menu.count)
+			std::snprintf(status, sizeof status, "TUNER: %s %u/%u",
+			              menu_mode_name(tuner_control.menu.mode),
+			              unsigned(tuner_control.menu.selected + 1),
+			              unsigned(tuner_control.menu.count));
+		else
+			std::snprintf(status, sizeof status, "TUNER: %s",
+			              menu_mode_name(tuner_control.menu.mode));
+		home_text(tuner_control.menu_status, status);
+	}
 	const auto source = tuner_control.state.source;
 	lv_obj_set_style_border_width(tuner_control.radio,
 	                              source == control_home::TunerSource::RADIO ? 2 : 0,
@@ -199,11 +475,16 @@ static void tuner_control_refresh(lv_timer_t *)
 	                              LV_PART_MAIN);
 	if (!tuner_control.visible) return;
 	if (!tuner_control.state.connected) {
-		tuner_control_popup("TUNER disconnected", false);
+		if (!tuner_control.disconnect_popup) {
+			tuner_control.disconnect_popup = true;
+			tuner_control_popup("TUNER disconnected", false, false, true);
+		}
 		return;
 	}
+	if (tuner_control.disconnect_popup) tuner_control_popup_hide();
 	if (tuner_control.state.command_pending) return;
-	if (tuner_control.state.result_present) {
+	if (tuner_control.state.result_present && !tuner_control.source_result_handled) {
+		tuner_control.source_result_handled = true;
 		if (!tuner_control.state.result_accepted) {
 			tuner_control_popup(source_error(tuner_control.state.last_error), false);
 			return;
@@ -211,7 +492,62 @@ static void tuner_control_refresh(lv_timer_t *)
 		if (source == tuner_control.state.requested_source) {
 			tuner_control_popup(source == control_home::TunerSource::BLUETOOTH
 				? "Bluetooth ready" : "Radio ready", false);
-			if (!tuner_control.success_until) tuner_control.success_until = lv_tick_get() + 3000;
+			if (!tuner_control.popup_until) {
+				tuner_control.popup_until = lv_tick_get() + 3000;
+				tuner_control.return_home_after_popup = true;
+			}
+		}
+	}
+	if (control_home::catalog_read(tuner_control.catalog,
+	                              tuner_control.catalog_generation)) {
+		if (tuner_control.catalog.sequence) tuner_control_apply_catalog();
+		if (tuner_control.awaiting_action &&
+		    tuner_control.catalog.result_present &&
+		    !tuner_control.catalog.command_pending) {
+			tuner_control.awaiting_action = false;
+			if (!tuner_control.catalog.result_accepted) {
+				if (tuner_control.catalog.last_error == 4) {
+					tuner_control_popup_hide();
+					tuner_control_clear_rows();
+					(void)control_home::request_catalog(tuner_control.collection, 0);
+				} else if (tuner_control.catalog.last_error == 8) {
+					tuner_control_popup("Already in Favorites", false);
+					tuner_control.popup_until = lv_tick_get() + 3000;
+				} else if (tuner_control.catalog.last_error == 9) {
+					tuner_control_popup("Favorites full (10/10)", false);
+					tuner_control.popup_until = lv_tick_get() + 3000;
+				} else if (tuner_control.pending_operation == control_home::CatalogOperation::PLAY) {
+					tuner_control_close();
+					tuner_control_popup("Station unavailable", false);
+					tuner_control.popup_until = lv_tick_get() + 3000;
+				} else {
+					tuner_control_popup("Operation failed", false);
+					tuner_control.popup_until = lv_tick_get() + 3000;
+				}
+			} else if (tuner_control.pending_operation == control_home::CatalogOperation::PLAY) {
+				tuner_control.awaiting_playback = true;
+				tuner_control_clear_rows();
+				(void)control_home::request_catalog(tuner_control.collection, 0);
+			} else {
+				tuner_control_popup(
+					tuner_control.pending_operation == control_home::CatalogOperation::REMOVE
+						? "Deleted" : "Added to Favorites", false);
+				tuner_control.popup_until = lv_tick_get() + 3000;
+				tuner_control_clear_rows();
+				(void)control_home::request_catalog(tuner_control.collection, 0);
+			}
+		}
+	}
+	if (tuner_control.awaiting_playback &&
+	    tuner_control.playback.playback == control_home::Playback::PLAYING) {
+		bool active = false;
+		for (std::uint8_t i = 0; i < tuner_control.catalog.item_count; ++i)
+			active = active || tuner_control.catalog.items[i].active;
+		if (active) {
+			tuner_control.awaiting_playback = false;
+			tuner_control_popup("Now Playing", false);
+			tuner_control.popup_until = lv_tick_get() + 3000;
+			tuner_control.return_home_after_popup = true;
 		}
 	}
 }
@@ -375,14 +711,52 @@ static void tuner_control_create()
 	                                "Browse All Stations"};
 	for (unsigned i = 0; i < 4; ++i) {
 		auto *row = tuner_control_button(tuner_control.view, entries[i], 242 + i * 58, 48);
-		// Later milestones activate these bounded canonical projections.
-		lv_obj_add_state(row, LV_STATE_DISABLED);
-		lv_obj_set_style_opa(row, LV_OPA_50, LV_STATE_DISABLED);
+		tuner_control.main_rows[i] = row;
+		if (i < 3)
+			lv_obj_add_event_cb(row, tuner_control_main_row_event, LV_EVENT_CLICKED,
+			                    reinterpret_cast<void *>(static_cast<std::uintptr_t>(i)));
+		else {
+			// The blocking Radio Browser remains explicitly unavailable until its
+			// cooperative job milestone is proven safe.
+			lv_obj_add_state(row, LV_STATE_DISABLED);
+			lv_obj_set_style_opa(row, LV_OPA_50, LV_STATE_DISABLED);
+		}
 	}
-	remote01_single_line(tuner_control.view, "Authenticated TUNER controls",
+	tuner_control.menu_status = remote01_single_line(tuner_control.view, "TUNER: Unavailable",
 	                    &lv_font_montserrat_12, muted, 12, 594, 148,
 	                    LV_LABEL_LONG_CLIP, LV_TEXT_ALIGN_CENTER);
-	tuner_control.popup = remote01_panel(tuner_control.view, 16, 250, 140, 120,
+	tuner_control.list_panel = remote01_panel(tuner_control.view, 0, 50, 172, 590,
+	                                      background, 0);
+	lv_obj_add_flag(tuner_control.list_panel, LV_OBJ_FLAG_HIDDEN);
+	tuner_control.list_title = remote01_single_line(
+		tuner_control.list_panel, "STATIONS", &lv_font_montserrat_16, text,
+		12, 10, 148, LV_LABEL_LONG_CLIP, LV_TEXT_ALIGN_CENTER);
+	tuner_control.list_area = remote01_panel(tuner_control.list_panel, 8, 48, 156,
+	                                      530, background, 0);
+	lv_obj_add_flag(tuner_control.list_area, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_set_scroll_dir(tuner_control.list_area, LV_DIR_VER);
+	lv_obj_set_scrollbar_mode(tuner_control.list_area, LV_SCROLLBAR_MODE_AUTO);
+	tuner_control.empty_text = remote01_single_line(
+		tuner_control.list_area, "No stations available", &lv_font_montserrat_14,
+		muted, 4, 20, 148, LV_LABEL_LONG_WRAP, LV_TEXT_ALIGN_CENTER);
+	lv_obj_add_flag(tuner_control.empty_text, LV_OBJ_FLAG_HIDDEN);
+	for (std::uint8_t i = 0; i < 15; ++i) {
+		auto *row = remote01_panel(tuner_control.list_area, 2, i * 54, 148, 48,
+		                          lv_color_hex(0x1c292e), 5);
+		lv_obj_add_flag(row, LV_OBJ_FLAG_CLICKABLE);
+		lv_obj_set_style_border_color(row, lv_color_hex(0xc2ff00), LV_PART_MAIN);
+		lv_obj_set_style_border_opa(row, LV_OPA_COVER, LV_PART_MAIN);
+		auto *label = remote01_single_line(row, "", &lv_font_montserrat_14, text,
+		                                  8, 16, 132, LV_LABEL_LONG_SCROLL,
+		                                  LV_TEXT_ALIGN_LEFT);
+		lv_obj_set_style_anim_speed(label, 25, LV_PART_MAIN);
+		tuner_control.list_rows[i] = row;
+		tuner_control.list_labels[i] = label;
+		lv_obj_add_event_cb(row, tuner_control_row_event, LV_EVENT_ALL,
+		                    reinterpret_cast<void *>(static_cast<std::uintptr_t>(i)));
+		lv_obj_add_flag(row, LV_OBJ_FLAG_HIDDEN);
+	}
+	tuner_control.popup = remote01_panel(src_ui.screen, 16, 230, 140, 180,
 	                                   lv_color_hex(0x24343a), 8);
 	tuner_control.popup_text = remote01_single_line(tuner_control.popup, "", &lv_font_montserrat_14,
 	                                               text, 8, 68, 124,
@@ -390,6 +764,21 @@ static void tuner_control_create()
 	tuner_control.spinner = lv_spinner_create(tuner_control.popup, 1000, 70);
 	lv_obj_set_size(tuner_control.spinner, 38, 38);
 	lv_obj_align(tuner_control.spinner, LV_ALIGN_TOP_MID, 0, 16);
+	tuner_control.popup_confirm = tuner_control_button(tuner_control.popup, "Delete", 132, 36);
+	lv_obj_set_pos(tuner_control.popup_confirm, 8, 132);
+	lv_obj_set_width(tuner_control.popup_confirm, 58);
+	tuner_control.popup_cancel = tuner_control_button(tuner_control.popup, "Cancel", 132, 36);
+	lv_obj_set_pos(tuner_control.popup_cancel, 74, 132);
+	lv_obj_set_width(tuner_control.popup_cancel, 58);
+	tuner_control.popup_ok = tuner_control_button(tuner_control.popup, "OK", 132, 36);
+	lv_obj_set_pos(tuner_control.popup_ok, 41, 132);
+	lv_obj_set_width(tuner_control.popup_ok, 58);
+	lv_obj_add_event_cb(tuner_control.popup_confirm, tuner_control_confirm_event,
+	                    LV_EVENT_CLICKED, nullptr);
+	lv_obj_add_event_cb(tuner_control.popup_cancel, tuner_control_cancel_event,
+	                    LV_EVENT_CLICKED, nullptr);
+	lv_obj_add_event_cb(tuner_control.popup_ok, tuner_control_ok_event,
+	                    LV_EVENT_CLICKED, nullptr);
 	lv_obj_add_flag(tuner_control.popup, LV_OBJ_FLAG_HIDDEN);
 	tuner_control.timer = lv_timer_create(tuner_control_refresh, 20, nullptr);
 }
@@ -471,7 +860,9 @@ static void remote01_mockup_create(void)
 		lv_obj_align(name, LV_ALIGN_LEFT_MID, 10, 0);
 		lv_obj_t *arrow = remote01_label(row, LV_SYMBOL_RIGHT, &lv_font_montserrat_14, text, 0, 0);
 		lv_obj_align(arrow, LV_ALIGN_RIGHT_MID, -10, 0);
-		if (i == 2)
+		if (i == 0)
+			lv_obj_add_event_cb(row, tuner_control_favorites_event, LV_EVENT_CLICKED, nullptr);
+		else if (i == 2)
 			lv_obj_add_event_cb(row, tuner_control_open_event, LV_EVENT_CLICKED, nullptr);
 	}
 

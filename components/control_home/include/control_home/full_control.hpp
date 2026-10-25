@@ -65,8 +65,50 @@ struct MenuSnapshot {
   std::array<MenuItemSnapshot, 5> items{};
 };
 
+enum class CatalogCollection : std::uint8_t {
+  SAVED = 1,
+  FAVORITES = 2,
+  RECENT = 3
+};
+enum class CatalogOperation : std::uint8_t {
+  PLAY = 1,
+  REMOVE = 2,
+  ADD_FAVORITE = 3
+};
+struct CatalogItemSnapshot {
+  std::uint16_t token = 0;
+  bool active = false;
+  std::array<char, 49> name{};
+};
+struct CatalogSnapshot {
+  bool connected = false;
+  bool supported = false;
+  bool loading = false;
+  bool command_pending = false;
+  bool result_present = false;
+  bool result_accepted = false;
+  std::uint8_t last_error = 0;
+  CatalogCollection collection = CatalogCollection::SAVED;
+  CatalogOperation requested_operation = CatalogOperation::PLAY;
+  std::uint16_t requested_token = 0;
+  std::uint8_t flags = 0;
+  std::uint8_t capacity = 0;
+  std::uint8_t item_count = 0;
+  std::uint16_t count = 0;
+  std::uint16_t start = 0;
+  std::uint64_t sequence = 0;
+  std::uint64_t revision = 0;
+  std::array<CatalogItemSnapshot, 5> items{};
+};
+
 bool full_control_read(FullControlSnapshot &snapshot, std::uint64_t &generation);
 bool menu_read(MenuSnapshot &snapshot, std::uint64_t &generation);
+bool catalog_read(CatalogSnapshot &snapshot, std::uint64_t &generation);
 bool request_source(TunerSource source);
+bool request_catalog(CatalogCollection collection, std::uint16_t offset);
+bool request_catalog_action(CatalogOperation operation,
+                            CatalogCollection collection,
+                            std::uint16_t token,
+                            std::uint64_t revision);
 
 }  // namespace control_home

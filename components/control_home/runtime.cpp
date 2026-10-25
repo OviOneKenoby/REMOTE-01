@@ -43,6 +43,21 @@ struct MenuChannel {
   std::uint64_t generation = 1;
   std::uint64_t observed_sequence = 0;
 } menu_channel;
+struct CatalogChannel {
+  enum class Request : std::uint8_t { NONE, QUERY, COMMAND };
+  CatalogSnapshot view{};
+  std::uint64_t generation = 1;
+  std::uint64_t observed_sequence = 0;
+  std::uint64_t next_request = 0x4341544100000000ULL;
+  std::uint64_t pending_request = 0;
+  std::uint64_t handled_result = 0;
+  std::uint64_t requested_revision = 0;
+  Request request = Request::NONE;
+  CatalogCollection collection = CatalogCollection::SAVED;
+  CatalogOperation operation = CatalogOperation::PLAY;
+  std::uint16_t offset_or_token = 0;
+  bool query_in_flight = false;
+} catalog_channel;
 
 void publish_full_control(const FullControlSnapshot &next) {
   const auto &old = full_control.view;
@@ -86,6 +101,52 @@ void publish_menu(const rtcp_client::wire::MenuState &source, bool connected,
   menu_channel.view = next;
   menu_channel.observed_sequence = connected && supported ? source.sequence : 0;
   if (menu_channel.generation != UINT64_MAX) ++menu_channel.generation;
+}
+void publish_catalog(const rtcp_client::wire::CatalogPage &source,
+                     bool connected, bool supported) {
+  CatalogSnapshot next = catalog_channel.view;
+  next.connected = connected;
+  next.supported = supported;
+  if (!connected || !supported) {
+    next = {};
+    next.connected = connected;
+    next.supported = supported;
+    catalog_channel.observed_sequence = 0;
+    catalog_channel.query_in_flight = false;
+  } else if (source.sequence && source.sequence != catalog_channel.observed_sequence) {
+    next.collection = static_cast<CatalogCollection>(source.collection);
+    next.flags = source.flags;
+    next.capacity = source.capacity;
+    next.item_count = source.item_count;
+    next.count = source.count;
+    next.start = source.start;
+    next.sequence = source.sequence;
+    next.revision = source.revision;
+    next.items = {};
+    for (std::uint8_t i = 0; i < source.item_count; ++i) {
+      next.items[i].token = source.items[i].token;
+      next.items[i].active = source.items[i].active;
+      next.items[i].name = source.items[i].name;
+    }
+    catalog_channel.observed_sequence = source.sequence;
+    catalog_channel.query_in_flight = false;
+  }
+  next.loading = catalog_channel.request == CatalogChannel::Request::QUERY ||
+                 catalog_channel.query_in_flight;
+  next.command_pending =
+      catalog_channel.request == CatalogChannel::Request::COMMAND ||
+      catalog_channel.pending_request != 0;
+  if (next.connected != catalog_channel.view.connected ||
+      next.supported != catalog_channel.view.supported ||
+      next.loading != catalog_channel.view.loading ||
+      next.command_pending != catalog_channel.view.command_pending ||
+      next.sequence != catalog_channel.view.sequence ||
+      next.result_present != catalog_channel.view.result_present ||
+      next.result_accepted != catalog_channel.view.result_accepted ||
+      next.last_error != catalog_channel.view.last_error) {
+    catalog_channel.view = next;
+    if (catalog_channel.generation != UINT64_MAX) ++catalog_channel.generation;
+  }
 }
 void observer(void *p, std::size_t bytes, bool allocated) {
   if (xTaskGetCurrentTaskHandle() != owner)
@@ -252,7 +313,8 @@ void task(void *) {
     s->core.tick(time);
     bool command_waiting;
     portENTER_CRITICAL(&mux);
-    command_waiting = channel.count != 0 || full_control.requested;
+    command_waiting = channel.count != 0 || full_control.requested ||
+                      catalog_channel.request != CatalogChannel::Request::NONE;
     portEXIT_CRITICAL(&mux);
     if (!s->poll(time, command_waiting))
       ESP_LOGW("A011_RTCP", "adapter_event_rejected=1");
@@ -298,6 +360,29 @@ void task(void *) {
       publish_full_control(next);
       publish_menu(s->rtcp.menu_state(), next.connected,
                    capability.menu_projection());
+      if (!next.connected) {
+        catalog_channel.request = CatalogChannel::Request::NONE;
+        catalog_channel.pending_request = 0;
+        catalog_channel.query_in_flight = false;
+        catalog_channel.view.result_present = false;
+        catalog_channel.view.result_accepted = false;
+        catalog_channel.view.last_error = 0;
+      }
+      const auto &catalog_result = s->rtcp.result();
+      if (catalog_channel.pending_request &&
+          catalog_result.request == catalog_channel.pending_request &&
+          catalog_result.request != catalog_channel.handled_result) {
+        catalog_channel.handled_result = catalog_result.request;
+        catalog_channel.pending_request = 0;
+        catalog_channel.view.command_pending = false;
+        catalog_channel.view.result_present = true;
+        catalog_channel.view.result_accepted = catalog_result.accepted;
+        catalog_channel.view.last_error = catalog_result.error;
+        if (catalog_channel.generation != UINT64_MAX)
+          ++catalog_channel.generation;
+      }
+      publish_catalog(s->rtcp.catalog_page(), next.connected,
+                      capability.catalog_query() && capability.catalog_command());
       portEXIT_CRITICAL(&mux);
     }
     // At most one external inbox event per turn, on the same Core owner.
@@ -412,6 +497,51 @@ void task(void *) {
       }
       portEXIT_CRITICAL(&mux);
     }
+    CatalogChannel::Request catalog_request = CatalogChannel::Request::NONE;
+    CatalogCollection catalog_collection = CatalogCollection::SAVED;
+    CatalogOperation catalog_operation = CatalogOperation::PLAY;
+    std::uint16_t catalog_value = 0;
+    std::uint64_t catalog_revision = 0;
+    portENTER_CRITICAL(&mux);
+    catalog_request = catalog_channel.request;
+    catalog_collection = catalog_channel.collection;
+    catalog_operation = catalog_channel.operation;
+    catalog_value = catalog_channel.offset_or_token;
+    catalog_revision = catalog_channel.requested_revision;
+    portEXIT_CRITICAL(&mux);
+    if (catalog_request != CatalogChannel::Request::NONE && s->command_ready()) {
+      bool sent = false;
+      std::uint64_t request = 0;
+      if (catalog_request == CatalogChannel::Request::QUERY) {
+        sent = s->rtcp.catalog_query(
+            static_cast<rtcp_client::wire::CatalogCollection>(catalog_collection),
+            catalog_value, 5);
+      } else {
+        portENTER_CRITICAL(&mux);
+        if (++catalog_channel.next_request == 0) ++catalog_channel.next_request;
+        request = catalog_channel.next_request;
+        portEXIT_CRITICAL(&mux);
+        sent = s->rtcp.catalog_command(
+            request,
+            static_cast<rtcp_client::wire::CatalogOperation>(catalog_operation),
+            static_cast<rtcp_client::wire::CatalogCollection>(catalog_collection),
+            catalog_value, catalog_revision);
+      }
+      portENTER_CRITICAL(&mux);
+      if (sent && catalog_channel.request == catalog_request) {
+        catalog_channel.request = CatalogChannel::Request::NONE;
+        if (catalog_request == CatalogChannel::Request::QUERY)
+          catalog_channel.query_in_flight = true;
+        else
+          catalog_channel.pending_request = request;
+        catalog_channel.view.loading = catalog_channel.query_in_flight;
+        catalog_channel.view.command_pending =
+            catalog_channel.pending_request != 0;
+        if (catalog_channel.generation != UINT64_MAX)
+          ++catalog_channel.generation;
+      }
+      portEXIT_CRITICAL(&mux);
+    }
     std::uint64_t outstanding_token;
     portENTER_CRITICAL(&mux);
     outstanding_token = channel.volume_token;
@@ -492,6 +622,16 @@ bool menu_read(MenuSnapshot &snapshot, std::uint64_t &generation) {
   portEXIT_CRITICAL(&mux);
   return changed;
 }
+bool catalog_read(CatalogSnapshot &snapshot, std::uint64_t &generation) {
+  portENTER_CRITICAL(&mux);
+  const bool changed = catalog_channel.generation != generation;
+  if (changed) {
+    snapshot = catalog_channel.view;
+    generation = catalog_channel.generation;
+  }
+  portEXIT_CRITICAL(&mux);
+  return changed;
+}
 bool request_source(TunerSource source) {
   if (!power_management::commands_allowed() ||
       (source != TunerSource::RADIO && source != TunerSource::BLUETOOTH))
@@ -500,7 +640,10 @@ bool request_source(TunerSource source) {
   const bool accepted = full_control.view.connected &&
                         full_control.view.supported &&
                         !full_control.requested &&
-                        !full_control.pending_request;
+                        !full_control.pending_request &&
+                        catalog_channel.request == CatalogChannel::Request::NONE &&
+                        !catalog_channel.pending_request &&
+                        !catalog_channel.query_in_flight;
   if (accepted) {
     full_control.requested = true;
     full_control.requested_source = source;
@@ -509,6 +652,67 @@ bool request_source(TunerSource source) {
     full_control.view.result_present = false;
     full_control.view.last_error = 0;
     ++full_control.generation;
+  }
+  portEXIT_CRITICAL(&mux);
+  return accepted;
+}
+bool request_catalog(CatalogCollection collection, std::uint16_t offset) {
+  if (!power_management::commands_allowed() ||
+      collection < CatalogCollection::SAVED ||
+      collection > CatalogCollection::RECENT)
+    return false;
+  portENTER_CRITICAL(&mux);
+  const bool accepted = catalog_channel.view.connected &&
+                        catalog_channel.view.supported &&
+                        catalog_channel.request == CatalogChannel::Request::NONE &&
+                        !catalog_channel.pending_request &&
+                        !catalog_channel.query_in_flight &&
+                        !full_control.requested && !full_control.pending_request;
+  if (accepted) {
+    catalog_channel.request = CatalogChannel::Request::QUERY;
+    catalog_channel.collection = collection;
+    catalog_channel.offset_or_token = offset;
+    catalog_channel.view.loading = true;
+    catalog_channel.view.result_present = false;
+    catalog_channel.view.last_error = 0;
+    if (catalog_channel.generation != UINT64_MAX) ++catalog_channel.generation;
+  }
+  portEXIT_CRITICAL(&mux);
+  return accepted;
+}
+bool request_catalog_action(CatalogOperation operation,
+                            CatalogCollection collection,
+                            std::uint16_t token,
+                            std::uint64_t revision) {
+  const bool compatible =
+      operation == CatalogOperation::PLAY ||
+      (operation == CatalogOperation::REMOVE &&
+       collection != CatalogCollection::RECENT) ||
+      (operation == CatalogOperation::ADD_FAVORITE &&
+       collection == CatalogCollection::RECENT);
+  if (!power_management::commands_allowed() || !revision || !compatible ||
+      collection < CatalogCollection::SAVED ||
+      collection > CatalogCollection::RECENT)
+    return false;
+  portENTER_CRITICAL(&mux);
+  const bool accepted = catalog_channel.view.connected &&
+                        catalog_channel.view.supported &&
+                        catalog_channel.request == CatalogChannel::Request::NONE &&
+                        !catalog_channel.pending_request &&
+                        !catalog_channel.query_in_flight &&
+                        !full_control.requested && !full_control.pending_request;
+  if (accepted) {
+    catalog_channel.request = CatalogChannel::Request::COMMAND;
+    catalog_channel.collection = collection;
+    catalog_channel.operation = operation;
+    catalog_channel.offset_or_token = token;
+    catalog_channel.requested_revision = revision;
+    catalog_channel.view.command_pending = true;
+    catalog_channel.view.requested_operation = operation;
+    catalog_channel.view.requested_token = token;
+    catalog_channel.view.result_present = false;
+    catalog_channel.view.last_error = 0;
+    if (catalog_channel.generation != UINT64_MAX) ++catalog_channel.generation;
   }
   portEXIT_CRITICAL(&mux);
   return accepted;
