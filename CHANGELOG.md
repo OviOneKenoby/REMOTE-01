@@ -1,5 +1,39 @@
 # Changelog
 
+## 2026-10-25 - BTX Radio playback ownership hardware validation PASS
+
+Installed the playback-ownership correction from implementation commit
+`596cb71be867e2b5ff6eb3f6c0dde52d6dd8a770` on the verified REMOTE ESP32-S3.
+The application-only write at `0x10000` and independent exact 2,583,008-byte
+readback both passed SHA-256
+`fad87bb2f50142f3758945c5a2276a2535008aec4f32a5ec29f021faa95f3b3f`.
+Runtime reported embedded build `596cb71` and the expected ELF identity. Stored
+Wi-Fi, pairing, HOME, display, touch, authenticated RTCP and authoritative
+volume were retained.
+
+With Radio ABF HTTPS MP3 playing, REMOTE preserved `PLAYING`, enabled Pause,
+correct Radio metadata and authoritative volume across three RTCP cycles. The
+same state survived display-idle and touchscreen wake. One Radio Pause and one
+Play were accepted and reconciled by TUNER without `UNKNOWN`, reconnect or
+volume regression. Bluetooth then showed the phone metadata and `PLAYING`;
+one REMOTE Pause/Play controlled the phone, and one clockwise encoder detent
+changed authoritative phone volume from 80% to 82%. After Bluetooth-to-Radio,
+three further cycles retained Radio ABF metadata, `PLAYING`, enabled Pause and
+82% volume with no stale Bluetooth metadata. REMOTE RTCP session 2 remained
+READY and its close/attempt counters stayed at 255 throughout the bounded
+test. TUNER remained on build `dbf9896876a7`, with continuous uptime, zero
+Wi-Fi disconnects and no reset; COM5 was not accessed.
+
+Motion wake did not operate during the display-idle check. Read-only evidence
+showed `IMU=0`, zero motion events and otherwise healthy RTCP; touchscreen wake
+passed. This preserves the previously documented intermittent IMU
+initialization/motion-wake limitation as a separate open issue and is not
+attributed to the playback-ownership correction. TUNER internal free/largest
+heap varied with source transition, reaching an observed 6,640/2,292 bytes
+before recovering to 9,152/6,644 bytes while Radio played. No reset, Wi-Fi
+disconnect, HTTP/RTCP failure or audio interruption occurred, but the current
+HTTP diagnostics do not expose allocation-failure or Wi-Fi-TX-refusal counts.
+
 ## 2026-10-25 - BTX radio playback ownership correction
 
 Corrected the REMOTE adapter's mixed D-009/BTX ownership boundary. Authenticated

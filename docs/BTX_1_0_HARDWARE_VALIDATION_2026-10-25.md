@@ -1,6 +1,82 @@
 # REMOTE BTX hardware validation - 2026-10-25
 
-Status: **HARDWARE FAIL PRESERVED; SOFTWARE CORRECTION VERIFIED / HARDWARE RETEST PENDING**
+Status: **HARDWARE PASS - RADIO PLAYBACK OWNERSHIP; MOTION-WAKE LIMITATION OPEN**
+
+## Corrected-candidate installation and bounded hardware retest
+
+The verified REMOTE on COM3 was positively identified as ESP32-S3 QFN56
+revision 0.2 with 16 MiB flash. The live partition-table sector matched
+SHA-256
+`fd62ef669cdbab98ac5372777a686d8dcd9813f7eb5302a67cc5136e96e90f69`
+and retained the 8 MiB factory application at `0x10000`. The prior
+2,582,432-byte application rollback and complete 16 MiB flash backup remained
+available with their recorded hashes.
+
+The exact 2,583,008-byte candidate was written once at `0x10000`; bootloader,
+partition table, NVS, OTA metadata, pairing, credentials and other persistent
+regions were not written. Independent exact-span readback matched SHA-256
+`fad87bb2f50142f3758945c5a2276a2535008aec4f32a5ec29f021faa95f3b3f`.
+Runtime reported embedded build `596cb71` and ELF SHA-256
+`1bbb0cdc2eb1035c30d46e985369f855f7a10ee98d5bdefdfb592af10a08bd02`.
+Retained Wi-Fi/configuration/pairing, HOME, display and touch passed. RTCP
+authenticated and reached READY with authoritative volume and `volume.set`.
+
+Radio ABF was audibly playing while three successive REMOTE/TUNER snapshots
+were collected. REMOTE continuously displayed `PLAYING`, enabled Pause, showed
+the correct Radio metadata and retained authoritative 80% volume. It did not
+revert to `UNKNOWN`. After natural display-idle, touchscreen wake restored the
+same correct presentation. One Pause and one Play issued by REMOTE were each
+accepted and authoritatively reconciled by TUNER.
+
+Bluetooth A2DP then played SBC audio from the connected phone. REMOTE showed
+the correct phone artist/title, `PLAYING`, enabled Play/Pause and correct
+volume. One REMOTE Pause and Play controlled the phone. One clockwise encoder
+detent produced four transitions, one accepted intent and an authoritative
+80% to 82% phone-volume change without interrupting playback. Returning to
+Radio ABF produced correct Radio metadata, no stale Bluetooth metadata,
+`PLAYING`, enabled Pause and 82% volume across three further snapshots.
+
+The REMOTE RTCP session remained 2 and READY; close and connection-attempt
+counters remained unchanged at 255 for the bounded validation. TUNER build
+`dbf9896876a7` retained continuous uptime, zero Wi-Fi disconnects and
+`power_on` reset reason. Its HTTP diagnostics remained responsive throughout.
+Observed internal free/largest heap during the final source transition ranged
+down to 6,640/2,292 bytes and then recovered to 9,152/6,644 bytes while Radio
+played. Allocation-failure and Wi-Fi-TX-refusal counters are not exposed by
+this production HTTP interface and are therefore not claimed as zero. TUNER
+COM5 was never opened.
+
+Lift did not wake the display in this run. The contemporaneous REMOTE snapshot
+showed display-idle, `IMU=0`, zero motion events, authenticated RTCP READY and
+continued authoritative volume. Touchscreen wake passed and preserved the
+correct playback state. The lift result is retained as the separate known
+intermittent IMU-initialization/motion-wake limitation; serial-port reset safety
+and motion wake remain outside this correction's hardware PASS.
+
+### Corrected-candidate acceptance matrix
+
+| Check | Result |
+| --- | --- |
+| Candidate write and exact readback | PASS |
+| Boot, retained Wi-Fi/pairing, HOME/display/touch | PASS |
+| RTCP authentication/READY and authoritative volume | PASS |
+| Radio `PLAYING` across three snapshot cycles | PASS |
+| Radio metadata, Pause availability and no `UNKNOWN` overwrite | PASS |
+| Display-idle then touchscreen wake | PASS |
+| Lift/motion wake | OPEN LIMITATION; `IMU=0`, not attributed to this correction |
+| Radio Pause then Play | PASS |
+| Bluetooth audio, metadata and playback state | PASS |
+| Bluetooth AVRCP Pause then Play | PASS |
+| Bluetooth volume by REMOTE encoder | PASS; 80% to 82% |
+| Bluetooth to Radio ownership handover | PASS across three snapshot cycles |
+| TUNER Wi-Fi/HTTP/RTCP/audio continuity | PASS for bounded test |
+| Allocation-failure / Wi-Fi-TX-refusal deltas | NOT OBSERVABLE in current HTTP diagnostics |
+
+Private evidence:
+`C:\Users\RYZEN\Documents\BTX_PRIVATE_HARDWARE_EVIDENCE\20261025T172806Z-REMOTE-radio-ownership-install`
+
+The earlier failure and its diagnosis remain below as historical evidence; the
+corrected-candidate results above supersede its pending-retest status.
 
 ## Offline ownership correction checkpoint
 
@@ -53,7 +129,7 @@ The previously installed application and fresh 16 MiB rollback backup remain
 unchanged and independently hash-verified. No hardware was accessed for this
 correction.
 
-## Installed identities
+## Previous installed identities (historical failed run)
 
 - REMOTE device: ESP32-S3 QFN56 revision 0.2, native USB Serial/JTAG, 16 MiB.
 - Source/documentation head: `2200bc8df02262e076ecdbd3c9fd66eac4c5d3b3`.
@@ -80,7 +156,7 @@ Private NVS, OTA metadata and `remote_ctl` region backups were also retained.
 Private evidence:
 `C:\Users\RYZEN\Documents\BTX_PRIVATE_HARDWARE_EVIDENCE\20261025T105633Z-REMOTE-BTX-integration`
 
-## Installation verification
+## Previous installation verification (historical failed run)
 
 - Single application-only write at `0x10000`: PASS.
 - esptool transmitted-data verification: PASS.
@@ -92,7 +168,7 @@ Private evidence:
 - Authoritative volume and `volume.set`: PASS; no request outstanding.
 - Unexpected reset after boot: none observed.
 
-## Functional result and stop condition
+## Previous functional result and stop condition (historical failed run)
 
 Radio ABF HTTPS MP3 played audibly and TUNER remained online. Diagnostics at
 the failure checkpoint showed REMOTE RTCP stage 13, unchanged session 2, no
@@ -109,7 +185,7 @@ authentication or wire-protocol failure.
 The loss-of-existing-function stop condition ended commissioning. No source
 analysis or correction was attempted in this task.
 
-## Acceptance matrix
+## Previous acceptance matrix (superseded by corrected-candidate retest)
 
 | Check | Result |
 | --- | --- |
@@ -126,7 +202,7 @@ analysis or correction was attempted in this task.
 | Radio/Bluetooth transition synchronization | NOT TESTED |
 | Sleep/reconnect stale-state checks | NOT TESTED |
 
-## Remaining work
+## Historical retest requirement (completed above)
 
 Install the exact corrected candidate only after separate owner authorization.
 With Radio ABF playing, observe at least three snapshot cycles, wake from
