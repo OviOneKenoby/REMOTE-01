@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-10-25 - REMOTE Full Control permanent specification established
+
+Added the complete owner-approved behavior as the binding
+`docs/REMOTE_FULL_CONTROL_SPEC.md`, plus a separate milestone, protocol, test,
+build and limitation tracker in `docs/REMOTE_FULL_CONTROL_IMPLEMENTATION.md`.
+README now requires future UI/navigation/source/station work to consult the
+specification. Unimplemented and hardware-untested behavior remains explicitly
+marked; no approved requirement was weakened to match the current partial
+implementation.
+
+## 2026-10-25 - REMOTE Full Control milestone 1 (offline)
+
+Added a legacy-safe, capability-negotiated source-control extension and the
+approved portrait TUNER CONTROL entry point. HOME now labels its third row
+`TUNER CONTROL`; DEVICES remains reserved. Radio/Bluetooth selection uses the
+existing authenticated single-request lane with generation fencing, no
+optimistic source change, no automatic retry and authoritative completion.
+Compact progress/error/success popups, three-second HOME return, disconnected
+handling, wake-to-HOME behavior, and the Bluetooth waiting presentation are
+implemented. List entries are deliberately disabled until their canonical
+TUNER projections are implemented. Focused wire tests cover record bounds,
+malformed input, discovery compatibility and source vectors. Hardware remains
+untouched and validation is pending.
+
 ## 2026-10-25 - BTX Radio playback ownership hardware validation PASS
 
 Installed the playback-ownership correction from implementation commit
