@@ -22,8 +22,9 @@ bool text(const std::uint8_t*p,std::size_t n){
 }
 }
 bool Identity::full_control_advertised()const{
-  constexpr char marker[]="+fc1";const auto n=std::strlen(firmware),m=sizeof(marker)-1;
-  return n>=m&&std::memcmp(firmware+n-m,marker,m)==0;
+  constexpr char marker1[]="+fc1",marker2[]="+fc2";const auto n=std::strlen(firmware),m=sizeof(marker1)-1;
+  return n>=m&&(std::memcmp(firmware+n-m,marker1,m)==0||
+                std::memcmp(firmware+n-m,marker2,m)==0);
 }
 std::size_t identity_request(std::span<std::uint8_t>o){if(o.size()<4)return 0;o[0]=1;o[1]=1;o[2]=1;o[3]=0;return 4;}
 std::size_t capability_request(std::span<std::uint8_t>o){if(o.empty())return 0;o[0]=3;return 1;}
@@ -32,6 +33,7 @@ std::size_t now_playing_request(std::span<std::uint8_t>o){if(o.empty())return 0;
 std::size_t btx_state_request(std::span<std::uint8_t>o){if(o.empty())return 0;o[0]=13;return 1;}
 std::size_t full_control_capability_request(std::span<std::uint8_t>o){if(o.empty())return 0;o[0]=16;return 1;}
 std::size_t source_state_request(std::span<std::uint8_t>o){if(o.empty())return 0;o[0]=18;return 1;}
+std::size_t menu_state_request(std::span<std::uint8_t>o){if(o.empty())return 0;o[0]=21;return 1;}
 std::size_t volume_set(std::uint64_t id,std::uint32_t n,std::uint32_t d,std::span<std::uint8_t>o){if(o.size()<17||!id||!d||n>d)return 0;o[0]=7;p64(o.data()+1,id);p32(o.data()+9,n);p32(o.data()+13,d);return 17;}
 std::size_t playback_command(std::uint64_t id,PlaybackOperation operation,std::uint8_t expected,std::uint64_t generation,std::span<std::uint8_t>o){
   const auto op=std::uint8_t(operation);if(o.size()<19||!id||!generation||op<1||op>4||expected>3)return 0;
@@ -55,10 +57,14 @@ bool parse(std::span<const std::uint8_t>p,BtxCapabilities&o){
   o={1,2000,p[3],p[4],p[5],true};return true;
 }
 bool parse(std::span<const std::uint8_t>p,FullControlCapabilities&o){
-  if(p.size()!=20||p[0]!=17||p[1]!=1||p[2]!=0||p[3]!=0||
-     (g32(p.data()+4)&~1u)||!g32(p.data()+4)||
-     (std::uint16_t(p[8])<<8|p[9])!=2000||p[10]||p[11]||g64(p.data()+12)!=1)return false;
-  o={1,g32(p.data()+4),2000,true};return true;
+  if(p.size()!=20||p[0]!=17||p[1]!=1||p[2]>1||p[3]!=0||
+     (std::uint16_t(p[8])<<8|p[9])!=2000||p[10]||p[11])return false;
+  const std::uint32_t features=g32(p.data()+4);
+  const std::uint64_t revision=g64(p.data()+12);
+  const bool legacy=p[2]==0&&features==1&&revision==1;
+  const bool menu=p[2]==1&&features==3&&revision==2;
+  if(!legacy&&!menu)return false;
+  o={revision,features,2000,true};return true;
 }
 bool parse(std::span<const std::uint8_t>p,SourceState&o){
   if(p.size()!=24||p[0]!=19||p[1]!=1||p[2]<1||p[2]>2||p[3]>3||
@@ -66,6 +72,34 @@ bool parse(std::span<const std::uint8_t>p,SourceState&o){
   const auto sequence=g64(p.data()+8),generation=g64(p.data()+16);
   if(!sequence||!generation||(p[2]!=2&&p[4]))return false;
   o={sequence,generation,Source(p[2]),SourceTransition(p[3]),p[4]!=0,p[5]};return true;
+}
+bool parse(std::span<const std::uint8_t>p,MenuState&o){
+  if(p.size()<28||p.size()>288||p[0]!=22||p[1]!=1||p[2]<1||p[2]>13||
+     (p[3]&~3u)||p[10]>5)return false;
+  const auto selected=std::uint16_t(p[4])<<8|p[5];
+  const auto count=std::uint16_t(p[6])<<8|p[7];
+  const auto start=std::uint16_t(p[8])<<8|p[9];
+  if((count?selected>=count:selected!=0)||start>count||
+     std::size_t(start)+p[10]>std::size_t(count)||
+     ((p[3]&2u)?p[11]==0:p[11]!=0))return false;
+  const auto sequence=g64(p.data()+12),revision=g64(p.data()+20);
+  if(!sequence||!revision)return false;
+  MenuState value{};value.sequence=sequence;value.revision=revision;
+  value.mode=MenuMode(p[2]);value.flags=p[3];value.error=p[11];
+  value.selected=selected;value.count=count;value.window_start=start;
+  value.window_count=p[10];std::size_t at=28;
+  for(std::uint8_t i=0;i<value.window_count;++i){
+    if(p.size()-at<4)return false;
+    auto&item=value.items[i];item.token=std::uint16_t(p[at])<<8|p[at+1];
+    item.active=p[at+2]!=0;item.name_size=p[at+3];
+    if(p[at+2]>1||item.name_size==0||item.name_size>48||
+       item.token!=std::uint16_t(start+i)||p.size()-at-4<item.name_size||
+       !text(p.data()+at+4,item.name_size))return false;
+    std::memcpy(item.name.data(),p.data()+at+4,item.name_size);
+    item.name[item.name_size]=0;at+=4+item.name_size;
+  }
+  if(at!=p.size())return false;
+  o=value;return true;
 }
 BtxProbeResult BtxNegotiation::second(std::span<const std::uint8_t>p,
                                       const Capabilities&first_value,

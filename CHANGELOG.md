@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-10-25 - REMOTE Full Control milestone 2 protocol projection (offline)
+
+Added the bounded authenticated read-only menu projection needed by later
+station-list UI. The TUNER supplies its canonical mode, selection, count,
+revision and at most five names; REMOTE validates and copies that fixed window
+through its owner boundary. No URL, raw input, mutation, heap allocation or
+automatic command was introduced. `+fc2` isolates the new capability mask
+from Milestone 1 clients while current REMOTE remains compatible with both
+extension generations. Focused TUNER and REMOTE model tests pass. Approved
+list rendering and semantic actions remain pending and no hardware result is
+claimed.
+
 ## 2026-10-25 - REMOTE Full Control permanent specification established
 
 Added the complete owner-approved behavior as the binding

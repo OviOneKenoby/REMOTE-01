@@ -19,8 +19,8 @@ engineering state; it does not replace or relax the specification.
 
 | # | Milestone | Software | Hardware | Remaining work |
 | --- | --- | --- | --- | --- |
-| 1 | Source switching | PASS at current offline working-tree checkpoint | NOT TESTED | Commit implementation after permanent-doc checkpoint; hardware install/Radio-Bluetooth validation separately authorized. |
-| 2 | Read-only canonical menu/state projection | NOT IMPLEMENTED | NOT TESTED | Bounded revisioned visible-window projection. |
+| 1 | Source switching | PASS; TUNER `5d10615`, REMOTE `9293a99` | NOT TESTED | Hardware install/Radio-Bluetooth validation separately authorized. |
+| 2 | Read-only canonical menu/state projection | PARTIAL; wire/server/client/API PASS, dedicated list rendering pending | NOT TESTED | Render through the approved list UI during Milestone 4. |
 | 3 | Semantic navigation | NOT IMPLEMENTED | NOT TESTED | Safe open/move/select/back/exit with local-control priority. |
 | 4 | Saved/Favorites/Recent | NOT IMPLEMENTED | NOT TESTED | Queries, play, gestures, confirmation, persistence operations, HOME shortcut. |
 | 5 | Radio Browser | NOT IMPLEMENTED / RISK GATE | NOT TESTED | Prove bounded cooperative HTTPS job or mark BLOCKED. |
@@ -31,8 +31,10 @@ engineering state; it does not replace or relax the specification.
 
 ### Protocol
 
-Existing authenticated RTCP/1 framing and IDs 1-15 are unchanged. BTX feature
-bit 6 advertises the optional extension before a new REMOTE sends any new ID.
+Existing authenticated RTCP/1 framing and IDs 1-15 are unchanged. A bounded
+`+fc1` identity-text suffix advertises that the optional capability request is
+safe before a new REMOTE sends any new ID. Legacy clients accept and ignore
+identity text, so existing BTX feature bits remain byte-for-byte compatible.
 Current records are:
 
 | ID | Direction | Purpose | Payload bytes |
@@ -81,24 +83,52 @@ REMOTE:
 - `components/user_app/user_app.cpp`
 - `tests/control/full_control_tests.cpp`
 
-Implementation commit IDs are pending the required documentation-first local
-commit and will be recorded here at the next checkpoint.
+Implementation commits are TUNER
+`5d1061516175d3ef6471b07b94e8ba164404220b` and REMOTE
+`9293a99d05b6218dde0206a05d73a56f4590ade5`. The permanent documentation
+checkpoint is REMOTE `401709c`.
 
 ### Automated verification
 
 - TUNER Full-Control source model: PASS (parse, bounds, generation stale,
   busy, idempotent, bounded mailbox/no replay).
 - TUNER existing BTX regression: PASS, 46/46 assertions.
-- REMOTE Full-Control wire regression: PASS, 15 assertions.
+- REMOTE Full-Control wire regression: PASS, 17 assertions.
 - REMOTE existing BTX regression: PASS, 7 tests / 52 assertions.
-- TUNER `esp32-lwip-psram` integration build: PASS. Interim image 2,074,080
-  bytes; link usage 2,067,505 / 3,145,728 bytes; static RAM 79,128 / 327,680.
-- REMOTE `remote01` integration build: PASS. Interim image 2,587,024 bytes;
-  link usage 2,586,529 / 8,388,608 bytes; static RAM 56,796 / 327,680.
+- TUNER `esp32-lwip-psram` post-commit build: PASS. Image 2,074,096 bytes,
+  SHA-256 `e715bd517623e6a4168a26995dbb507fa8589a08344c41aecb56158461270c7a`;
+  ELF 30,347,892 bytes, SHA-256
+  `634a90164918bb591f77c98631d6775886aa26a985391ed4009b0b7823f22a63`;
+  link usage 2,067,521 / 3,145,728 bytes; static RAM 79,128 / 327,680.
+- REMOTE `remote01` post-commit build: PASS. Image 2,587,088 bytes, SHA-256
+  `f244f7ac9a618cb1136421e0268bf022fef9cef3e081a605c24fe801d01df0ae`;
+  ELF 19,851,880 bytes, SHA-256
+  `7423a8d424459fc9c11e879f4ba40440e205a4aa4d20305669913f075109c01a`;
+  link usage 2,586,593 / 8,388,608 bytes; static RAM 56,796 / 327,680.
 
 These are interim compile checkpoints, not final candidates: the embedded
 build identity still reflects the pre-commit HEAD and final clean builds and
 manifests are required after all safe milestones.
+
+## Milestone 2 checkpoint
+
+Full-Control 1.1 adds a fixed read-only menu projection. The TUNER serializes
+its actual main-loop-owned mode, selection, total count, error/loading flags,
+stable revision and at most five visible items. Each item carries only an
+opaque 16-bit index, active flag and at most 48 bytes of validated UTF-8 text;
+URLs never cross the protocol. Empty lists are valid and the maximum response
+is 288 bytes, below the existing 512-byte plaintext limit. TUNER storage adds
+only a 16-byte revision/signature tracker and uses the existing response
+buffer; no dynamic allocation or input injection was added.
+
+Compatibility uses `+fc2` for the 1.1 feature mask. Milestone 1 REMOTE clients
+therefore remain on D-009/BTX when paired with this TUNER, while the current
+REMOTE accepts both `+fc1` and `+fc2`. The REMOTE parser stores one bounded
+five-item window and publishes it through a copied owner/UI channel. Focused
+TUNER source/menu tests pass; focused REMOTE wire tests pass 25 assertions.
+Rendering that projection in the approved station-list UI is intentionally
+deferred to the list milestone, so Milestone 2 remains PARTIAL rather than
+being overstated as complete.
 
 ## Known limitations and risk gates
 

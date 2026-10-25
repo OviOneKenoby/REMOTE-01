@@ -1,7 +1,9 @@
 #include "rtcp_client/wire.hpp"
 
 #include <array>
+#include <cstring>
 #include <cstdio>
+#include <string_view>
 
 namespace {
 unsigned assertions = 0;
@@ -10,13 +12,17 @@ unsigned assertions = 0;
 void p64(std::uint8_t *p, std::uint64_t value) {
   for (int i = 7; i >= 0; --i) { p[i] = std::uint8_t(value); value >>= 8; }
 }
+void p16(std::uint8_t *p, std::uint16_t value) {
+  p[0] = std::uint8_t(value >> 8); p[1] = std::uint8_t(value);
+}
 }
 
 int main() {
   using namespace rtcp_client::wire;
-  std::array<std::uint8_t, 32> bytes{};
+  std::array<std::uint8_t, 512> bytes{};
   CHECK(full_control_capability_request(bytes) == 1 && bytes[0] == 16);
   CHECK(source_state_request(bytes) == 1 && bytes[0] == 18);
+  CHECK(menu_state_request(bytes) == 1 && bytes[0] == 21);
   CHECK(source_select(0x0102030405060708ULL, Source::bluetooth, 9, bytes) == 18);
   const std::array<std::uint8_t, 18> expected{
       20,1,2,3,4,5,6,7,8,2,0,0,0,0,0,0,0,9};
@@ -33,6 +39,11 @@ int main() {
   auto invalid_capability = capabilities;
   invalid_capability[7] = 2;
   CHECK(!parse(invalid_capability, capability));
+  auto menu_capability = capabilities;
+  menu_capability[2] = 1; menu_capability[7] = 3; menu_capability[19] = 2;
+  CHECK(parse(menu_capability, capability));
+  CHECK(capability.source_switch() && capability.menu_projection() &&
+        capability.revision == 2);
 
   std::array<std::uint8_t, 24> state{};
   state[0] = 19; state[1] = 1; state[2] = 2; state[3] = 0; state[4] = 1;
@@ -46,6 +57,24 @@ int main() {
   state[4] = 0;
   CHECK(parse(state, value) && value.source == Source::radio);
 
+  std::array<std::uint8_t, 45> menu{};
+  menu[0]=22;menu[1]=1;menu[2]=std::uint8_t(MenuMode::favorites);
+  p16(menu.data()+4,1);p16(menu.data()+6,2);p16(menu.data()+8,0);menu[10]=2;
+  p64(menu.data()+12,12);p64(menu.data()+20,4);
+  p16(menu.data()+28,0);menu[30]=0;menu[31]=5;
+  std::memcpy(menu.data()+32,"Alpha",5);
+  p16(menu.data()+37,1);menu[39]=1;menu[40]=4;
+  std::memcpy(menu.data()+41,"Beta",4);
+  MenuState menu_value{};
+  CHECK(parse(menu,menu_value));
+  CHECK(menu_value.mode==MenuMode::favorites&&menu_value.selected==1&&
+        menu_value.window_count==2&&menu_value.items[1].active&&
+        std::string_view(menu_value.items[1].name.data())=="Beta");
+  auto invalid_menu=menu;invalid_menu[39]=2;
+  CHECK(!parse(invalid_menu,menu_value));
+  invalid_menu=menu;invalid_menu[38]=2;
+  CHECK(!parse(invalid_menu,menu_value));
+
   const std::array<std::uint8_t,16> discovery{
       12,1,0,0x3f,96,127,7,0xd0,0,0,0,0,0,0,0,1};
   BtxCapabilities btx{};
@@ -56,6 +85,8 @@ int main() {
       2,1,1,0,10,'1','.','1','.','1','2','+','f','c','1'};
   Identity identity{};
   CHECK(parse(identity_bytes,identity) && identity.full_control_advertised());
+  auto identity2=identity_bytes;identity2.back()='2';
+  CHECK(parse(identity2,identity) && identity.full_control_advertised());
   auto legacy_identity=identity_bytes;legacy_identity[4]=6;
   CHECK(parse({legacy_identity.data(),11},identity)&&!identity.full_control_advertised());
   std::printf("FULL_CONTROL: PASS=1 FAIL=0 assertions=%u\n", assertions);

@@ -38,6 +38,11 @@ struct FullControlChannel {
   bool requested = false;
   TunerSource requested_source = TunerSource::UNKNOWN;
 } full_control;
+struct MenuChannel {
+  MenuSnapshot view{};
+  std::uint64_t generation = 1;
+  std::uint64_t observed_sequence = 0;
+} menu_channel;
 
 void publish_full_control(const FullControlSnapshot &next) {
   const auto &old = full_control.view;
@@ -52,6 +57,35 @@ void publish_full_control(const FullControlSnapshot &next) {
       old.source_generation == next.source_generation) return;
   full_control.view = next;
   if (full_control.generation != UINT64_MAX) ++full_control.generation;
+}
+void publish_menu(const rtcp_client::wire::MenuState &source, bool connected,
+                  bool supported) {
+  if (source.sequence && source.sequence == menu_channel.observed_sequence &&
+      menu_channel.view.connected == connected &&
+      menu_channel.view.supported == supported)
+    return;
+  MenuSnapshot next{};
+  next.connected = connected;
+  next.supported = supported;
+  if (connected && supported && source.sequence) {
+    next.loading = source.loading();
+    next.failed = source.failed();
+    next.error = source.error;
+    next.mode = static_cast<TunerMenuMode>(source.mode);
+    next.selected = source.selected;
+    next.count = source.count;
+    next.window_start = source.window_start;
+    next.window_count = source.window_count;
+    next.revision = source.revision;
+    for (std::uint8_t i = 0; i < source.window_count; ++i) {
+      next.items[i].token = source.items[i].token;
+      next.items[i].active = source.items[i].active;
+      next.items[i].name = source.items[i].name;
+    }
+  }
+  menu_channel.view = next;
+  menu_channel.observed_sequence = connected && supported ? source.sequence : 0;
+  if (menu_channel.generation != UINT64_MAX) ++menu_channel.generation;
 }
 void observer(void *p, std::size_t bytes, bool allocated) {
   if (xTaskGetCurrentTaskHandle() != owner)
@@ -262,6 +296,8 @@ void task(void *) {
         next.last_error = result.error;
       }
       publish_full_control(next);
+      publish_menu(s->rtcp.menu_state(), next.connected,
+                   capability.menu_projection());
       portEXIT_CRITICAL(&mux);
     }
     // At most one external inbox event per turn, on the same Core owner.
@@ -442,6 +478,16 @@ bool full_control_read(FullControlSnapshot &snapshot, std::uint64_t &generation)
   if (changed) {
     snapshot = full_control.view;
     generation = full_control.generation;
+  }
+  portEXIT_CRITICAL(&mux);
+  return changed;
+}
+bool menu_read(MenuSnapshot &snapshot, std::uint64_t &generation) {
+  portENTER_CRITICAL(&mux);
+  const bool changed = menu_channel.generation != generation;
+  if (changed) {
+    snapshot = menu_channel.view;
+    generation = menu_channel.generation;
   }
   portEXIT_CRITICAL(&mux);
   return changed;
