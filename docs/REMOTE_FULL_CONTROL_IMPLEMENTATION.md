@@ -130,6 +130,22 @@ Rendering that projection in the approved station-list UI is intentionally
 deferred to the list milestone, so Milestone 2 remains PARTIAL rather than
 being overstated as complete.
 
+Milestone 2 implementation commits are TUNER
+`4cf9b65e00e0a6c5a28f6833ec06a672a046a461` and REMOTE
+`e032ae324fab9627c6071a4848a976f92c81df51`. Both production builds pass:
+
+- TUNER: 2,076,272-byte BIN, SHA-256
+  `d308d56a52f46241f0c2eae432eccf0bf2e542f4279cc34c57c9d614b292a982`;
+  30,380,224-byte ELF, SHA-256
+  `3816b9cfcbdb14d0a7648c6a6e53f8914a1d2374fa5f99fbc2a8b88b6198a933`;
+  79,208 bytes static RAM and 1,069,456 bytes exact-image slot headroom.
+- REMOTE: 2,588,864-byte BIN, SHA-256
+  `eef4c8dad70f8e0817a65458341c88d18ffbee822fd40a4dddd68cde6a745450`;
+  19,883,688-byte ELF, SHA-256
+  `e76a9998e04cf43e5afafb77f16b4256f79fe1e0b19f80ccc8906bcd2f7eaf9d`;
+  57,100 bytes static RAM and 5,799,744 bytes exact-image factory-slot
+  headroom.
+
 ## Known limitations and risk gates
 
 - No Full-Control feature has been installed or hardware-tested.
