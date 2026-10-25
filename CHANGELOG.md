@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026-10-25 - BTX hardware installation verified; radio state/control regression
+
+Mandatory preflight identified REMOTE as the ESP32-S3 QFN56 revision 0.2
+native USB Serial/JTAG device on COM3 with 16 MiB flash. The live partition
+table retained the 8 MiB factory application at `0x10000`. A fresh 16 MiB
+full-flash backup was captured before writing; its exact Round 5 application
+span matched SHA-256
+`6eb44ff4137d8c11f44dc5e0fed0a7061f77b172d4a38982e5219bbd7454e278`.
+Separate NVS, OTA metadata and `remote_ctl` copies were preserved privately.
+
+The exact 2,582,432-byte BTX application from source head
+`2200bc8df02262e076ecdbd3c9fd66eac4c5d3b3`, SHA-256
+`5d84f83b8e9e6f860e7cd807a270eeee697ed42dc361bbb1e1022f639dc4206b`,
+was written once at `0x10000`. No other partition was written. Independent
+exact-span readback matched the candidate SHA-256. Build `5b32cbb` booted with
+retained Wi-Fi, pairing and configuration. RTCP reached authenticated READY,
+authoritative volume and `volume.set` were available, and no command was
+outstanding. Display, touch and HOME behavior passed owner inspection.
+
+During Radio ABF HTTPS MP3 playback, TUNER continued playing and RTCP remained
+authenticated/READY, but after REMOTE woke from display-idle the green HOME
+playback label showed `UNKNOWN` instead of `PLAYING`. The Play/Pause control
+was disabled/unavailable, so the authorized radio-control check could not be
+performed. This is an OPEN REMOTE UI/state-synchronization defect, not a proven
+RTCP protocol failure. The commissioning loss-of-existing-function stop
+condition was applied. Bluetooth UI/metadata/AVRCP and further mode-transition
+tests were not run. No source investigation, rebuild, additional flash,
+rollback or TUNER serial/flash access occurred. Hardware verdict: **FAIL**.
+
 ## 2026-10-23 - BTX/1.0 REMOTE Phase 6B installation
 
 Installed the exact 2,582,432-byte BTX/1.0 application at `0x10000` on the
