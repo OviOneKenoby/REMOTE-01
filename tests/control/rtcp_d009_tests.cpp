@@ -75,7 +75,9 @@ bool result_bounds(){
   using namespace rtcp_client::wire;std::array<std::uint8_t,11>b{};b[0]=8;p64(b.data()+1,3);Result value{};
   b[9]=1;b[10]=0;CHECK(parse(b,value)&&value.accepted);
   b[9]=0;b[10]=7;CHECK(parse(b,value)&&!value.accepted);
-  b[10]=8;CHECK(!parse(b,value));b[10]=0;CHECK(!parse(b,value));return true;
+  b[10]=8;CHECK(parse(b,value)&&!value.accepted);
+  b[10]=9;CHECK(parse(b,value)&&!value.accepted);
+  b[10]=10;CHECK(!parse(b,value));b[10]=0;CHECK(!parse(b,value));return true;
 }
 
 bool generation_and_revision_fence(){
