@@ -1,6 +1,7 @@
 #include "diagnostics/api.hpp"
 #include "control_home/development.hpp"
 #include "control_home/power_suspend.hpp"
+#include "control_home/full_control.hpp"
 #include "network_manager/api.hpp"
 #include "power_management/api.hpp"
 #include "remote_persistence/diagnostic.hpp"
@@ -28,6 +29,30 @@ std::uint64_t encoder_invalid = 0, encoder_positive = 0,
               encoder_negative = 0, encoder_rejected = 0;
 std::uint32_t encoder_sample_last_ms = 0, encoder_sample_max_ms = 0;
 std::uint8_t encoder_last_delta = 0;
+struct FullControlChannel {
+  FullControlSnapshot view{};
+  std::uint64_t generation = 1;
+  std::uint64_t next_request = 0x46554c4c00000000ULL;
+  std::uint64_t pending_request = 0;
+  std::uint64_t handled_result = 0;
+  bool requested = false;
+  TunerSource requested_source = TunerSource::UNKNOWN;
+} full_control;
+
+void publish_full_control(const FullControlSnapshot &next) {
+  const auto &old = full_control.view;
+  if (old.connected == next.connected && old.supported == next.supported &&
+      old.bluetooth_connected == next.bluetooth_connected &&
+      old.command_pending == next.command_pending &&
+      old.result_present == next.result_present &&
+      old.result_accepted == next.result_accepted &&
+      old.last_error == next.last_error && old.source == next.source &&
+      old.requested_source == next.requested_source &&
+      old.transition == next.transition &&
+      old.source_generation == next.source_generation) return;
+  full_control.view = next;
+  if (full_control.generation != UINT64_MAX) ++full_control.generation;
+}
 void observer(void *p, std::size_t bytes, bool allocated) {
   if (xTaskGetCurrentTaskHandle() != owner)
     corrupt = true;
@@ -193,10 +218,52 @@ void task(void *) {
     s->core.tick(time);
     bool command_waiting;
     portENTER_CRITICAL(&mux);
-    command_waiting = channel.count != 0;
+    command_waiting = channel.count != 0 || full_control.requested;
     portEXIT_CRITICAL(&mux);
     if (!s->poll(time, command_waiting))
       ESP_LOGW("A011_RTCP", "adapter_event_rejected=1");
+    {
+      FullControlSnapshot next{};
+      const auto &capability = s->rtcp.full_control_capabilities();
+      const auto &source = s->rtcp.source_state();
+      next.connected = s->rtcp.state() == rtcp_client::Client::State::ready;
+      next.supported = capability.source_switch();
+      next.source = static_cast<TunerSource>(source.source);
+      next.transition = static_cast<SourceTransition>(source.transition);
+      next.bluetooth_connected = source.bluetooth_connected;
+      next.source_generation = source.generation;
+      portENTER_CRITICAL(&mux);
+      next.command_pending = full_control.pending_request != 0 || full_control.requested;
+      next.requested_source = full_control.pending_request || full_control.requested ||
+                                      full_control.view.result_present
+                                  ? full_control.requested_source
+                                  : TunerSource::UNKNOWN;
+      next.result_present = full_control.view.result_present;
+      next.result_accepted = full_control.view.result_accepted;
+      next.last_error = full_control.view.last_error;
+      if (!next.connected) {
+        full_control.requested = false;
+        full_control.pending_request = 0;
+        next.command_pending = false;
+        next.requested_source = TunerSource::UNKNOWN;
+        next.result_present = false;
+        next.result_accepted = false;
+        next.last_error = 0;
+      }
+      const auto &result = s->rtcp.result();
+      if (full_control.pending_request &&
+          result.request == full_control.pending_request &&
+          result.request != full_control.handled_result) {
+        full_control.handled_result = result.request;
+        full_control.pending_request = 0;
+        next.command_pending = false;
+        next.result_present = true;
+        next.result_accepted = result.accepted;
+        next.last_error = result.error;
+      }
+      publish_full_control(next);
+      portEXIT_CRITICAL(&mux);
+    }
     // At most one external inbox event per turn, on the same Core owner.
     s->boundary.process_one(time);
     // Fixed budget: at most eight serial bytes and one HOME intent per turn.
@@ -279,6 +346,36 @@ void task(void *) {
                static_cast<unsigned long long>(time >= intent.latest_input_ms ? time - intent.latest_input_ms : 0),
                unsigned(intent.volume));
     }
+    bool source_present = false;
+    TunerSource source_target = TunerSource::UNKNOWN;
+    portENTER_CRITICAL(&mux);
+    if (full_control.requested && !full_control.pending_request) {
+      source_present = true;
+      source_target = full_control.requested_source;
+    }
+    portEXIT_CRITICAL(&mux);
+    if (source_present && s->command_ready()) {
+      const auto wire_target = static_cast<rtcp_client::wire::Source>(source_target);
+      const auto generation = s->rtcp.source_state().generation;
+      bool sent = false;
+      std::uint64_t request = 0;
+      portENTER_CRITICAL(&mux);
+      if (++full_control.next_request == 0) ++full_control.next_request;
+      request = full_control.next_request;
+      portEXIT_CRITICAL(&mux);
+      if (generation)
+        sent = s->rtcp.source_select(request, wire_target, generation);
+      portENTER_CRITICAL(&mux);
+      if (sent) {
+        full_control.requested = false;
+        full_control.pending_request = request;
+        full_control.view.command_pending = true;
+        full_control.view.result_present = false;
+        full_control.view.last_error = 0;
+        ++full_control.generation;
+      }
+      portEXIT_CRITICAL(&mux);
+    }
     std::uint64_t outstanding_token;
     portENTER_CRITICAL(&mux);
     outstanding_token = channel.volume_token;
@@ -338,6 +435,37 @@ bool read(Snapshot &snapshot, std::uint64_t &generation) {
   }
   portEXIT_CRITICAL(&mux);
   return changed;
+}
+bool full_control_read(FullControlSnapshot &snapshot, std::uint64_t &generation) {
+  portENTER_CRITICAL(&mux);
+  const bool changed = full_control.generation != generation;
+  if (changed) {
+    snapshot = full_control.view;
+    generation = full_control.generation;
+  }
+  portEXIT_CRITICAL(&mux);
+  return changed;
+}
+bool request_source(TunerSource source) {
+  if (!power_management::commands_allowed() ||
+      (source != TunerSource::RADIO && source != TunerSource::BLUETOOTH))
+    return false;
+  portENTER_CRITICAL(&mux);
+  const bool accepted = full_control.view.connected &&
+                        full_control.view.supported &&
+                        !full_control.requested &&
+                        !full_control.pending_request;
+  if (accepted) {
+    full_control.requested = true;
+    full_control.requested_source = source;
+    full_control.view.command_pending = true;
+    full_control.view.requested_source = source;
+    full_control.view.result_present = false;
+    full_control.view.last_error = 0;
+    ++full_control.generation;
+  }
+  portEXIT_CRITICAL(&mux);
+  return accepted;
 }
 void start() {
   if (started)

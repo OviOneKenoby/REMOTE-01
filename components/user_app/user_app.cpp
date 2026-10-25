@@ -5,6 +5,7 @@
 #include "gui_guider.h"
 #include "lcd_bl_pwm_bsp.h"
 #include "control_home/api.hpp"
+#include "control_home/full_control.hpp"
 #include "power_management/api.hpp"
 #include "network_manager/presentation.hpp"
 #include "encoder_volume.hpp"
@@ -27,6 +28,16 @@ struct HomeWidgets {
 	lv_obj_t *page = nullptr;
 	std::uint64_t generation = 0;
 } home;
+
+struct TunerControlWidgets {
+	lv_obj_t *view = nullptr, *radio = nullptr, *bluetooth = nullptr;
+	lv_obj_t *popup = nullptr, *popup_text = nullptr, *spinner = nullptr;
+	lv_timer_t *timer = nullptr;
+	control_home::FullControlSnapshot state{};
+	std::uint64_t generation = 0;
+	std::uint32_t success_until = 0;
+	bool visible = false, last_commands_allowed = true;
+} tuner_control;
 
 namespace {
 constexpr gpio_num_t encoder_a = GPIO_NUM_2;
@@ -102,12 +113,115 @@ static void home_click(lv_event_t *event)
 	(void)control_home::request(action); // Full queue rejects this press; no retry/optimism.
 }
 
+static void tuner_control_close()
+{
+	if (!tuner_control.view) return;
+	lv_obj_add_flag(tuner_control.view, LV_OBJ_FLAG_HIDDEN);
+	tuner_control.visible = false;
+	tuner_control.success_until = 0;
+	lv_obj_add_flag(tuner_control.popup, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void tuner_control_popup(const char *text, bool busy)
+{
+	home_text(tuner_control.popup_text, text);
+	if (busy) lv_obj_clear_flag(tuner_control.spinner, LV_OBJ_FLAG_HIDDEN);
+	else lv_obj_add_flag(tuner_control.spinner, LV_OBJ_FLAG_HIDDEN);
+	lv_obj_clear_flag(tuner_control.popup, LV_OBJ_FLAG_HIDDEN);
+}
+
+static const char *source_error(std::uint8_t error)
+{
+	switch (error) {
+	case 2: return "Not supported";
+	case 3: return "TUNER unavailable";
+	case 4: return "State changed locally";
+	case 5: return "Switch failed";
+	case 6: return "TUNER busy";
+	default: return "Source switch failed";
+	}
+}
+
+static void tuner_control_exit_event(lv_event_t *) { tuner_control_close(); }
+static void tuner_control_back_event(lv_event_t *)
+{
+	if (!lv_obj_has_flag(tuner_control.popup, LV_OBJ_FLAG_HIDDEN)) {
+		lv_obj_add_flag(tuner_control.popup, LV_OBJ_FLAG_HIDDEN);
+		return;
+	}
+	tuner_control_close();
+}
+
+static void tuner_control_source_event(lv_event_t *event)
+{
+	const auto target = static_cast<control_home::TunerSource>(
+		reinterpret_cast<std::uintptr_t>(lv_event_get_user_data(event)));
+	if (!tuner_control.state.connected || !tuner_control.state.supported ||
+	    tuner_control.state.command_pending || tuner_control.state.source == target)
+		return;
+	if (!control_home::request_source(target)) {
+		tuner_control_popup("TUNER unavailable", false);
+		return;
+	}
+	tuner_control_popup(target == control_home::TunerSource::BLUETOOTH
+		? "Starting Bluetooth..." : "Switching to Radio...", true);
+}
+
+static void tuner_control_open_event(lv_event_t *)
+{
+	if (!tuner_control.view) return;
+	tuner_control.visible = true;
+	lv_obj_clear_flag(tuner_control.view, LV_OBJ_FLAG_HIDDEN);
+	lv_obj_move_foreground(tuner_control.view);
+	if (!tuner_control.state.connected)
+		tuner_control_popup("TUNER disconnected", false);
+}
+
+static void tuner_control_refresh(lv_timer_t *)
+{
+	const bool commands_allowed = power_management::commands_allowed();
+	if (tuner_control.visible && !tuner_control.last_commands_allowed && commands_allowed)
+		tuner_control_close(); // Wake always resumes at HOME; no submenu replay.
+	tuner_control.last_commands_allowed = commands_allowed;
+	if (tuner_control.success_until &&
+	    static_cast<std::int32_t>(lv_tick_get() - tuner_control.success_until) >= 0) {
+		tuner_control_close();
+		return;
+	}
+	if (!control_home::full_control_read(tuner_control.state,
+	                                    tuner_control.generation)) return;
+	const auto source = tuner_control.state.source;
+	lv_obj_set_style_border_width(tuner_control.radio,
+	                              source == control_home::TunerSource::RADIO ? 2 : 0,
+	                              LV_PART_MAIN);
+	lv_obj_set_style_border_width(tuner_control.bluetooth,
+	                              source == control_home::TunerSource::BLUETOOTH ? 2 : 0,
+	                              LV_PART_MAIN);
+	if (!tuner_control.visible) return;
+	if (!tuner_control.state.connected) {
+		tuner_control_popup("TUNER disconnected", false);
+		return;
+	}
+	if (tuner_control.state.command_pending) return;
+	if (tuner_control.state.result_present) {
+		if (!tuner_control.state.result_accepted) {
+			tuner_control_popup(source_error(tuner_control.state.last_error), false);
+			return;
+		}
+		if (source == tuner_control.state.requested_source) {
+			tuner_control_popup(source == control_home::TunerSource::BLUETOOTH
+				? "Bluetooth ready" : "Radio ready", false);
+			if (!tuner_control.success_until) tuner_control.success_until = lv_tick_get() + 3000;
+		}
+	}
+}
+
 static void home_refresh(lv_timer_t *)
 {
 	const bool home_active = home.page &&
 	                         lv_carousel_get_element_act(src_ui.screen_carousel_1) ==
 	                             home.page;
-	encoder_home.store(home_active,
+	encoder_home.store(home_active || tuner_control.visible,
 	                   std::memory_order_relaxed);
 	network_manager::Status network{};
 	(void)network_manager::read_status(network); // Never wait for NETWORK/HTTP.
@@ -143,6 +257,10 @@ static void home_refresh(lv_timer_t *)
 	                    metadata_active);
 	home_scrolling_text(home.subtitle, s.title[0] ? s.title : "--",
 	                    metadata_active);
+	if (tuner_control.state.source == control_home::TunerSource::BLUETOOTH &&
+	    !tuner_control.state.bluetooth_connected)
+		home_scrolling_text(home.subtitle, "Waiting for Bluetooth device...",
+		                    metadata_active);
 	home_text(home.playback, s.playback == Playback::PLAYING ? LV_SYMBOL_PLAY " PLAYING" :
 	                        s.playback == Playback::PAUSED ? LV_SYMBOL_PAUSE " PAUSED" :
 	                        s.playback == Playback::CONFLICT ? "CONFLICT" :
@@ -209,6 +327,71 @@ static lv_obj_t *remote01_single_line(lv_obj_t *parent, const char *text, const 
 	lv_obj_set_size(label, width, font->line_height);
 	lv_obj_set_style_text_align(label, align, LV_PART_MAIN);
 	return label;
+}
+
+static lv_obj_t *tuner_control_button(lv_obj_t *parent, const char *text,
+	                                  lv_coord_t y, lv_coord_t height = 44)
+{
+	const lv_color_t panel = lv_color_hex(0x1c292e);
+	const lv_color_t foreground = lv_color_hex(0xf3f5f2);
+	lv_obj_t *button = remote01_panel(parent, 12, y, 148, height, panel, 5);
+	lv_obj_add_flag(button, LV_OBJ_FLAG_CLICKABLE);
+	lv_obj_set_style_border_color(button, lv_color_hex(0xc2ff00), LV_PART_MAIN);
+	lv_obj_set_style_border_opa(button, LV_OPA_COVER, LV_PART_MAIN);
+	auto *label = remote01_single_line(button, text, &lv_font_montserrat_14,
+	                                  foreground, 10, (height - 14) / 2,
+	                                  128, LV_LABEL_LONG_CLIP,
+	                                  LV_TEXT_ALIGN_LEFT);
+	(void)label;
+	return button;
+}
+
+static void tuner_control_create()
+{
+	const lv_color_t background = lv_color_hex(0x11191d);
+	const lv_color_t text = lv_color_hex(0xf3f5f2);
+	const lv_color_t muted = lv_color_hex(0x91a3a6);
+	tuner_control.view = remote01_panel(src_ui.screen, 0, 0, 172, 640,
+	                                  background, 0);
+	lv_obj_clear_flag(tuner_control.view, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_add_flag(tuner_control.view, LV_OBJ_FLAG_HIDDEN);
+	lv_obj_t *back = tuner_control_button(tuner_control.view, LV_SYMBOL_LEFT " BACK", 8, 34);
+	lv_obj_set_width(back, 70);
+	lv_obj_t *exit = tuner_control_button(tuner_control.view, "EXIT", 8, 34);
+	lv_obj_set_pos(exit, 90, 8); lv_obj_set_width(exit, 70);
+	lv_obj_add_event_cb(back, tuner_control_back_event, LV_EVENT_CLICKED, nullptr);
+	lv_obj_add_event_cb(exit, tuner_control_exit_event, LV_EVENT_CLICKED, nullptr);
+	remote01_label(tuner_control.view, "TUNER CONTROL", &lv_font_montserrat_20,
+	               text, 12, 60);
+	tuner_control.radio = tuner_control_button(tuner_control.view, "RADIO", 100, 54);
+	tuner_control.bluetooth = tuner_control_button(tuner_control.view, "BLUETOOTH", 162, 54);
+	lv_obj_add_event_cb(tuner_control.radio, tuner_control_source_event,
+	                    LV_EVENT_CLICKED,
+	                    reinterpret_cast<void *>(static_cast<std::uintptr_t>(control_home::TunerSource::RADIO)));
+	lv_obj_add_event_cb(tuner_control.bluetooth, tuner_control_source_event,
+	                    LV_EVENT_CLICKED,
+	                    reinterpret_cast<void *>(static_cast<std::uintptr_t>(control_home::TunerSource::BLUETOOTH)));
+	static const char *entries[] = {"Saved Stations", "Favorites", "Recent",
+	                                "Browse All Stations"};
+	for (unsigned i = 0; i < 4; ++i) {
+		auto *row = tuner_control_button(tuner_control.view, entries[i], 242 + i * 58, 48);
+		// Later milestones activate these bounded canonical projections.
+		lv_obj_add_state(row, LV_STATE_DISABLED);
+		lv_obj_set_style_opa(row, LV_OPA_50, LV_STATE_DISABLED);
+	}
+	remote01_single_line(tuner_control.view, "Authenticated TUNER controls",
+	                    &lv_font_montserrat_12, muted, 12, 594, 148,
+	                    LV_LABEL_LONG_CLIP, LV_TEXT_ALIGN_CENTER);
+	tuner_control.popup = remote01_panel(tuner_control.view, 16, 250, 140, 120,
+	                                   lv_color_hex(0x24343a), 8);
+	tuner_control.popup_text = remote01_single_line(tuner_control.popup, "", &lv_font_montserrat_14,
+	                                               text, 8, 68, 124,
+	                                               LV_LABEL_LONG_WRAP, LV_TEXT_ALIGN_CENTER);
+	tuner_control.spinner = lv_spinner_create(tuner_control.popup, 1000, 70);
+	lv_obj_set_size(tuner_control.spinner, 38, 38);
+	lv_obj_align(tuner_control.spinner, LV_ALIGN_TOP_MID, 0, 16);
+	lv_obj_add_flag(tuner_control.popup, LV_OBJ_FLAG_HIDDEN);
+	tuner_control.timer = lv_timer_create(tuner_control_refresh, 20, nullptr);
 }
 
 static void remote01_mockup_create(void)
@@ -280,7 +463,7 @@ static void remote01_mockup_create(void)
 	lv_obj_t *volume_track = remote01_panel(page, 12, 450, 148, 6, track, 3);
 	home.level = remote01_panel(volume_track, 0, 0, 0, 6, accent, 3);
 
-	static const char *navigation[] = {"FAVORITES", "DEVICES", "REMOTES"};
+	static const char *navigation[] = {"FAVORITES", "DEVICES", "TUNER CONTROL"};
 	for (int i = 0; i < 3; ++i) {
 		lv_obj_t *row = remote01_panel(page, 12, 486 + i * 40, 148, 36, panel, 4);
 		lv_obj_add_flag(row, LV_OBJ_FLAG_CLICKABLE);
@@ -288,6 +471,8 @@ static void remote01_mockup_create(void)
 		lv_obj_align(name, LV_ALIGN_LEFT_MID, 10, 0);
 		lv_obj_t *arrow = remote01_label(row, LV_SYMBOL_RIGHT, &lv_font_montserrat_14, text, 0, 0);
 		lv_obj_align(arrow, LV_ALIGN_RIGHT_MID, -10, 0);
+		if (i == 2)
+			lv_obj_add_event_cb(row, tuner_control_open_event, LV_EVENT_CLICKED, nullptr);
 	}
 
 	home.ip = remote01_single_line(page, "--", &lv_font_montserrat_12, muted, 12, 618, 124,
@@ -345,6 +530,7 @@ void user_app_init(void)
 	lv_obj_set_size(src_ui.screen_label_21, 162, lv_font_montserrat_12.line_height);
 	lv_label_set_text(src_ui.screen_label_21, "--");
 	remote01_mockup_create();
+	tuner_control_create();
 	lv_obj_set_element_id(src_ui.screen_carousel_1, 0, LV_ANIM_OFF);
 	lcd_bl_pwm_bsp_init(LCD_PWM_MODE_255);
 	lv_obj_add_event_cb(src_ui.screen_slider_1, lvgl_obj_event_callback, LV_EVENT_ALL, NULL);
