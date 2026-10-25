@@ -54,6 +54,16 @@ with tempfile.TemporaryDirectory(prefix="remote01-core-") as work:
     print("HOME COMPILE:", " ".join(home_cmd), flush=True)
     subprocess.run(home_cmd, cwd=root, env=env, check=True)
     subprocess.run([str(home_binary)], cwd=root, env=env, check=True)
+    ownership_binary = Path(work) / ("rtcp_ownership_tests.exe" if os.name == "nt" else "rtcp_ownership_tests")
+    ownership_cmd = cmd[:-2] + ["-I", str(root / "components/control_home/include"),
+        "-I", str(root / "components/rtcp_client/include"),
+        str(root / "components/control_home/facade.cpp"),
+        str(root / "components/control_home/rtcp_device.cpp"),
+        str(root / "tests/control/rtcp_ownership_tests.cpp"), "-o", str(ownership_binary)]
+    ownership_cmd.remove(str(root / "tests/control/core_tests.cpp"))
+    print("RTCP OWNERSHIP COMPILE:", " ".join(ownership_cmd), flush=True)
+    subprocess.run(ownership_cmd, cwd=root, env=env, check=True)
+    subprocess.run([str(ownership_binary)], cwd=root, env=env, check=True)
     hardening_binary = Path(work) / ("hardening_tests.exe" if os.name == "nt" else "hardening_tests")
     hardening_cmd = list(home_cmd)
     hardening_cmd[hardening_cmd.index(str(root / "tests/control/home_tests.cpp"))] = str(root / "tests/control/hardening_tests.cpp")

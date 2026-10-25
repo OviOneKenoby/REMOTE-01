@@ -32,8 +32,10 @@ checks = {
     "authoritative_ui": "Event::btx_state" in adapter and
                         'text_value("Bluetooth", 9)' in adapter and
                         "Phone disconnected" in (root / "components/control_home/include/control_home/btx_policy.hpp").read_text(),
-    "btx_playback_only_from_id14": "const bool legacy_playback" in adapter and
-                                   "BtxSource::radio" in adapter,
+    "source_owned_playback": "if (!bluetooth)" in adapter and
+                             "last_d009_snapshot_" in adapter and
+                             "d009_media_fence_" in adapter and
+                             "btx_media_fence_" in adapter,
     "freshness_withdrawal": "btx_authoritative_" in adapter and
                             "btx_observed_at_" in adapter,
     "home_bound": "char title[227]{}, subtitle[32]{}" in api,

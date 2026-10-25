@@ -10,6 +10,7 @@
 #include <cstdint>
 
 namespace rtcp_client {
+struct ClientTestAccess;
 class Client {
 public:
   enum class State{disabled,disconnected,connecting,server_hello,authenticated,identity,capabilities,btx_probe,ready};
@@ -33,6 +34,7 @@ public:
   const Diagnostic&diagnostic()const{return diagnostic_;}
   static constexpr std::size_t static_buffer_bytes(){return 556*2;}
 private:
+  friend struct ClientTestAccess;
   enum class Awaited:std::uint8_t{none,identity,capabilities,btx_capabilities,snapshot,now_playing,btx_state,result};
   Association association_{};State state_{State::disabled};int socket_{-1};std::uint64_t retry_at_{0},snapshot_at_{0},deadline_{0};bool awaiting_{false};
   std::array<std::uint8_t,556>rx_{},tx_{};std::size_t rx_used_{0},rx_need_{56},tx_used_{0},tx_sent_{0};

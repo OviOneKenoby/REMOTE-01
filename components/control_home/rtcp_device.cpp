@@ -244,14 +244,17 @@ void RtcpDevice::dispatch(const Dispatch &dispatch, AdapterSink &sink) {
                            media.btx_source == std::uint8_t(rtcp_client::wire::BtxSource::bluetooth);
     if (known && target && dispatch.request.media_context_generation.present &&
         dispatch.request.media_context_generation.value == target->media_context_generation &&
-        media_fence_.generation) {
+        (bluetooth ? btx_media_fence_.generation
+                   : d009_media_fence_.generation)) {
+      const auto generation = bluetooth ? btx_media_fence_.generation
+                                        : d009_media_fence_.generation;
       if (bluetooth && btx_expected.present &&
           std::uint8_t(btx_expected.value) == media.btx_playback)
         sent = client_.bluetooth(dispatch.request.admission_ticket.serial, wire_op,
-                                 btx_expected.value, media_fence_.generation);
+                                 btx_expected.value, generation);
       else if (!bluetooth && expected.present)
         sent = client_.playback(dispatch.request.admission_ticket.serial, wire_op,
-                                expected.value, media_fence_.generation);
+                                expected.value, generation);
     }
   }
   if (!sent) {
@@ -271,40 +274,49 @@ bool RtcpDevice::poll(U64 now, bool command_waiting) {
     if (!btx_context(expired, now)) return false;
   }
   const auto event = client_.poll(now, command_waiting);
+  return handle(event, now);
+}
+
+bool RtcpDevice::handle(rtcp_client::Client::Event event, U64 now) {
   if (event == rtcp_client::Client::Event::none) return true;
   if (event == rtcp_client::Client::Event::connected) {
-    media_fence_.reset(); pending_ = {}; btx_authoritative_ = false; btx_observed_at_ = 0;
+    d009_media_fence_.reset(); btx_media_fence_.reset();
+    last_d009_snapshot_ = {}; last_d009_snapshot_present_ = false;
+    pending_ = {}; btx_authoritative_ = false; btx_observed_at_ = 0;
     if (!boundary_->reconnect(now) || !boundary_->reachability(Reachability::REACHABLE, now)) return false;
     availability(Availability::UNKNOWN, now); return true;
   }
   if (event == rtcp_client::Client::Event::disconnected) {
-    media_fence_.reset(); pending_ = {}; btx_authoritative_ = false; btx_observed_at_ = 0;
+    d009_media_fence_.reset(); btx_media_fence_.reset();
+    last_d009_snapshot_ = {}; last_d009_snapshot_present_ = false;
+    pending_ = {}; btx_authoritative_ = false; btx_observed_at_ = 0;
     availability(Availability::OFFLINE, now);
     return boundary_->reachability(Reachability::UNREACHABLE, now);
   }
   if (event == rtcp_client::Client::Event::capabilities) return negotiated(now);
   if (event == rtcp_client::Client::Event::snapshot) {
     const auto &snapshot = client_.snapshot();
-    if (!media(media_fence_.snapshot(snapshot.sequence, snapshot.media_generation), now)) return false;
+    last_d009_snapshot_ = snapshot; last_d009_snapshot_present_ = true;
     Scalar volume = Scalar::level(volume_rational(snapshot.volume));
-    Scalar playback; playback.kind = ScalarKind::PLAYBACK;
-    playback.playback = static_cast<control::Playback>(snapshot.playback);
     // These are independent observations. A rejected volume sample must not
     // suppress the fresh playback sample and temporarily disable HOME control.
     const bool volume_ok = publish("volume.level", Value<Scalar>::of(volume),
                                    snapshot.sequence, now, false);
-    const bool legacy_playback = !client_.btx_capabilities().negotiated ||
-        client_.now_playing().btx_source ==
-            std::uint8_t(rtcp_client::wire::BtxSource::radio);
-    const bool playback_ok = !legacy_playback ||
-        publish("playback.state", Value<Scalar>::of(playback),
-                snapshot.sequence, now, true);
+    if (btx_authoritative_) return volume_ok;
+    if (!media(d009_media_fence_.snapshot(snapshot.sequence,
+                                          snapshot.media_generation), now))
+      return false;
+    Scalar playback; playback.kind = ScalarKind::PLAYBACK;
+    playback.playback = static_cast<control::Playback>(snapshot.playback);
+    const bool playback_ok = publish("playback.state", Value<Scalar>::of(playback),
+                                     snapshot.sequence, now, true);
     return volume_ok && playback_ok;
   }
   if (event == rtcp_client::Client::Event::now_playing) {
     const auto &value = client_.now_playing();
-    if (!media(media_fence_.metadata(value.sequence, value.media_generation,
-                                     value.metadata_revision), now) || !context(value, now)) return false;
+    if (!media(d009_media_fence_.metadata(value.sequence, value.media_generation,
+                                          value.metadata_revision), now) ||
+        !context(value, now)) return false;
     const bool station_valid = value.flags & 0x01;
     const bool metadata_valid = value.flags & 0x02;
     const bool split = value.flags & 0x04;
@@ -323,12 +335,28 @@ bool RtcpDevice::poll(U64 now, bool command_waiting) {
   }
   if (event == rtcp_client::Client::Event::btx_state) {
     auto &value = client_.now_playing();
-    if (!media(media_fence_.metadata(value.sequence, value.media_generation,
-                                     value.metadata_revision), now) ||
-        !btx_context(value, now))
-      return false;
     const bool bluetooth = value.btx_source ==
                            std::uint8_t(rtcp_client::wire::BtxSource::bluetooth);
+    if (!bluetooth) {
+      const bool relinquished = btx_authoritative_;
+      btx_authoritative_ = false; btx_observed_at_ = 0;
+      // A radio BTX record describes only that the BTX extension does not own
+      // the source. It must not overwrite D-009 playback, metadata or operation
+      // capabilities, and its independent generation must not enter that fence.
+      if (!relinquished || !last_d009_snapshot_present_) return true;
+      const auto &snapshot = last_d009_snapshot_;
+      if (!media(d009_media_fence_.snapshot(snapshot.sequence,
+                                            snapshot.media_generation), now))
+        return false;
+      Scalar playback; playback.kind = ScalarKind::PLAYBACK;
+      playback.playback = static_cast<control::Playback>(snapshot.playback);
+      return publish("playback.state", Value<Scalar>::of(playback),
+                     snapshot.sequence, now, true);
+    }
+    if (!media(btx_media_fence_.metadata(value.sequence, value.media_generation,
+                                         value.metadata_revision), now) ||
+        !btx_context(value, now))
+      return false;
     const bool connected = value.btx_connection ==
                            std::uint8_t(rtcp_client::wire::BtxConnection::connected);
     Value<Scalar> playback = Value<Scalar>::absent(Absence::UNAVAILABLE);

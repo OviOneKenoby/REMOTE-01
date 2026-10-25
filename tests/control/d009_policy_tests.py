@@ -18,11 +18,16 @@ checks = {
     "streamtitle_bounded_scroll": 'home.subtitle = remote01_single_line(page, "--", &lv_font_montserrat_14, muted, 12, 290, 148,' in ui and ui.count('LV_LABEL_LONG_SCROLL, LV_TEXT_ALIGN_LEFT);') >= 2,
     "independent_snapshot_fields": 'const bool volume_ok = publish("volume.level"' in adapter and
                                    'publish("playback.state", Value<Scalar>::of(playback)' in adapter and
-                                   'const bool legacy_playback' in adapter,
+                                   'if (btx_authoritative_) return volume_ok' in adapter,
+    "radio_owns_d009_state": "A radio BTX record describes only" in adapter and
+                              "d009_media_fence_" in adapter and
+                              "btx_media_fence_" in adapter,
     "lvgl_owner_timer": "lv_timer_create(home_refresh" in ui,
     "playback_precondition": "intent.action == Action::TOGGLE || intent.action == Action::PREVIOUS" in facade,
     "media_generation_fence": "media_fence_.generation" in adapter,
-    "disconnect_clears_pending": "media_fence_.reset(); pending_ = {}; btx_authoritative_ = false" in adapter and "availability(Availability::OFFLINE" in adapter,
+    "disconnect_clears_pending": "d009_media_fence_.reset(); btx_media_fence_.reset()" in adapter and
+                                 "pending_ = {}; btx_authoritative_ = false" in adapter and
+                                 "availability(Availability::OFFLINE" in adapter,
     "d009_capability_gate": "const bool enabled = c.d009()" in adapter,
     "physical_buttons_unassigned": "intentionally unassigned" in ui,
 }
