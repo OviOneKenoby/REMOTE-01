@@ -37,23 +37,29 @@ struct TunerControlWidgets {
 	lv_obj_t *popup_confirm = nullptr, *popup_cancel = nullptr, *popup_ok = nullptr;
 	lv_obj_t *main_rows[4]{};
 	lv_obj_t *list_panel = nullptr, *list_title = nullptr, *list_area = nullptr;
-	lv_obj_t *empty_text = nullptr, *list_rows[15]{}, *list_labels[15]{};
-	char row_names[15][49]{};
+	lv_obj_t *empty_text = nullptr, *list_rows[27]{}, *list_labels[27]{};
+	char row_names[27][49]{};
 	lv_timer_t *timer = nullptr;
 	control_home::FullControlSnapshot state{};
 	control_home::CatalogSnapshot catalog{};
 	control_home::MenuSnapshot menu{};
 	control_home::Snapshot playback{};
 	control_home::navigation::Model navigation{};
-	control_home::navigation::Gesture gestures[15]{};
+	control_home::navigation::Gesture gestures[27]{};
+	control_home::BrowserSnapshot browser{};
 	std::uint64_t generation = 0;
-	std::uint64_t catalog_generation = 0, playback_generation = 0,
+	std::uint64_t catalog_generation = 0, browser_generation = 0, playback_generation = 0,
 	              menu_generation = 0;
-	std::uint64_t catalog_revision = 0;
+	std::uint64_t catalog_revision = 0, browser_revision = 0, browser_session = 0;
+	std::uint64_t browser_sequence_applied = 0;
 	std::uint32_t popup_until = 0;
+	std::uint32_t browser_poll_at = 0;
 	std::uint16_t pending_token = 0;
 	std::uint8_t row_count = 0;
+	std::uint8_t row_kind[27]{}, country_filter = 0;
+	std::uint16_t browser_page_start = 0;
 	control_home::CatalogOperation pending_operation = control_home::CatalogOperation::PLAY;
+	control_home::BrowserOperation pending_browser_operation = control_home::BrowserOperation::START;
 	control_home::CatalogCollection collection = control_home::CatalogCollection::SAVED;
 	bool awaiting_action = false, awaiting_playback = false;
 	bool return_home_after_popup = false;
@@ -139,6 +145,9 @@ static void home_click(lv_event_t *event)
 static void tuner_control_close()
 {
 	if (!tuner_control.view) return;
+	if (tuner_control.browser_session)
+		(void)control_home::request_browser_action(control_home::BrowserOperation::CANCEL,
+			0, tuner_control.browser_session, 0);
 	lv_obj_add_flag(tuner_control.view, LV_OBJ_FLAG_HIDDEN);
 	tuner_control.visible = false;
 	tuner_control.navigation.exit();
@@ -146,6 +155,7 @@ static void tuner_control_close()
 	tuner_control.return_home_after_popup = false;
 	tuner_control.awaiting_action = false;
 	tuner_control.awaiting_playback = false;
+	tuner_control.browser_session = tuner_control.browser_revision = 0;
 	lv_obj_add_flag(tuner_control.popup, LV_OBJ_FLAG_HIDDEN);
 }
 
@@ -208,10 +218,14 @@ static const char *menu_mode_name(control_home::TunerMenuMode mode)
 	}
 }
 
+static void tuner_control_show_country_filters();
+static void tuner_control_show_name_filters();
+
 static void tuner_control_exit_event(lv_event_t *) { tuner_control_close(); }
 static void tuner_control_back_event(lv_event_t *)
 {
 	if (!lv_obj_has_flag(tuner_control.popup, LV_OBJ_FLAG_HIDDEN)) {
+		if (!lv_obj_has_flag(tuner_control.spinner, LV_OBJ_FLAG_HIDDEN)) return;
 		tuner_control_popup_hide();
 		return;
 	}
@@ -220,12 +234,27 @@ static void tuner_control_back_event(lv_event_t *)
 	if (tuner_control.navigation.page == control_home::navigation::Page::HOME) {
 		tuner_control_close();
 	} else if (before != tuner_control.navigation.page) {
-		lv_obj_add_flag(tuner_control.list_panel, LV_OBJ_FLAG_HIDDEN);
+		if (before == control_home::navigation::Page::BROWSER_COUNTRY) {
+			if (tuner_control.browser_session)
+				(void)control_home::request_browser_action(control_home::BrowserOperation::CANCEL,0,
+					tuner_control.browser_session,0);
+			tuner_control.browser_session=0;
+			lv_obj_add_flag(tuner_control.list_panel, LV_OBJ_FLAG_HIDDEN);
+		} else if(tuner_control.navigation.page==control_home::navigation::Page::BROWSER_GENRE){
+			(void)control_home::request_browser_page(control_home::BrowserStage::GENRES,0,0,tuner_control.browser_session);
+			tuner_control_popup("Loading...",true);
+		} else if(tuner_control.navigation.page==control_home::navigation::Page::BROWSER_NAME)
+			tuner_control_show_name_filters();
+		else if(tuner_control.navigation.page==control_home::navigation::Page::BROWSER_COUNTRY){
+			tuner_control.country_filter=0;tuner_control_show_country_filters();
+		}
 	}
 }
 
 static void tuner_control_source_event(lv_event_t *event)
 {
+	if (!lv_obj_has_flag(tuner_control.popup, LV_OBJ_FLAG_HIDDEN) &&
+	    !lv_obj_has_flag(tuner_control.spinner, LV_OBJ_FLAG_HIDDEN)) return;
 	const auto target = static_cast<control_home::TunerSource>(
 		reinterpret_cast<std::uintptr_t>(lv_event_get_user_data(event)));
 	if (!tuner_control.state.connected || !tuner_control.state.supported ||
@@ -258,6 +287,7 @@ static void tuner_control_clear_rows()
 {
 	tuner_control.row_count = 0;
 	tuner_control.catalog_revision = 0;
+	std::memset(tuner_control.row_kind, 0, sizeof tuner_control.row_kind);
 	for (auto *row : tuner_control.list_rows)
 		lv_obj_add_flag(row, LV_OBJ_FLAG_HIDDEN);
 	lv_obj_add_flag(tuner_control.empty_text, LV_OBJ_FLAG_HIDDEN);
@@ -272,6 +302,50 @@ static const char *catalog_title(control_home::CatalogCollection collection)
 	case control_home::CatalogCollection::RECENT: return "RECENT";
 	}
 	return "STATIONS";
+}
+
+enum : std::uint8_t { ROW_CATALOG=1,ROW_COUNTRY_FILTER,ROW_COUNTRY,ROW_NAME_FILTER,
+	ROW_GENRE_ANY,ROW_GENRE,ROW_RESULT,ROW_PREVIOUS,ROW_MORE };
+
+static void tuner_control_add_row(std::uint8_t kind,std::uint16_t token,
+	                              const char *name,bool active=false)
+{
+	if(tuner_control.row_count>=27)return;
+	const auto row=tuner_control.row_count++;
+	tuner_control.row_kind[row]=kind;lv_obj_set_user_data(tuner_control.list_rows[row],
+		reinterpret_cast<void *>(static_cast<std::uintptr_t>(token)));
+	std::snprintf(tuner_control.row_names[row],sizeof tuner_control.row_names[row],"%s",name);
+	char display[56];std::snprintf(display,sizeof display,"%s%s",active?LV_SYMBOL_PLAY " ":"",name);
+	lv_label_set_text(tuner_control.list_labels[row],display);
+	lv_obj_set_style_text_color(tuner_control.list_labels[row],active?lv_color_hex(0xc2ff00):lv_color_hex(0xf3f5f2),LV_PART_MAIN);
+	lv_obj_set_style_border_width(tuner_control.list_rows[row],active?2:0,LV_PART_MAIN);
+	lv_obj_clear_flag(tuner_control.list_rows[row],LV_OBJ_FLAG_HIDDEN);
+}
+
+static void tuner_control_show_country_filters()
+{
+	tuner_control_clear_rows();home_text(tuner_control.list_title,"COUNTRY");
+	tuner_control_add_row(ROW_COUNTRY_FILTER,0,"Any Country");
+	for(std::uint8_t i=0;i<26;++i){char letter[2]={char('A'+i),0};tuner_control_add_row(ROW_COUNTRY_FILTER,i+1,letter);}
+	lv_obj_clear_flag(tuner_control.list_panel,LV_OBJ_FLAG_HIDDEN);
+}
+static void tuner_control_show_name_filters()
+{
+	tuner_control_clear_rows();home_text(tuner_control.list_title,"STATION NAME");
+	tuner_control_add_row(ROW_NAME_FILTER,0,"Popular Stations");
+	for(std::uint8_t i=0;i<26;++i){char letter[2]={char('A'+i),0};tuner_control_add_row(ROW_NAME_FILTER,i+1,letter);}
+	lv_obj_clear_flag(tuner_control.list_panel,LV_OBJ_FLAG_HIDDEN);
+}
+
+static void tuner_control_open_browser()
+{
+	if(!tuner_control.browser.connected||!tuner_control.browser.supported){tuner_control_popup("Radio Browser unavailable",false);return;}
+	tuner_control.navigation.open_browser();tuner_control.country_filter=0;
+	tuner_control.browser_session=tuner_control.browser_revision=0;tuner_control_clear_rows();
+	home_text(tuner_control.list_title,"RADIO BROWSER");lv_obj_clear_flag(tuner_control.list_panel,LV_OBJ_FLAG_HIDDEN);
+	if(!control_home::request_browser_start()){tuner_control_popup("TUNER busy",false);return;}
+	tuner_control.pending_browser_operation=control_home::BrowserOperation::START;
+	tuner_control.awaiting_action=true;tuner_control_popup("Searching stations...",true);
 }
 
 static void tuner_control_open_catalog(control_home::CatalogCollection collection,
@@ -297,11 +371,13 @@ static void tuner_control_open_catalog(control_home::CatalogCollection collectio
 
 static void tuner_control_main_row_event(lv_event_t *event)
 {
+	if (!lv_obj_has_flag(tuner_control.popup, LV_OBJ_FLAG_HIDDEN) &&
+	    !lv_obj_has_flag(tuner_control.spinner, LV_OBJ_FLAG_HIDDEN)) return;
 	const auto index = reinterpret_cast<std::uintptr_t>(lv_event_get_user_data(event));
 	if (index < 3)
 		tuner_control_open_catalog(static_cast<control_home::CatalogCollection>(index + 1), false);
 	else
-		tuner_control_popup("Radio Browser pending", false);
+		tuner_control_open_browser();
 }
 
 static void tuner_control_favorites_event(lv_event_t *)
@@ -338,9 +414,14 @@ static void tuner_control_request_action(std::uint8_t row,
 
 static void tuner_control_row_event(lv_event_t *event)
 {
+	if (!lv_obj_has_flag(tuner_control.popup, LV_OBJ_FLAG_HIDDEN) &&
+	    !lv_obj_has_flag(tuner_control.spinner, LV_OBJ_FLAG_HIDDEN)) return;
 	const auto row = static_cast<std::uint8_t>(
 		reinterpret_cast<std::uintptr_t>(lv_event_get_user_data(event)));
 	if (row >= tuner_control.row_count) return;
+	const auto kind=tuner_control.row_kind[row];
+	const auto token=static_cast<std::uint16_t>(reinterpret_cast<std::uintptr_t>(
+		lv_obj_get_user_data(tuner_control.list_rows[row])));
 	auto &gesture = tuner_control.gestures[row];
 	const auto code = lv_event_get_code(event);
 	lv_point_t point{};
@@ -351,9 +432,14 @@ static void tuner_control_row_event(lv_event_t *event)
 	else if (code == LV_EVENT_PRESSING) {
 		gesture.move(point.x, point.y);
 		if (gesture.hold(now) == control_home::navigation::GestureResult::LONG_PRESS) {
-			if (tuner_control.collection == control_home::CatalogCollection::RECENT)
+			if(kind==ROW_RESULT){
+				if(control_home::request_browser_action(control_home::BrowserOperation::ADD_FAVORITE,token,
+					tuner_control.browser_session,tuner_control.browser_revision)){
+					tuner_control.pending_browser_operation=control_home::BrowserOperation::ADD_FAVORITE;
+					tuner_control.awaiting_action=true;tuner_control_popup("Adding to Favorites...",true);}
+			}else if (kind==ROW_CATALOG && tuner_control.collection == control_home::CatalogCollection::RECENT)
 				tuner_control_request_action(row, control_home::CatalogOperation::ADD_FAVORITE);
-			else {
+			else if(kind==ROW_CATALOG) {
 				tuner_control.pending_token = static_cast<std::uint16_t>(
 					reinterpret_cast<std::uintptr_t>(lv_obj_get_user_data(tuner_control.list_rows[row])));
 				tuner_control.pending_operation = control_home::CatalogOperation::REMOVE;
@@ -368,7 +454,33 @@ static void tuner_control_row_event(lv_event_t *event)
 		gesture.cancel();
 	} else if (code == LV_EVENT_RELEASED &&
 	           gesture.release(now) == control_home::navigation::GestureResult::SHORT_TAP) {
-		tuner_control_request_action(row, control_home::CatalogOperation::PLAY);
+		if(kind==ROW_CATALOG)tuner_control_request_action(row, control_home::CatalogOperation::PLAY);
+		else if(kind==ROW_PREVIOUS||kind==ROW_MORE){
+			const auto stage=tuner_control.browser.stage;
+			(void)control_home::request_browser_page(stage,token,
+				stage==control_home::BrowserStage::COUNTRIES?tuner_control.country_filter:0,
+				tuner_control.browser_session);tuner_control_popup("Searching stations...",true);
+		}else if(kind==ROW_COUNTRY_FILTER){
+			if(token==0){
+				if(control_home::request_browser_action(control_home::BrowserOperation::SELECT_COUNTRY,
+					control_home::BROWSER_ANY,tuner_control.browser_session,tuner_control.browser_revision)){
+					tuner_control.pending_browser_operation=control_home::BrowserOperation::SELECT_COUNTRY;
+					tuner_control.awaiting_action=true;tuner_control_popup("Loading...",true);}
+			}else{tuner_control.country_filter=std::uint8_t('A'+token-1);tuner_control_clear_rows();
+				(void)control_home::request_browser_page(control_home::BrowserStage::COUNTRIES,0,
+					tuner_control.country_filter,tuner_control.browser_session);tuner_control_popup("Loading...",true);}
+		}else if(kind==ROW_COUNTRY||kind==ROW_NAME_FILTER||kind==ROW_GENRE_ANY||kind==ROW_GENRE){
+			const auto operation=kind==ROW_COUNTRY?control_home::BrowserOperation::SELECT_COUNTRY:
+				kind==ROW_NAME_FILTER?control_home::BrowserOperation::SELECT_NAME:control_home::BrowserOperation::SELECT_GENRE;
+			const auto value=kind==ROW_GENRE_ANY?control_home::BROWSER_ANY:token;
+			if(control_home::request_browser_action(operation,value,tuner_control.browser_session,tuner_control.browser_revision)){
+				tuner_control.pending_browser_operation=operation;tuner_control.awaiting_action=true;
+				tuner_control_popup(operation==control_home::BrowserOperation::SELECT_GENRE?"Searching stations...":"Loading...",true);}
+		}else if(kind==ROW_RESULT&&control_home::request_browser_action(control_home::BrowserOperation::PLAY,token,
+			tuner_control.browser_session,tuner_control.browser_revision)){
+			tuner_control.pending_browser_operation=control_home::BrowserOperation::PLAY;
+			tuner_control.awaiting_action=true;char message[72];std::snprintf(message,sizeof message,"Tuning to %s...",tuner_control.row_names[row]);tuner_control_popup(message,true);
+		}
 	}
 }
 
@@ -410,6 +522,7 @@ static void tuner_control_apply_catalog()
 	}
 	for (std::uint8_t i = 0; i < page.item_count && tuner_control.row_count < 15; ++i) {
 		const auto row = tuner_control.row_count++;
+		tuner_control.row_kind[row]=ROW_CATALOG;
 		auto *object = tuner_control.list_rows[row];
 		auto *label = tuner_control.list_labels[row];
 		lv_obj_set_user_data(object, reinterpret_cast<void *>(
@@ -435,6 +548,45 @@ static void tuner_control_apply_catalog()
 		                                  tuner_control.row_count);
 }
 
+static void tuner_control_apply_browser()
+{
+	const auto &page=tuner_control.browser;
+	tuner_control.browser_session=page.session_generation;
+	tuner_control.browser_revision=page.revision;
+	tuner_control.browser_page_start=page.start;
+	if(page.status==control_home::BrowserStatus::LOADING){
+		tuner_control_popup("Searching stations...",true);
+		tuner_control.browser_poll_at=lv_tick_get()+300;return;
+	}
+	if(page.status==control_home::BrowserStatus::FAILED){
+		tuner_control_popup(page.last_error==9?"Results too large":"Radio Browser error",false);
+		return;
+	}
+	tuner_control_popup_hide();
+	if(page.stage==control_home::BrowserStage::COUNTRIES&&tuner_control.country_filter==0){
+		tuner_control_show_country_filters();return;
+	}
+	tuner_control_clear_rows();
+	if(page.stage==control_home::BrowserStage::COUNTRIES)home_text(tuner_control.list_title,"COUNTRY");
+	else if(page.stage==control_home::BrowserStage::GENRES)home_text(tuner_control.list_title,"GENRE");
+	else home_text(tuner_control.list_title,"STATIONS");
+	if(page.stage==control_home::BrowserStage::GENRES&&page.start==0)
+		tuner_control_add_row(ROW_GENRE_ANY,control_home::BROWSER_ANY,"Any Genre");
+	for(std::uint8_t i=0;i<page.item_count;++i){
+		const auto kind=page.stage==control_home::BrowserStage::COUNTRIES?ROW_COUNTRY:
+			page.stage==control_home::BrowserStage::GENRES?ROW_GENRE:ROW_RESULT;
+		tuner_control_add_row(kind,page.items[i].token,page.items[i].name.data(),page.items[i].active);
+	}
+	if(page.start)tuner_control_add_row(ROW_PREVIOUS,page.start>=5?page.start-5:0,LV_SYMBOL_LEFT " Previous");
+	if(std::uint32_t(page.start)+page.item_count<page.count)
+		tuner_control_add_row(ROW_MORE,page.start+page.item_count,"More " LV_SYMBOL_RIGHT);
+	if(page.status==control_home::BrowserStatus::EMPTY||page.count==0){
+		home_text(tuner_control.empty_text,page.stage==control_home::BrowserStage::RESULTS?"No stations found":"No options available");
+		lv_obj_clear_flag(tuner_control.empty_text,LV_OBJ_FLAG_HIDDEN);
+	}
+	lv_obj_clear_flag(tuner_control.list_panel,LV_OBJ_FLAG_HIDDEN);
+}
+
 static void tuner_control_refresh(lv_timer_t *)
 {
 	const bool commands_allowed = power_management::commands_allowed();
@@ -452,6 +604,8 @@ static void tuner_control_refresh(lv_timer_t *)
 	                                    tuner_control.generation);
 	(void)control_home::read(tuner_control.playback,
 	                       tuner_control.playback_generation);
+	const bool browser_changed=control_home::browser_read(tuner_control.browser,
+	                                                     tuner_control.browser_generation);
 	if (control_home::menu_read(tuner_control.menu,
 	                           tuner_control.menu_generation)) {
 		char status[48];
@@ -497,6 +651,49 @@ static void tuner_control_refresh(lv_timer_t *)
 				tuner_control.return_home_after_popup = true;
 			}
 		}
+	}
+	if(browser_changed&&tuner_control.browser.sequence&&tuner_control.browser_session==0)
+		tuner_control.browser_session=tuner_control.browser.session_generation;
+	if(tuner_control.awaiting_action&&tuner_control.browser.result_present&&
+	   !tuner_control.browser.command_pending){
+		tuner_control.awaiting_action=false;
+		if(!tuner_control.browser.result_accepted){
+			if(tuner_control.pending_browser_operation==control_home::BrowserOperation::PLAY){
+				tuner_control_close();tuner_control_popup("Station unavailable",false);
+				tuner_control.popup_until=lv_tick_get()+3000;
+			}else{tuner_control_popup("Radio Browser operation failed",false);}
+		}else switch(tuner_control.pending_browser_operation){
+		case control_home::BrowserOperation::START:
+			(void)control_home::request_browser_page(control_home::BrowserStage::COUNTRIES,0,0,0);
+			break;
+		case control_home::BrowserOperation::SELECT_COUNTRY:
+			tuner_control.navigation.browser_next();tuner_control_show_name_filters();break;
+		case control_home::BrowserOperation::SELECT_NAME:
+			tuner_control.navigation.browser_next();
+			(void)control_home::request_browser_page(control_home::BrowserStage::GENRES,0,0,tuner_control.browser_session);break;
+		case control_home::BrowserOperation::SELECT_GENRE:
+			tuner_control.navigation.browser_next();
+			(void)control_home::request_browser_page(control_home::BrowserStage::RESULTS,0,0,tuner_control.browser_session);break;
+		case control_home::BrowserOperation::PLAY:
+			tuner_control_popup("Now Playing",false);tuner_control.popup_until=lv_tick_get()+3000;
+			tuner_control.return_home_after_popup=true;break;
+		case control_home::BrowserOperation::ADD_FAVORITE:
+			tuner_control_popup("Added to Favorites",false);tuner_control.popup_until=lv_tick_get()+3000;break;
+		default:break;
+		}
+	}
+	if(browser_changed&&tuner_control.browser.sequence&&tuner_control.browser_session&&
+	   tuner_control.browser.sequence!=tuner_control.browser_sequence_applied){
+		tuner_control.browser_sequence_applied=tuner_control.browser.sequence;
+		tuner_control_apply_browser();
+	}
+	if(tuner_control.browser.status==control_home::BrowserStatus::LOADING&&
+	   tuner_control.browser_poll_at&&static_cast<std::int32_t>(lv_tick_get()-tuner_control.browser_poll_at)>=0&&
+	   !tuner_control.browser.query_pending&&!tuner_control.browser.command_pending){
+		tuner_control.browser_poll_at=lv_tick_get()+300;
+		(void)control_home::request_browser_page(tuner_control.browser.stage,tuner_control.browser.start,
+			tuner_control.browser.stage==control_home::BrowserStage::COUNTRIES?tuner_control.country_filter:0,
+			tuner_control.browser.session_generation);
 	}
 	if (control_home::catalog_read(tuner_control.catalog,
 	                              tuner_control.catalog_generation)) {
@@ -712,15 +909,8 @@ static void tuner_control_create()
 	for (unsigned i = 0; i < 4; ++i) {
 		auto *row = tuner_control_button(tuner_control.view, entries[i], 242 + i * 58, 48);
 		tuner_control.main_rows[i] = row;
-		if (i < 3)
-			lv_obj_add_event_cb(row, tuner_control_main_row_event, LV_EVENT_CLICKED,
-			                    reinterpret_cast<void *>(static_cast<std::uintptr_t>(i)));
-		else {
-			// The blocking Radio Browser remains explicitly unavailable until its
-			// cooperative job milestone is proven safe.
-			lv_obj_add_state(row, LV_STATE_DISABLED);
-			lv_obj_set_style_opa(row, LV_OPA_50, LV_STATE_DISABLED);
-		}
+		lv_obj_add_event_cb(row, tuner_control_main_row_event, LV_EVENT_CLICKED,
+		                    reinterpret_cast<void *>(static_cast<std::uintptr_t>(i)));
 	}
 	tuner_control.menu_status = remote01_single_line(tuner_control.view, "TUNER: Unavailable",
 	                    &lv_font_montserrat_12, muted, 12, 594, 148,
@@ -740,7 +930,7 @@ static void tuner_control_create()
 		tuner_control.list_area, "No stations available", &lv_font_montserrat_14,
 		muted, 4, 20, 148, LV_LABEL_LONG_WRAP, LV_TEXT_ALIGN_CENTER);
 	lv_obj_add_flag(tuner_control.empty_text, LV_OBJ_FLAG_HIDDEN);
-	for (std::uint8_t i = 0; i < 15; ++i) {
+	for (std::uint8_t i = 0; i < 27; ++i) {
 		auto *row = remote01_panel(tuner_control.list_area, 2, i * 54, 148, 48,
 		                          lv_color_hex(0x1c292e), 5);
 		lv_obj_add_flag(row, LV_OBJ_FLAG_CLICKABLE);

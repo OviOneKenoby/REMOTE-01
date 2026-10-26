@@ -101,14 +101,39 @@ struct CatalogSnapshot {
   std::array<CatalogItemSnapshot, 5> items{};
 };
 
+enum class BrowserStage : std::uint8_t { COUNTRIES = 1, GENRES = 2, RESULTS = 3 };
+enum class BrowserStatus : std::uint8_t { IDLE = 0, LOADING = 1, READY = 2, EMPTY = 3, FAILED = 4 };
+enum class BrowserOperation : std::uint8_t {
+  START = 1, SELECT_COUNTRY = 2, SELECT_NAME = 3, SELECT_GENRE = 4,
+  PLAY = 5, ADD_FAVORITE = 6, CANCEL = 7
+};
+constexpr std::uint16_t BROWSER_ANY = 0xffff;
+struct BrowserSnapshot {
+  bool connected=false,supported=false,query_pending=false,command_pending=false;
+  bool result_present=false,result_accepted=false;
+  std::uint8_t last_error=0,item_count=0;
+  BrowserStage stage=BrowserStage::COUNTRIES;
+  BrowserStatus status=BrowserStatus::IDLE;
+  BrowserOperation requested_operation=BrowserOperation::START;
+  std::uint16_t count=0,start=0,requested_token=0;
+  std::uint64_t sequence=0,session_generation=0,revision=0;
+  std::array<CatalogItemSnapshot,5> items{};
+};
+
 bool full_control_read(FullControlSnapshot &snapshot, std::uint64_t &generation);
 bool menu_read(MenuSnapshot &snapshot, std::uint64_t &generation);
 bool catalog_read(CatalogSnapshot &snapshot, std::uint64_t &generation);
+bool browser_read(BrowserSnapshot &snapshot, std::uint64_t &generation);
 bool request_source(TunerSource source);
 bool request_catalog(CatalogCollection collection, std::uint16_t offset);
 bool request_catalog_action(CatalogOperation operation,
                             CatalogCollection collection,
                             std::uint16_t token,
                             std::uint64_t revision);
+bool request_browser_start();
+bool request_browser_page(BrowserStage stage,std::uint16_t offset,
+                          std::uint8_t filter,std::uint64_t generation);
+bool request_browser_action(BrowserOperation operation,std::uint16_t token,
+                            std::uint64_t generation,std::uint64_t revision);
 
 }  // namespace control_home

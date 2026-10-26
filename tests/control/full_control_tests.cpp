@@ -27,6 +27,10 @@ int main() {
   CHECK(bytes[0] == 23 && bytes[1] == 2 && bytes[2] == 0 &&
         bytes[3] == 5 && bytes[4] == 5);
   CHECK(!catalog_query(CatalogCollection::favorites, 0, 6, bytes));
+  CHECK(browser_state_request(BrowserStage::results,5,5,0,9,bytes)==14);
+  CHECK(bytes[0]==26&&bytes[1]==3&&bytes[3]==5&&bytes[4]==5&&bytes[13]==9);
+  CHECK(browser_state_request(BrowserStage::countries,0,5,'R',9,bytes)==14);
+  CHECK(bytes[5]=='R');
   CHECK(source_select(0x0102030405060708ULL, Source::bluetooth, 9, bytes) == 18);
   const std::array<std::uint8_t, 18> expected{
       20,1,2,3,4,5,6,7,8,2,0,0,0,0,0,0,0,9};
@@ -55,6 +59,10 @@ int main() {
   CHECK(capability.source_switch() && capability.menu_projection() &&
         capability.catalog_query() && capability.catalog_command() &&
         capability.revision == 3);
+  auto browser_capability=capabilities;
+  browser_capability[2]=3;browser_capability[7]=31;browser_capability[19]=4;
+  CHECK(parse(browser_capability,capability));
+  CHECK(capability.radio_browser()&&capability.revision==4);
 
   std::array<std::uint8_t, 24> state{};
   state[0] = 19; state[1] = 1; state[2] = 2; state[3] = 0; state[4] = 1;
@@ -105,6 +113,23 @@ int main() {
                         6,12,bytes)==21);
   CHECK(bytes[0]==25&&bytes[8]==7&&bytes[9]==2&&bytes[10]==2&&
         bytes[11]==0&&bytes[12]==6&&bytes[20]==12);
+  CHECK(browser_command(8,BrowserOperation::select_genre,1,4,7,bytes)==29);
+  CHECK(bytes[0]==28&&bytes[8]==8&&bytes[9]==4&&bytes[11]==1&&
+        bytes[20]==4&&bytes[28]==7);
+
+  std::array<std::uint8_t,54> browser{};
+  browser[0]=27;browser[1]=1;browser[2]=std::uint8_t(BrowserStage::results);
+  browser[3]=std::uint8_t(BrowserStatus::ready);browser[5]=2;
+  p16(browser.data()+6,2);p16(browser.data()+8,0);
+  p64(browser.data()+12,3);p64(browser.data()+20,4);p64(browser.data()+28,7);
+  p16(browser.data()+36,0);browser[38]=0;browser[39]=5;
+  std::memcpy(browser.data()+40,"Alpha",5);
+  p16(browser.data()+45,1);browser[47]=1;browser[48]=5;
+  std::memcpy(browser.data()+49,"B\xc3\xa9ta",5);
+  BrowserPage browser_page{};
+  CHECK(parse(browser,browser_page));
+  CHECK(browser_page.stage==BrowserStage::results&&browser_page.item_count==2&&
+        browser_page.items[1].active);
 
   const std::array<std::uint8_t,16> discovery{
       12,1,0,0x3f,96,127,7,0xd0,0,0,0,0,0,0,0,1};
@@ -120,6 +145,8 @@ int main() {
   CHECK(parse(identity2,identity) && identity.full_control_advertised());
   auto identity3=identity_bytes;identity3.back()='3';
   CHECK(parse(identity3,identity) && identity.full_control_advertised());
+  auto identity4=identity_bytes;identity4.back()='4';
+  CHECK(parse(identity4,identity) && identity.full_control_advertised());
   auto legacy_identity=identity_bytes;legacy_identity[4]=6;
   CHECK(parse({legacy_identity.data(),11},identity)&&!identity.full_control_advertised());
   std::printf("FULL_CONTROL: PASS=1 FAIL=0 assertions=%u\n", assertions);

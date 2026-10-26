@@ -5,7 +5,7 @@
 #include <span>
 
 namespace rtcp_client::wire {
-enum class Kind:std::uint8_t{identity_request=1,identity_response=2,capability_request=3,capability_response=4,snapshot_request=5,snapshot_response=6,volume_set=7,command_result=8,playback_command=9,now_playing_request=10,now_playing_response=11,btx_capability_response=12,btx_state_request=13,btx_state_response=14,btx_command=15,full_control_capability_request=16,full_control_capability_response=17,source_state_request=18,source_state_response=19,source_select_request=20,menu_state_request=21,menu_state_response=22,catalog_query_request=23,catalog_page_response=24,catalog_command_request=25};
+enum class Kind:std::uint8_t{identity_request=1,identity_response=2,capability_request=3,capability_response=4,snapshot_request=5,snapshot_response=6,volume_set=7,command_result=8,playback_command=9,now_playing_request=10,now_playing_response=11,btx_capability_response=12,btx_state_request=13,btx_state_response=14,btx_command=15,full_control_capability_request=16,full_control_capability_response=17,source_state_request=18,source_state_response=19,source_select_request=20,menu_state_request=21,menu_state_response=22,catalog_query_request=23,catalog_page_response=24,catalog_command_request=25,browser_state_request=26,browser_state_response=27,browser_command_request=28};
 enum class PlaybackOperation:std::uint8_t{play=1,pause=2,previous=3,next=4};
 enum class BtxSource:std::uint8_t{none=0,radio=1,bluetooth=2,other=3};
 enum class BtxConnection:std::uint8_t{not_applicable=0,unknown=1,disconnected=2,connected=3};
@@ -46,6 +46,7 @@ struct FullControlCapabilities{
   bool menu_projection()const{return negotiated&&(features&2u);}
   bool catalog_query()const{return negotiated&&(features&4u);}
   bool catalog_command()const{return negotiated&&(features&8u);}
+  bool radio_browser()const{return negotiated&&(features&16u);}
 };
 struct SourceState{
   std::uint64_t sequence=0,generation=0;
@@ -77,6 +78,22 @@ struct CatalogPage{
   std::array<CatalogItem,5>items{};
   bool full()const{return flags&1u;}
 };
+enum class BrowserStage:std::uint8_t{countries=1,genres=2,results=3};
+enum class BrowserStatus:std::uint8_t{idle=0,loading=1,ready=2,empty=3,failed=4};
+enum class BrowserOperation:std::uint8_t{start=1,select_country=2,select_name=3,select_genre=4,play=5,add_favorite=6,cancel=7};
+constexpr std::uint16_t browser_any_token=0xffff;
+struct BrowserItem{
+  std::uint16_t token=0;bool active=false;std::uint8_t name_size=0;
+  std::array<char,49>name{};
+};
+struct BrowserPage{
+  BrowserStage stage=BrowserStage::countries;
+  BrowserStatus status=BrowserStatus::idle;
+  std::uint8_t error=0,item_count=0;
+  std::uint16_t count=0,start=0;
+  std::uint64_t sequence=0,generation=0,revision=0;
+  std::array<BrowserItem,5>items{};
+};
 enum class BtxProbeResult:std::uint8_t{invalid,legacy,enabled};
 struct BtxNegotiation{
   enum class Stage:std::uint8_t{first,probe,legacy,enabled};
@@ -105,18 +122,23 @@ std::size_t source_state_request(std::span<std::uint8_t>);
 std::size_t menu_state_request(std::span<std::uint8_t>);
 std::size_t catalog_query(CatalogCollection,std::uint16_t,std::uint8_t,
                           std::span<std::uint8_t>);
+std::size_t browser_state_request(BrowserStage,std::uint16_t,std::uint8_t,std::uint8_t,
+                                  std::uint64_t,std::span<std::uint8_t>);
 std::size_t volume_set(std::uint64_t,std::uint32_t,std::uint32_t,std::span<std::uint8_t>);
 std::size_t playback_command(std::uint64_t,PlaybackOperation,std::uint8_t,std::uint64_t,std::span<std::uint8_t>);
 std::size_t btx_command(std::uint64_t,PlaybackOperation,BtxPlayback,std::uint64_t,std::span<std::uint8_t>);
 std::size_t source_select(std::uint64_t,Source,std::uint64_t,std::span<std::uint8_t>);
 std::size_t catalog_command(std::uint64_t,CatalogOperation,CatalogCollection,
                             std::uint16_t,std::uint64_t,std::span<std::uint8_t>);
+std::size_t browser_command(std::uint64_t,BrowserOperation,std::uint16_t,
+                            std::uint64_t,std::uint64_t,std::span<std::uint8_t>);
 bool parse(std::span<const std::uint8_t>,Identity&);bool parse(std::span<const std::uint8_t>,Capabilities&);
 bool parse(std::span<const std::uint8_t>,BtxCapabilities&);
 bool parse(std::span<const std::uint8_t>,FullControlCapabilities&);
 bool parse(std::span<const std::uint8_t>,SourceState&);
 bool parse(std::span<const std::uint8_t>,MenuState&);
 bool parse(std::span<const std::uint8_t>,CatalogPage&);
+bool parse(std::span<const std::uint8_t>,BrowserPage&);
 bool parse(std::span<const std::uint8_t>,Snapshot&);bool parse(std::span<const std::uint8_t>,Result&);
 bool parse(std::span<const std::uint8_t>,NowPlaying&);
 bool parse_btx_state(std::span<const std::uint8_t>,NowPlaying&);

@@ -232,7 +232,7 @@ bool home_boundary() {
 bool no_ui_truth() {
   auto ui = source("components/user_app/user_app.cpp");
   auto first = ui.find("static void home_click");
-  auto last = ui.find("static void home_refresh", first);
+  auto last = ui.find("static void tuner_control_close", first);
   auto callback = ui.substr(first, last - first);
   CHECK(callback.find("control_home::request") != std::string::npos);
   CHECK(callback.find("lv_label_set_text") == std::string::npos &&
