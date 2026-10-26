@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026-10-26 - Full Control Milestone 5 Radio Browser offline complete
+
+Implemented the binding Country (Any/A-Z), Name (Popular/A-Z), Genre
+(Any/list) and paged Results workflow without coupling REMOTE navigation to
+the physical TUNER menu. Full-Control 1.3 (`+fc4`) adds authenticated bounded
+browser IDs 26-28, five-item pages, session generation/revision fencing,
+short-tap play, two-second add-to-Favorites, active highlighting, and the
+specified loading, empty, error, BACK/EXIT, disconnect and HOME behaviors.
+Stale work is cancelled or ignored and mutations remain single-in-flight with
+no retry or replay.
+
+The TUNER path is a separate cooperative asynchronous HTTPS service rather
+than the legacy synchronous physical-browser path. It uses verified TLS, a
+30-second absolute deadline, two mirrors, fixed result limits and PSRAM-only
+bounded body/JSON/catalog storage. It does not stop playback and is polled by
+the normal application loop so RTCP and physical controls continue to receive
+service. Hardware timing and memory coexistence remain to be measured.
+
+Focused browser, Full Control, navigation, D-009, BTX and UI tests pass. The
+full REMOTE runner's sole `utf8_snapshot_bounds` failure was reproduced at
+pre-Milestone-5 commit `fefaae6` and is not caused by this change. Production
+REMOTE build `fdcbdac` passes: 2,606,192-byte BIN, SHA-256
+`dc80ba560a3327a069c911de0af31d20eeece77d8f7681ab4d54cbce3ed1c270`;
+20,006,100-byte ELF, SHA-256
+`3ee7c94c4a43b61ea72ca778501585a9d231ebb303aeb405b161d6a0932f3056`;
+61,052 bytes static RAM and 5,782,416 bytes exact-image slot headroom. This is
+an offline result only; no firmware was installed and hardware validation is
+pending.
+
 ## 2026-10-26 - Full Control independent navigation approved
 
 Recorded the owner-approved architectural clarification in the binding
