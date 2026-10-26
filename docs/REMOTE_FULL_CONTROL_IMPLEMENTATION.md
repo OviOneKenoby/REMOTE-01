@@ -248,6 +248,36 @@ RTCP coexistence tests.
 - Existing dependency warnings in the TUNER build are historical; the
   Full-Control sources compile with their configured warning policy.
 
+## Separately gated hardware plan and rollback
+
+These partial images are not authorized for installation by this offline task.
+If the owner later accepts commissioning with Radio Browser still disabled:
+
+1. Reverify device identity, partition layout, each candidate hash, and all
+   local/external rollback copies without altering either device.
+2. Install TUNER first, application-only, then perform an independent exact-span
+   readback. With the installed REMOTE, verify legacy D-009/BTX, volume, Radio,
+   Bluetooth, HTTP and RTCP compatibility before proceeding.
+3. Install REMOTE application-only and verify exact readback. Test source
+   switching, independent navigation, read-only physical-menu projection,
+   Saved/Favorites/Recent paging, active highlighting, mutation fencing,
+   playback confirmation, disconnect/reconnect, sleep/wake and simultaneous
+   physical TUNER use. Use a controlled temporary record for destructive tests
+   and restore owner data exactly.
+4. Stop on any authentication, audio, memory, persistence, UI or no-replay
+   regression. Never auto-retry a write or mutation.
+
+The preserved installed REMOTE baseline is implementation `596cb71`,
+2,583,008 bytes, SHA-256
+`fad87bb2f50142f3758945c5a2276a2535008aec4f32a5ec29f021faa95f3b3f`, plus
+the verified full 16 MiB backup. The preserved installed TUNER baseline is
+implementation `dbf9896`, 2,072,416 bytes, SHA-256
+`6f02cdfd1576831a5d4a40f54eff88dcc3960fcdf72545d0909b0525cbceabf6`.
+Rollback, if separately authorized, restores REMOTE first and then TUNER so an
+older REMOTE never emits optional records to a downgraded TUNER. All writes are
+application-only with exact-span verification; NVS, pairing, bootloaders and
+partition tables remain untouched.
+
 ## Required update discipline
 
 At each milestone, record source/documentation commits, behavioral tests,
