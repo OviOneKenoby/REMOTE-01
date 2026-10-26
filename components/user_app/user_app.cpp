@@ -5,6 +5,7 @@
 #include "gui_guider.h"
 #include "lcd_bl_pwm_bsp.h"
 #include "control_home/api.hpp"
+#include "control_home/catalog_confirmation.hpp"
 #include "control_home/full_control.hpp"
 #include "control_home/full_control_navigation.hpp"
 #include "power_management/api.hpp"
@@ -47,6 +48,7 @@ struct TunerControlWidgets {
 	control_home::navigation::Model navigation{};
 	control_home::navigation::Gesture gestures[27]{};
 	control_home::BrowserSnapshot browser{};
+	control_home::CatalogPlaybackConfirmation playback_confirmation{};
 	std::uint64_t generation = 0;
 	std::uint64_t catalog_generation = 0, browser_generation = 0, playback_generation = 0,
 	              menu_generation = 0;
@@ -155,6 +157,7 @@ static void tuner_control_close()
 	tuner_control.return_home_after_popup = false;
 	tuner_control.awaiting_action = false;
 	tuner_control.awaiting_playback = false;
+	tuner_control.playback_confirmation.clear();
 	tuner_control.browser_session = tuner_control.browser_revision = 0;
 	lv_obj_add_flag(tuner_control.popup, LV_OBJ_FLAG_HIDDEN);
 }
@@ -401,6 +404,10 @@ static void tuner_control_request_action(std::uint8_t row,
 	}
 	tuner_control.awaiting_action = true;
 	if (operation == control_home::CatalogOperation::PLAY) {
+		tuner_control.playback_confirmation.begin(
+			tuner_control.collection, tuner_control.pending_token,
+			tuner_control.catalog_revision, tuner_control.catalog.sequence,
+			lv_tick_get());
 		char message[72];
 		std::snprintf(message, sizeof message, "Tuning to %s...",
 		              tuner_control.row_names[row]);
@@ -629,6 +636,11 @@ static void tuner_control_refresh(lv_timer_t *)
 	                              LV_PART_MAIN);
 	if (!tuner_control.visible) return;
 	if (!tuner_control.state.connected) {
+		tuner_control.playback_confirmation.disconnected();
+		if (tuner_control.playback_confirmation.active) {
+			tuner_control.awaiting_action = false;
+			tuner_control.awaiting_playback = true;
+		}
 		if (!tuner_control.disconnect_popup) {
 			tuner_control.disconnect_popup = true;
 			tuner_control_popup("TUNER disconnected", false, false, true);
@@ -636,6 +648,17 @@ static void tuner_control_refresh(lv_timer_t *)
 		return;
 	}
 	if (tuner_control.disconnect_popup) tuner_control_popup_hide();
+	if (tuner_control.playback_confirmation.connected() ==
+	    control_home::CatalogConfirmationDecision::QUERY) {
+		if (control_home::request_catalog(
+				tuner_control.playback_confirmation.collection, 0)) {
+			tuner_control.collection = tuner_control.playback_confirmation.collection;
+			tuner_control_clear_rows();
+			tuner_control_popup("Confirming playback...", true);
+		} else {
+			tuner_control.playback_confirmation.disconnected();
+		}
+	}
 	if (tuner_control.state.command_pending) return;
 	if (tuner_control.state.result_present && !tuner_control.source_result_handled) {
 		tuner_control.source_result_handled = true;
@@ -703,6 +726,7 @@ static void tuner_control_refresh(lv_timer_t *)
 		    !tuner_control.catalog.command_pending) {
 			tuner_control.awaiting_action = false;
 			if (!tuner_control.catalog.result_accepted) {
+				tuner_control.playback_confirmation.clear();
 				if (tuner_control.catalog.last_error == 4) {
 					tuner_control_popup_hide();
 					tuner_control_clear_rows();
@@ -723,8 +747,10 @@ static void tuner_control_refresh(lv_timer_t *)
 				}
 			} else if (tuner_control.pending_operation == control_home::CatalogOperation::PLAY) {
 				tuner_control.awaiting_playback = true;
+				tuner_control.playback_confirmation.accepted();
 				tuner_control_clear_rows();
-				(void)control_home::request_catalog(tuner_control.collection, 0);
+				if (control_home::request_catalog(tuner_control.collection, 0))
+					tuner_control.playback_confirmation.query_started();
 			} else {
 				tuner_control_popup(
 					tuner_control.pending_operation == control_home::CatalogOperation::REMOVE
@@ -735,17 +761,29 @@ static void tuner_control_refresh(lv_timer_t *)
 			}
 		}
 	}
-	if (tuner_control.awaiting_playback &&
-	    tuner_control.playback.playback == control_home::Playback::PLAYING) {
-		bool active = false;
-		for (std::uint8_t i = 0; i < tuner_control.catalog.item_count; ++i)
-			active = active || tuner_control.catalog.items[i].active;
-		if (active) {
+	if (tuner_control.awaiting_playback) {
+		const auto decision = tuner_control.playback_confirmation.observe(
+			tuner_control.playback.playback == control_home::Playback::PLAYING,
+			tuner_control.catalog);
+		if (decision == control_home::CatalogConfirmationDecision::CONFIRMED) {
 			tuner_control.awaiting_playback = false;
 			tuner_control_popup("Now Playing", false);
 			tuner_control.popup_until = lv_tick_get() + 3000;
 			tuner_control.return_home_after_popup = true;
+		} else if (decision == control_home::CatalogConfirmationDecision::FAILED) {
+			tuner_control.awaiting_playback = false;
+			tuner_control_close();
+			tuner_control_popup("Station unavailable", false);
+			tuner_control.popup_until = lv_tick_get() + 3000;
 		}
+	}
+	if (tuner_control.awaiting_playback && tuner_control.state.connected &&
+	    tuner_control.playback_confirmation.tick(lv_tick_get()) ==
+	        control_home::CatalogConfirmationDecision::EXPIRED) {
+		tuner_control.awaiting_playback = false;
+		tuner_control_close();
+		tuner_control_popup("Playback not confirmed", false);
+		tuner_control.popup_until = lv_tick_get() + 3000;
 	}
 }
 
