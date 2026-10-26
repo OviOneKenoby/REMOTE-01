@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026-10-26 - Full Control targeted popup/reconnect fixes and Browser diagnostics
+
+Corrected two hardware-confirmed REMOTE defects without changing the approved
+Full Control behavior. Shared compact popup text now uses a bounded multiline
+label instead of the one-line helper, preserving the popup, spinner and button
+layout. Catalog PLAY now retains a fixed confirmation fence for up to 15
+seconds and, after RTCP reconnect, performs read-only catalog reconciliation.
+It returns HOME only after fresh authoritative evidence confirms that the
+selected item is active and playing. It never replays PLAY or retries a
+mutation; different, stopped, stale or expired evidence fails closed.
+
+Added fixed 16-byte Browser diagnostics to the existing REMOTE diagnostic
+snapshot and `/api/status`: START results, page queries sent, page responses,
+pages accepted, generation mismatches, the last mismatched generation/revision
+low 16 bits, UI state and pending operation. Counters saturate, storage remains
+exactly 1,024/8,192 bytes, and no RTCP framing, security or Browser policy was
+changed. This is diagnostic-only for the empty Country panel; its cause is not
+claimed fixed.
+
+Focused popup (6/6), catalog reconciliation, Browser diagnostic policy (10/10),
+diagnostic schema (9/9; 9,098 assertions), Full Control, navigation, D-009, BTX,
+HOME metadata and volume tests pass. The broad runner retains its reproduced
+pre-existing `utf8_snapshot_bounds` failure and no related code was changed.
+Clean `remote01` build at `65923ad` passes: BIN 2,608,160 bytes, SHA-256
+`38e165da601756d0b4a2f56be97d8d44a0d42fdf16cb7c871d37a29bbbc53774`;
+ELF 20,022,008 bytes, SHA-256
+`c08f3fa41e05b887138e6c38a560dbf1ba875c67becfa1f744a8605ea41a293b`;
+61,100 bytes static RAM and 5,780,448 bytes exact-image slot headroom. This is
+offline verification only; no device was accessed or flashed.
+
 ## 2026-10-26 - Full Control Milestone 5 Radio Browser offline complete
 
 Implemented the binding Country (Any/A-Z), Name (Popular/A-Z), Genre

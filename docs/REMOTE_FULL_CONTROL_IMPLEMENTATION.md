@@ -37,6 +37,73 @@ Its checkboxes are intentionally unmarked until physical evidence is recorded.
 | 6 | UI/lifecycle | PASS offline for all approved flows | NOT TESTED | Touch, cancellation, disconnect, sleep/wake and simultaneous physical-control validation. |
 | 7 | Final offline verification | IN PROGRESS; Milestone 5 focused tests and both production builds PASS | N/A | Remaining Full Control milestones and complete hardware acceptance. |
 
+## Full Control 1.3 targeted correction checkpoint
+
+Hardware validation established two REMOTE defects and one unresolved Browser
+failure. The approved specification is unchanged.
+
+- **FC-UI-01 — FIXED offline; hardware retest pending.** The shared popup used
+  `remote01_single_line()` and then enabled wrapping, so a one-line object
+  clipped multiline progress and result messages. `make_popup()` now creates a
+  bounded 124 x 52 multiline label directly, centered above the existing
+  spinner/button area. It does not change the global helper or popup lifetime.
+- **FC-FAV-01 — FIXED offline; hardware retest pending.** A fixed
+  `CatalogPlaybackConfirmation` retains collection, token, prior sequence,
+  minimum revision and a 15-second deadline. Disconnect invalidates the old
+  session but preserves the selected identity for read-only reconciliation.
+  Reconnection sends only a catalog query. Fresh same-item plus authoritative
+  PLAYING completes the existing feedback and three-second HOME return;
+  different/stopped/stale/expired evidence clears the lifecycle without
+  claiming success. PLAY is never replayed or duplicated.
+- **FC-RB-01 — DIAGNOSTIC ONLY.** The empty Country panel is not corrected
+  speculatively. REMOTE adds a fixed 16-byte diagnostic record; TUNER adds a
+  fixed 56-byte record. No task, dynamic diagnostic allocation, packet logging,
+  timeout change, generation relaxation or wire change was introduced.
+- **FC-RB-02 — NOT CHANGED.** Touch-to-HOME may be the specified display-idle
+  wake path. The required future test keeps REMOTE continuously ACTIVE, opens
+  Browser, and touches an empty area before inactivity.
+
+Implementation commits are REMOTE `9286e31` (popup), `e020640` (catalog
+reconciliation), `05abdf5` (Browser diagnostics) and TUNER `4fa198a` (Browser
+diagnostics). Focused test commits are REMOTE `65923ad` and TUNER `b3ed9e5`.
+
+Verification:
+
+- popup layout: 6/6 PASS;
+- catalog confirmation sequences, including reconnect/different/stopped/
+  expiry/stale/rapid operation and no replay: PASS;
+- REMOTE diagnostic schema: 9/9, 9,098 assertions; exact Snapshots 1,024 bytes
+  and total fixed diagnostic storage 8,192 bytes;
+- REMOTE Browser diagnostic policy: 10/10 PASS;
+- TUNER Browser diagnostic state/counter coverage and policy: PASS (13/13
+  policy checks);
+- relevant Full Control, catalog/navigation, Browser, BTX, D-009,
+  StationManager, HOME metadata and volume regressions: PASS;
+- broad REMOTE runner: Core 69/69, profile 6/6, HOME 42/42, ownership 4/4;
+  hardening 25 PASS / 1 FAIL. The sole `utf8_snapshot_bounds` assertion was
+  reproduced at pre-Milestone-5 commit `fefaae6` and remains separately
+  tracked.
+
+Production candidates:
+
+| Device | Build source/identity | BIN | BIN SHA-256 | Static RAM | Exact slot headroom |
+| --- | --- | ---: | --- | ---: | ---: |
+| REMOTE | `65923ad` (embedded app version `65923ad`) | 2,608,160 | `38e165da601756d0b4a2f56be97d8d44a0d42fdf16cb7c871d37a29bbbc53774` | 61,100 | 5,780,448 |
+| TUNER | implementation/build ID `4fa198a55422` | 2,129,472 | `5cb1ad29a26173d277772d5f798a1be32ff857a322e2f82bea1ce1ec704fbd68` | 79,976 | 1,016,256 |
+
+REMOTE ELF is 20,022,008 bytes, SHA-256
+`c08f3fa41e05b887138e6c38a560dbf1ba875c67becfa1f744a8605ea41a293b`.
+TUNER ELF is 31,157,412 bytes, SHA-256
+`552d732c823044033666ce4d0d631d9288f0532aa14b66bd4b98db8b2c6756e0`.
+Versus the installed applications, REMOTE adds 1,968 bytes BIN and 48 bytes
+static RAM; TUNER adds 1,856 bytes BIN and 48 bytes static RAM. The known
+TUNER dependency warning about AudioTools include ordering remains unchanged;
+no new warning was identified.
+
+Private candidates and manifests are preserved under
+`C:\Users\RYZEN\Documents\FULL_CONTROL_PRIVATE_CANDIDATES\20261026T214412Z-targeted-fixes`.
+Installation and hardware retesting require separate owner authorization.
+
 ## Milestone 1 implementation
 
 ### Protocol

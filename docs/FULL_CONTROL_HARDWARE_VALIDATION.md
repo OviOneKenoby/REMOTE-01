@@ -59,6 +59,28 @@ Date prepared: 2026-10-26
   browser session at the critical time is not yet proven. Do not credit any
   Country/Name/Genre/Results behavior from this attempt.
 
+### Targeted-correction retest status
+
+The defects above produced offline candidates but those candidates have not
+been installed. FC-UI-01 and FC-FAV-01 are **FIXED offline / hardware retest
+pending**. FC-RB-01 remains **diagnostic only**. Repeat only these bounded
+checks after separately authorized TUNER-first then REMOTE installation:
+
+- [ ] Open Radio -> Bluetooth and Bluetooth -> Radio. Confirm complete popup
+  text, visible spinner/buttons, automatic completion and the specified HOME
+  return; no extra touch is required.
+- [ ] Start the known Favorite while connected and confirm audible playback,
+  complete feedback and automatic HOME return.
+- [ ] During one separate Favorite selection, allow one natural RTCP
+  interruption. Confirm no duplicate PLAY; after reconnect, fresh
+  authoritative same-station/PLAYING evidence completes HOME return. If a
+  different station or STOPPED is authoritative, confirm no false success.
+- [ ] Keep REMOTE continuously ACTIVE, open Browse All Stations once, and
+  capture both read-only diagnostic endpoints before and after the empty or
+  populated Country panel. Do not retry START automatically.
+- [ ] While still ACTIVE, touch an empty Browser area before inactivity to
+  distinguish a UI navigation issue from the specified wake-to-HOME behavior.
+
 This checklist validates the owner-approved behavior in
 [`REMOTE_FULL_CONTROL_SPEC.md`](REMOTE_FULL_CONTROL_SPEC.md). It does not
 authorize firmware changes, erasure, reprovisioning, or resets. Stop the
