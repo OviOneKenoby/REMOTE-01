@@ -4,6 +4,61 @@ Status: **procedure ready; all results initially NOT TESTED**
 Firmware family: Full Control 1.3 (`+fc4`)
 Date prepared: 2026-10-26
 
+## Validation run — 2026-10-26 (in progress)
+
+- Smoke A1: PASS. TUNER build `e51e39db9ab4`; Wi-Fi connected at
+  `192.168.1.57`; uptime advanced continuously. Last-reset reason reported
+  `watchdog` and is retained as a baseline warning, with no observed reset
+  loop. Initial internal free/largest was 106,808/102,388 bytes and free PSRAM
+  was 4,180,715 bytes.
+- Smoke A2: PASS. Owner verified saved-station selection and stable audible
+  MP3 playback.
+- Smoke A3: PARTIAL PASS. Encoder volume, Pause, Play and encoder return to
+  Station Select passed. Next-station behavior was NOT TESTED because only one
+  saved station exists; the assembly has no Previous button.
+- Smoke A4/A5: PASS. REMOTE HOME/touch/Wi-Fi passed at `192.168.1.55`;
+  authenticated RTCP was complete with authoritative volume available and no
+  operation in flight.
+- Source B1 first observation: owner confirms Radio-to-Bluetooth transition
+  itself succeeded. The subsequent return to Radio was accidental and is not
+  a firmware failure. Popup text appeared clipped (`Switching to...` was the
+  readable portion) and the popup did not visibly dismiss until touch; popup
+  rendering/timing therefore remains under controlled retest.
+- Source B1 controlled retest: **PARTIAL/FAIL**. TUNER authoritatively entered
+  Bluetooth and HOME ultimately displayed `Waiting for Bluetooth device...`,
+  but the progress popup rendered only `Starting`, never visibly changed to
+  `Bluetooth ready`, and remained present until REMOTE entered display-idle.
+  A wake touch then returned HOME. This is an OPEN REMOTE popup
+  rendering/completion-lifecycle defect; source switching and RTCP transport
+  themselves are not classified failed by this observation.
+- Bluetooth connection/playback: PASS. Owner verified continuous audible SBC,
+  correct metadata on TUNER and REMOTE, REMOTE `PLAYING`, and working REMOTE
+  Play/Pause. Read-only capture showed TUNER Bluetooth active/restartable,
+  18,908/16,372 bytes internal free/largest, 4,166,635 bytes free PSRAM, and
+  connected Wi-Fi. REMOTE RTCP was complete with volume available and no
+  operation in flight; close/attempt counters were 15/16 after the source
+  transition and are retained for later comparison.
+- Bluetooth phone-disconnect behavior: PASS. Audio stopped, TUNER remained in
+  Bluetooth mode, REMOTE displayed `Waiting for Bluetooth device...`, stale
+  metadata cleared, and no automatic Radio fallback occurred.
+- Source B2 Bluetooth-to-Radio: PASS for authoritative behavior. The popup
+  again rendered only `Switching to` with the remainder clipped, but HOME
+  returned automatically and TUNER reached Radio/Station Select stopped
+  without resuming prior audio. RTCP stayed complete and its close/attempt
+  counters remained 15/16. Popup rendering remains FAIL.
+- Same-source Radio selection: PASS. Tapping RADIO while already in Radio
+  produced no popup, restart, navigation change or playback change; TUNER
+  remained stopped at Station Select.
+- First Radio Browser hardware attempt: FAIL. `Searching` dismissed, but the
+  resulting panel showed only `RADIO BROWSER`; the required Any Country/A-Z
+  rows did not render. TUNER and REMOTE Wi-Fi were healthy, RTCP was complete,
+  authoritative volume remained available, and no allocation failure was
+  reported, so this is not evidence of a permanent transport or memory
+  failure. REMOTE session advanced from 5 to 7 and close/attempt counters from
+  15/16 to 17/18 before the capture; whether a reconnect invalidated the
+  browser session at the critical time is not yet proven. Do not credit any
+  Country/Name/Genre/Results behavior from this attempt.
+
 This checklist validates the owner-approved behavior in
 [`REMOTE_FULL_CONTROL_SPEC.md`](REMOTE_FULL_CONTROL_SPEC.md). It does not
 authorize firmware changes, erasure, reprovisioning, or resets. Stop the
