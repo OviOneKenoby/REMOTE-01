@@ -1,5 +1,49 @@
 # Changelog
 
+## 2026-10-26 - Full Control independent navigation approved
+
+Recorded the owner-approved architectural clarification in the binding
+specification: REMOTE navigation is local and never moves the physical TUNER
+cursor or e-paper menu. Both interfaces remain usable simultaneously. Shared
+source, active station, metadata, volume and station-list mutations remain
+TUNER-authoritative; mutations retain revision/generation fencing and are never
+replayed automatically. Existing touchscreen behavior is unchanged. Review of
+the outstanding diff found no unsafe raw-menu-navigation source draft.
+
+## 2026-10-25 - REMOTE Full Control station catalogs; Radio Browser blocked
+
+Implemented the safe offline scope of Milestones 3 and 4 on top of the binding
+Full Control specification. Capability-negotiated Full-Control 1.2 (`+fc3`)
+adds fixed, authenticated, paged Saved Stations, Favorites and Recent queries
+and semantic play/remove/add-favorite commands. The TUNER remains authoritative;
+physical control wins through catalog revision fencing, mutations use the
+existing one-request lane, and timed-out or disconnected work is never replayed.
+No URLs or raw input events cross RTCP and no NVS layout changed.
+
+The portrait REMOTE UI now provides local BACK/EXIT navigation, the HOME
+Favorites shortcut, bounded station rows, active highlighting, two-second
+press recognition with scroll cancellation, confirmed deletion and the
+approved empty/full/already-present results. Station play waits for
+authoritative PLAYING and active-station evidence. The global volume encoder,
+HOME, D-009, BTX, sleep/wake and disconnect ownership remain intact.
+
+Executable Full-Control, navigation/gesture, D-009 and BTX regressions pass on
+both repositories. The shared result parser intentionally accepts new bounded
+catalog errors 8 and 9; the stale D-009 test expectation was corrected without
+changing any D-009 record. Final production builds pass. REMOTE is 2,598,176
+bytes (SHA-256 `041d112a4b676956ed5265cd32f89fc423a2892dcc58b9d523901df29bcd7a8f`),
+uses 59,468 bytes static RAM and retains 5,790,432 bytes in the 8 MiB factory
+application partition.
+
+Radio Browser Milestone 5 is **BLOCKED**. Its existing TUNER implementation is
+a synchronous main-loop HTTPS operation with 20-second connect/read timeouts,
+whole-response `StreamString` buffering and dynamic JSON parsing, while RTCP
+uses 5-second response deadlines and the platform has verified very low
+internal-memory watermarks. No safe cooperative/cancellable job exists. The UI
+entry remains disabled rather than bridging that blocking path or weakening
+the approved specification. No hardware was accessed and this is not a full
+or hardware-validated candidate.
+
 ## 2026-10-25 - REMOTE Full Control milestone 2 protocol projection (offline)
 
 Added the bounded authenticated read-only menu projection needed by later

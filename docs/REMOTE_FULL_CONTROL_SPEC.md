@@ -22,6 +22,15 @@ for owner decision; the behavior must not be silently reinterpreted.
   is rejected, authoritative state is refreshed, and the operation is not
   automatically retried. Ordinary local/remote navigation conflicts do not
   produce nuisance popups.
+- **Approved architectural clarification (2026-10-26):** REMOTE navigation is
+  independent from the physical TUNER menu. Opening, paging, scrolling, BACK,
+  EXIT, selection focus, and filter navigation on REMOTE must not move the
+  physical TUNER menu cursor, change its current menu page, or refresh its
+  e-paper display. TUNER and REMOTE remain simultaneously usable.
+- Navigation independence does not create independent media truth. Playback
+  source, active station, metadata, volume, and station-list mutations remain
+  authoritatively synchronized from TUNER. Every mutation uses the current
+  authoritative revision/generation fence and is never replayed automatically.
 - Commands are semantic operations, not injected raw physical input events.
 - Existing RTCP authentication, encryption, replay protection, correlation,
   generation fencing, bounded storage, and one-request-in-flight safety remain
@@ -232,6 +241,12 @@ behavior is preserved. Navigating menus never changes audio by itself.
 
 Other approved REMOTE physical inputs remain unassigned/reserved until a later
 milestone after touchscreen behavior is stable.
+
+The canonical TUNER menu projection is informational only. REMOTE may display
+that state but does not follow its cursor and does not use it as REMOTE's local
+navigation model. Conversely, REMOTE local navigation never changes the
+TUNER's cursor or e-paper page. Only explicit approved semantic operations may
+change shared authoritative media or collection state.
 
 ## 13. Sleep, wake, and disconnection
 

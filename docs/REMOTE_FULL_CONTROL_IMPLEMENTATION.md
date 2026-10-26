@@ -20,12 +20,12 @@ engineering state; it does not replace or relax the specification.
 | # | Milestone | Software | Hardware | Remaining work |
 | --- | --- | --- | --- | --- |
 | 1 | Source switching | PASS; TUNER `5d10615`, REMOTE `9293a99` | NOT TESTED | Hardware install/Radio-Bluetooth validation separately authorized. |
-| 2 | Read-only canonical menu/state projection | PARTIAL; wire/server/client/API PASS, dedicated list rendering pending | NOT TESTED | Render through the approved list UI during Milestone 4. |
-| 3 | Semantic navigation | NOT IMPLEMENTED | NOT TESTED | Safe open/move/select/back/exit with local-control priority. |
-| 4 | Saved/Favorites/Recent | NOT IMPLEMENTED | NOT TESTED | Queries, play, gestures, confirmation, persistence operations, HOME shortcut. |
-| 5 | Radio Browser | NOT IMPLEMENTED / RISK GATE | NOT TESTED | Prove bounded cooperative HTTPS job or mark BLOCKED. |
-| 6 | UI/lifecycle | PARTIAL | NOT TESTED | Milestone 1 source UI, popup, disconnect, wake-to-HOME and global encoder context exist; list/navigation lifecycle remains. |
-| 7 | Final offline verification | NOT STARTED | N/A | Full focused regressions, clean final builds, manifests and rollback plan. |
+| 2 | Read-only canonical menu/state projection | PASS; bounded TUNER-owned menu projection is rendered as read-only status | NOT TESTED | Hardware rendering/physical-priority validation. |
+| 3 | Semantic navigation | PASS for the safe local REMOTE navigation model; no raw TUNER input injection | NOT TESTED | Hardware touch, BACK/EXIT, sleep/wake and simultaneous-control validation. |
+| 4 | Saved/Favorites/Recent | PASS offline; bounded queries, play, delete confirmation, add-favorite, paging, HOME shortcut and gestures implemented | NOT TESTED | Hardware persistence, playback-confirmation and physical-priority validation. |
+| 5 | Radio Browser | **BLOCKED** | NOT TESTED | Existing synchronous 20-second HTTPS/JSON path cannot safely meet the 5-second RTCP lifecycle or proven internal-memory constraints. |
+| 6 | UI/lifecycle | PARTIAL; all non-Browser approved flows implemented and built | NOT TESTED | Browser-dependent flow blocked; all UI/lifecycle behavior still needs hardware validation. |
+| 7 | Final offline verification | PARTIAL; focused compatibility tests and both clean production builds PASS; partial-candidate manifests produced | N/A | A complete candidate cannot be declared while Milestone 5 is blocked. |
 
 ## Milestone 1 implementation
 
@@ -126,9 +126,9 @@ therefore remain on D-009/BTX when paired with this TUNER, while the current
 REMOTE accepts both `+fc1` and `+fc2`. The REMOTE parser stores one bounded
 five-item window and publishes it through a copied owner/UI channel. Focused
 TUNER source/menu tests pass; focused REMOTE wire tests pass 25 assertions.
-Rendering that projection in the approved station-list UI is intentionally
-deferred to the list milestone, so Milestone 2 remains PARTIAL rather than
-being overstated as complete.
+The projection is now rendered as bounded read-only TUNER menu status without
+injecting navigation or forcing a REMOTE page change. Physical TUNER controls
+remain authoritative, completing the software scope of Milestone 2.
 
 Milestone 2 implementation commits are TUNER
 `4cf9b65e00e0a6c5a28f6833ec06a672a046a461` and REMOTE
@@ -146,14 +146,102 @@ Milestone 2 implementation commits are TUNER
   57,100 bytes static RAM and 5,799,744 bytes exact-image factory-slot
   headroom.
 
+## Milestones 3 and 4 checkpoint
+
+Full-Control 1.2 adds capability-negotiated, authenticated station catalogs.
+Compatibility advances to the identity suffix `+fc3`, feature mask 15 and
+capability revision 3. Earlier clients do not send the new records; current
+REMOTE still accepts `+fc1` and `+fc2` peers and keeps D-009/BTX behavior.
+
+| ID | Direction | Purpose | Exact/maximum payload |
+| --- | --- | --- | --- |
+| 23 | REMOTE -> TUNER | Catalog query: collection, offset, limit | 5 bytes |
+| 24 | TUNER -> REMOTE | Catalog page: capacity/count/revision and up to five items | 288 bytes maximum |
+| 25 | REMOTE -> TUNER | Correlated semantic catalog command | 21 bytes |
+
+Collections are Saved Stations (15), Favorites (10), and Recent (5). Pages
+carry only stable positional tokens, active flags, and validated station names
+bounded to 48 UTF-8 bytes; stream URLs and credentials never cross this
+extension. Semantic operations are play, remove, and add-to-Favorites. Every
+mutation includes the authoritative catalog revision and fails closed on stale,
+busy, unsupported, unavailable, full, or already-present state. The TUNER uses
+a fixed one-slot mailbox, executes work on its application main loop, clears
+pending work on disconnect, and never automatically replays a mutation.
+
+REMOTE adds one fixed catalog channel and keeps the existing single request
+lane. The dedicated portrait view now provides Saved Stations, Favorites and
+Recent, the HOME Favorites shortcut, five-item pagination, active-station
+highlighting, two-second press recognition with scroll cancellation, confirmed
+deletion, and non-destructive add-to-Favorites results. A station selection
+waits for authoritative PLAYING plus the active catalog entry before showing
+`Now Playing` and returning HOME. BACK/EXIT, disconnect dismissal, wake-to-HOME,
+first-touch handling, no pending-command replay, and the global volume encoder
+remain under their existing owners. TUNER physical navigation remains
+independent; REMOTE does not inject raw input events.
+
+The owner explicitly approved this independent-navigation architecture on
+2026-10-26. REMOTE page, row, scroll and filter focus are local UI state and do
+not alter the TUNER cursor or e-paper display. Only source, active station,
+metadata, volume and catalog mutations synchronize, and mutations remain
+revision-fenced with no replay. Review of the current worktrees found no
+uncommitted raw-input/menu-driving source draft to remove; only generated host
+test executables were untracked and are not product source.
+
+Implementation commits are TUNER
+`c217275262266b709a244870dd0f317ce135fdab` and REMOTE
+`df7d804d140b6c13c1be84485a518284024e322b`. REMOTE compatibility-test follow-up
+`f2d7c8a25e27541f6b1434dfa9d5201d001a47f5` records the shared result errors 8
+and 9 used by catalog operations without changing D-009 records.
+
+Focused executable verification:
+
+- TUNER catalog model: PASS.
+- TUNER Full-Control source/menu model: PASS.
+- TUNER D-009: PASS, 23/23; BTX: PASS, 46/46.
+- TUNER StationManager PSRAM behavior: PASS, 62/62.
+- REMOTE Full-Control wire/catalog: PASS, 36 assertions.
+- REMOTE navigation/gesture state machine: PASS.
+- REMOTE D-009: PASS, 8/8 with 46 assertions; BTX: PASS, 7/7 with 52 assertions.
+
+Final implementation builds (before documentation-only commits):
+
+- TUNER `esp32-lwip-psram`: PASS; static RAM 79,264 / 327,680 bytes;
+  linked flash 2,072,557 / 3,145,728 bytes. BIN 2,079,136 bytes, SHA-256
+  `7749b1f0f819773c2ee18e964115cbea55ccefa6aa92e388d5e06b31deaf2315`;
+  ELF 30,428,856 bytes, SHA-256
+  `ab5c1b58bae98baaba0d617fd87ac3a41e8db666b2586572fea1b1df439a19d0`;
+  exact-image slot headroom 1,066,592 bytes.
+- REMOTE `remote01`: PASS; static RAM 59,468 / 327,680 bytes;
+  linked flash 2,597,681 / 8,388,608 bytes. BIN 2,598,176 bytes, SHA-256
+  `041d112a4b676956ed5265cd32f89fc423a2892dcc58b9d523901df29bcd7a8f`;
+  ELF 19,951,184 bytes, SHA-256
+  `b410a027858fa80d33e241b7bf6783997aeb0bfb926cdcab5f329a967fe9b6c9`;
+  exact-image factory-slot headroom 5,790,432 bytes.
+
+## Milestone 5 blocker
+
+The approved Radio Browser behavior is not implemented. Source inspection
+demonstrates that `StationBrowser::httpsGetJsonOnce()` in `src/browser.cpp`
+runs synchronously on the TUNER main loop, gives both connect and read phases
+20,000 ms, buffers the complete response in `StreamString`, and deserializes a
+dynamic JSON document before returning. The RTCP server arms 5,000 ms response
+deadlines in `src/rtcp_server.cpp`. That mismatch can starve RTCP and the
+physical/e-paper application loop, and the verified platform has historically
+reached 1-2 KiB internal-memory low-water marks.
+
+There is no verified cancellation or bounded cooperative Browser job to reuse.
+A new large-stack task is forbidden without memory proof. Bridging the current
+call directly to RTCP would therefore violate the binding specification. The
+Browser entry remains disabled instead of advertising false functionality.
+Completion requires a separately reviewed cooperative HTTPS/JSON job with
+bounded ownership, cancellation/stale-result rules, memory measurements and
+RTCP coexistence tests.
+
 ## Known limitations and risk gates
 
 - No Full-Control feature has been installed or hardware-tested.
-- Saved/Favorites/Recent and Radio Browser controls are not implemented.
-- The existing TUNER Radio Browser performs blocking HTTPS and cannot be
-  exposed as a synchronous RTCP operation. Milestone 5 must prove a bounded
-  cooperative design within the historically constrained internal/DMA heap or
-  be recorded BLOCKED.
+- Saved/Favorites/Recent are implemented and offline-tested but not installed
+  or hardware-validated. Radio Browser remains blocked as described above.
 - Runtime DMA headroom cannot be established from static build figures.
 - Existing intermittent REMOTE QMI8658 motion-wake initialization remains a
   separate known limitation and is not silently folded into this project.
