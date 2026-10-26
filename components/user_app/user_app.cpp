@@ -948,9 +948,12 @@ static void tuner_control_create()
 	}
 	tuner_control.popup = remote01_panel(src_ui.screen, 16, 230, 140, 180,
 	                                   lv_color_hex(0x24343a), 8);
-	tuner_control.popup_text = remote01_single_line(tuner_control.popup, "", &lv_font_montserrat_14,
-	                                               text, 8, 68, 124,
-	                                               LV_LABEL_LONG_WRAP, LV_TEXT_ALIGN_CENTER);
+	tuner_control.popup_text = remote01_label(tuner_control.popup, "", &lv_font_montserrat_14,
+	                                        text, 8, 68);
+	lv_label_set_long_mode(tuner_control.popup_text, LV_LABEL_LONG_WRAP);
+	lv_obj_set_size(tuner_control.popup_text, 124, 52);
+	lv_obj_set_style_text_align(tuner_control.popup_text, LV_TEXT_ALIGN_CENTER,
+	                            LV_PART_MAIN);
 	tuner_control.spinner = lv_spinner_create(tuner_control.popup, 1000, 70);
 	lv_obj_set_size(tuner_control.spinner, 38, 38);
 	lv_obj_align(tuner_control.spinner, LV_ALIGN_TOP_MID, 0, 16);
