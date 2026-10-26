@@ -26,6 +26,18 @@ struct RtcpDiagnostic {
   std::uint8_t failure()const{return stage_failure>>4;}
 };
 static_assert(sizeof(RtcpDiagnostic)==24);
+struct BrowserDiagnostic {
+  // Saturating boot-local counters followed by bounded correlation evidence.
+  std::array<std::uint16_t,5> counters{};
+  std::uint16_t mismatch_generation_low16=0;
+  std::uint16_t mismatch_revision_low16=0;
+  std::uint8_t ui_state=0;
+  std::uint8_t pending_operation=0;
+  static void increment(std::uint16_t& value) {
+    if(value!=UINT16_MAX)++value;
+  }
+};
+static_assert(sizeof(BrowserDiagnostic)==16);
 struct Core {
   U64 time=0;
   // Existing resource/owner fields retain their 64-bit representation. The
@@ -36,6 +48,7 @@ struct Core {
   // by nine volume-pipeline fields. Compact storage preserves the 1 KiB cap.
   std::array<std::uint16_t,15> input_values{};
   RtcpDiagnostic rtcp;
+  BrowserDiagnostic browser;
 };
 struct ExternalPower {unsigned raw=0,mv=0,state=0,valid=0,calibrated=0;std::int32_t error=0;U64 read_errors=0;};
 struct Power { U64 time=0; std::array<U64,23> values{}; std::uint32_t resets[4][16]{}; ExternalPower external; };

@@ -70,6 +70,7 @@ struct BrowserChannel {
   std::uint16_t offset_or_token=0;
   std::uint8_t filter=0;
   bool query_in_flight=false;
+  diagnostics::BrowserDiagnostic diagnostic{};
 } browser_channel;
 
 void publish_full_control(const FullControlSnapshot &next) {
@@ -168,6 +169,14 @@ void publish_browser(const rtcp_client::wire::BrowserPage &source,
   if(!connected||!supported){next={};next.connected=connected;next.supported=supported;
     browser_channel.observed_sequence=0;browser_channel.query_in_flight=false;
   }else if(source.sequence&&source.sequence!=browser_channel.observed_sequence){
+    diagnostics::BrowserDiagnostic::increment(browser_channel.diagnostic.counters[2]);
+    if(browser_channel.query_in_flight&&browser_channel.requested_generation&&
+       source.generation!=browser_channel.requested_generation){
+      diagnostics::BrowserDiagnostic::increment(browser_channel.diagnostic.counters[4]);
+      browser_channel.diagnostic.mismatch_generation_low16=std::uint16_t(source.generation);
+      browser_channel.diagnostic.mismatch_revision_low16=std::uint16_t(source.revision);
+    }
+    diagnostics::BrowserDiagnostic::increment(browser_channel.diagnostic.counters[3]);
     next.stage=static_cast<BrowserStage>(source.stage);
     next.status=static_cast<BrowserStatus>(source.status);next.last_error=source.error;
     next.item_count=source.item_count;next.count=source.count;next.start=source.start;
@@ -308,8 +317,8 @@ void task(void *) {
       unsigned qr;portENTER_CRITICAL(&mux);qr=unsigned(channel.rejected);portEXIT_CRITICAL(&mux);
       auto q=s->boundary.inbox.counts();const auto &c=s->boundary.counts;
       std::uint64_t transitions,detents,invalid,positive,negative,encoder_rejects;
-      std::uint32_t sample_last_ms,sample_max_ms;std::uint8_t last_delta;Channel local;
-      portENTER_CRITICAL(&mux);transitions=encoder_transitions;detents=encoder_detents;invalid=encoder_invalid;positive=encoder_positive;negative=encoder_negative;encoder_rejects=encoder_rejected;sample_last_ms=encoder_sample_last_ms;sample_max_ms=encoder_sample_max_ms;last_delta=encoder_last_delta;local=channel;portEXIT_CRITICAL(&mux);
+      std::uint32_t sample_last_ms,sample_max_ms;std::uint8_t last_delta;Channel local;diagnostics::BrowserDiagnostic browser_diagnostic;
+      portENTER_CRITICAL(&mux);transitions=encoder_transitions;detents=encoder_detents;invalid=encoder_invalid;positive=encoder_positive;negative=encoder_negative;encoder_rejects=encoder_rejected;sample_last_ms=encoder_sample_last_ms;sample_max_ms=encoder_sample_max_ms;last_delta=encoder_last_delta;local=channel;browser_diagnostic=browser_channel.diagnostic;portEXIT_CRITICAL(&mux);
       const auto &rd=s->rtcp.diagnostic();const auto &rc=rd.counters;
       d.values={ds.session,ds.capability_revision,s->dispatches(),control::Memory::used,allocations,frees,failures,corrupt||live!=control::Memory::used,xTaskGetCurrentTaskHandle()==owner,qr,uxTaskGetStackHighWaterMark(nullptr),internal.total_free_bytes,internal.minimum_free_bytes,internal.largest_free_block,external.total_free_bytes,external.minimum_free_bytes,external.largest_free_block,q.posted,q.rejected,q.overflow,q.busy,c.applied,c.stale,c.invalid,c.refused,c.lifecycle,c.discarded};
       const auto u32=[](std::uint64_t value){return std::uint32_t(value>UINT32_MAX?UINT32_MAX:value);};
@@ -320,6 +329,7 @@ void task(void *) {
       d.rtcp.set_stage_failure(std::uint8_t(rd.stage),std::uint8_t(rd.failure));d.rtcp.error=std::int16_t(rd.error);d.rtcp.server_hello_bytes=std::uint8_t(rd.server_hello_bytes);d.rtcp.close_reason=std::uint8_t(rd.close_reason);d.rtcp.close_count=std::uint8_t(rd.close_count>255?255:rd.close_count);
       d.rtcp.last_poll_32ms=q32(rd.last_poll_interval_ms);d.rtcp.max_poll_32ms=q32(rd.max_poll_interval_ms);d.rtcp.timeout_elapsed_32ms=q32(rd.last_response_timeout_elapsed_ms);d.rtcp.timeout_state=rd.last_response_timeout_state;d.rtcp.timeout_queued_bytes=rd.last_response_timeout_queued_bytes<0?UINT16_MAX:std::uint16_t(rd.last_response_timeout_queued_bytes>=UINT16_MAX?UINT16_MAX-1:rd.last_response_timeout_queued_bytes);d.rtcp.timeout_unread_count=std::uint8_t(rd.response_timeouts_with_unread>255?255:rd.response_timeouts_with_unread);
       for(std::size_t i=0;i<d.rtcp.counters.size();++i)d.rtcp.counters[i]=std::uint8_t(rc[i]>255?255:rc[i]);
+      d.browser=browser_diagnostic;
       diagnostics::publish(d);
       if(ds.session!=diagnostic_session || ds.capability_revision!=diagnostic_revision)diagnostics::event(time,diagnostics::Event::CORE,unsigned(ds.session));
       diagnostic_time=time;diagnostic_session=ds.session;diagnostic_revision=ds.capability_revision;
@@ -428,6 +438,8 @@ void task(void *) {
       const auto &browser_result=s->rtcp.result();
       if(browser_channel.pending_request&&browser_result.request==browser_channel.pending_request&&
          browser_result.request!=browser_channel.handled_result){
+        if(browser_channel.view.requested_operation==BrowserOperation::START)
+          diagnostics::BrowserDiagnostic::increment(browser_channel.diagnostic.counters[0]);
         browser_channel.handled_result=browser_result.request;browser_channel.pending_request=0;
         browser_channel.view.command_pending=false;browser_channel.view.result_present=true;
         browser_channel.view.result_accepted=browser_result.accepted;
@@ -614,7 +626,9 @@ void task(void *) {
       }
       portENTER_CRITICAL(&mux);
       if(sent&&browser_channel.request==browser_request){browser_channel.request=BrowserChannel::Request::NONE;
-        if(browser_request==BrowserChannel::Request::QUERY)browser_channel.query_in_flight=true;else browser_channel.pending_request=request;
+        if(browser_request==BrowserChannel::Request::QUERY){browser_channel.query_in_flight=true;
+          diagnostics::BrowserDiagnostic::increment(browser_channel.diagnostic.counters[1]);}
+        else browser_channel.pending_request=request;
         browser_channel.view.query_pending=browser_channel.query_in_flight;
         browser_channel.view.command_pending=browser_channel.pending_request!=0;
         if(browser_channel.generation!=UINT64_MAX)++browser_channel.generation;}
@@ -813,7 +827,8 @@ bool request_browser_start(){
     catalog_channel.request==CatalogChannel::Request::NONE&&!catalog_channel.pending_request&&!full_control.requested&&!full_control.pending_request;
   if(accepted){browser_channel.request=BrowserChannel::Request::COMMAND;browser_channel.operation=BrowserOperation::START;
     browser_channel.offset_or_token=0;browser_channel.requested_generation=0;browser_channel.requested_revision=0;
-    browser_channel.view.command_pending=true;browser_channel.view.result_present=false;++browser_channel.generation;}
+    browser_channel.view.command_pending=true;browser_channel.view.result_present=false;
+    browser_channel.view.requested_operation=BrowserOperation::START;++browser_channel.generation;}
   portEXIT_CRITICAL(&mux);return accepted;
 }
 bool request_browser_page(BrowserStage stage,std::uint16_t offset,std::uint8_t filter,std::uint64_t generation){
@@ -837,6 +852,12 @@ bool request_browser_action(BrowserOperation operation,std::uint16_t token,std::
     browser_channel.view.command_pending=true;browser_channel.view.result_present=false;
     browser_channel.view.requested_operation=operation;browser_channel.view.requested_token=token;++browser_channel.generation;}
   portEXIT_CRITICAL(&mux);return accepted;
+}
+void browser_ui_diagnostic(std::uint8_t state,BrowserOperation pending_operation){
+  portENTER_CRITICAL(&mux);
+  browser_channel.diagnostic.ui_state=state;
+  browser_channel.diagnostic.pending_operation=std::uint8_t(pending_operation);
+  portEXIT_CRITICAL(&mux);
 }
 void start() {
   if (started)

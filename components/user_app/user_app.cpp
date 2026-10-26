@@ -159,6 +159,9 @@ static void tuner_control_close()
 	tuner_control.awaiting_playback = false;
 	tuner_control.playback_confirmation.clear();
 	tuner_control.browser_session = tuner_control.browser_revision = 0;
+	control_home::browser_ui_diagnostic(
+		static_cast<std::uint8_t>(control_home::navigation::Page::HOME),
+		control_home::BrowserOperation::START);
 	lv_obj_add_flag(tuner_control.popup, LV_OBJ_FLAG_HIDDEN);
 }
 
@@ -596,6 +599,9 @@ static void tuner_control_apply_browser()
 
 static void tuner_control_refresh(lv_timer_t *)
 {
+	control_home::browser_ui_diagnostic(
+		static_cast<std::uint8_t>(tuner_control.navigation.page),
+		tuner_control.pending_browser_operation);
 	const bool commands_allowed = power_management::commands_allowed();
 	if (tuner_control.visible && !tuner_control.last_commands_allowed && commands_allowed)
 		tuner_control_close(); // Wake always resumes at HOME; no submenu replay.

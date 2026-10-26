@@ -135,5 +135,6 @@ bool request_browser_page(BrowserStage stage,std::uint16_t offset,
                           std::uint8_t filter,std::uint64_t generation);
 bool request_browser_action(BrowserOperation operation,std::uint16_t token,
                             std::uint64_t generation,std::uint64_t revision);
+void browser_ui_diagnostic(std::uint8_t state, BrowserOperation pending_operation);
 
 }  // namespace control_home
