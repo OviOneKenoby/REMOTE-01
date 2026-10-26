@@ -4,26 +4,36 @@ This record tracks implementation against the binding
 [owner-approved specification](REMOTE_FULL_CONTROL_SPEC.md). It describes
 engineering state; it does not replace or relax the specification.
 
+The ordered owner-executable hardware procedure is
+[`FULL_CONTROL_HARDWARE_VALIDATION.md`](FULL_CONTROL_HARDWARE_VALIDATION.md).
+Its checkboxes are intentionally unmarked until physical evidence is recorded.
+
 ## Baselines
 
 - REMOTE branch: `remote/btx-1.0-implementation`
 - Initial verified REMOTE HEAD: `ea7ae801803f7285e9b3d1549080cc3035087595`
-- Installed REMOTE implementation: `596cb71be867e2b5ff6eb3f6c0dde52d6dd8a770`
+- Previous REMOTE rollback implementation: `596cb71be867e2b5ff6eb3f6c0dde52d6dd8a770`
 - TUNER branch: `tuner/btx-tls-psram-remediation`
 - Initial verified TUNER HEAD: `39a3705b2c9a85824cf995782cd44abee3a1408a`
-- Installed TUNER implementation: `dbf9896876a7fe8c9b421bb1608dc9c2782e9cfe`
-- No hardware access, flash, NVS change, push, merge, or release is part of
-  this offline project.
+- Previous TUNER rollback implementation: `dbf9896876a7fe8c9b421bb1608dc9c2782e9cfe`
+- Current Full Control applications were installed application-only and
+  independently read back on 2026-10-26: REMOTE source `fdcbdac`, 2,606,192
+  bytes, SHA-256
+  `dc80ba560a3327a069c911de0af31d20eeece77d8f7681ab4d54cbce3ed1c270`;
+  TUNER source `e51e39d`, 2,127,616 bytes, SHA-256
+  `4d68d01fd3ccaffbd463c6ff310e54d16bb42d2e9e102426384cf1d4b63e8e6d`.
+  Full raw rollback backups are preserved on `D:`. Installation/readback is
+  PASS; functional hardware validation remains NOT TESTED.
 
 ## Milestone matrix
 
 | # | Milestone | Software | Hardware | Remaining work |
 | --- | --- | --- | --- | --- |
-| 1 | Source switching | PASS; TUNER `5d10615`, REMOTE `9293a99` | NOT TESTED | Hardware install/Radio-Bluetooth validation separately authorized. |
+| 1 | Source switching | PASS; TUNER `5d10615`, REMOTE `9293a99` | NOT TESTED | Run the Radio/Bluetooth checks in `FULL_CONTROL_HARDWARE_VALIDATION.md`. |
 | 2 | Read-only canonical menu/state projection | PASS; bounded TUNER-owned menu projection is rendered as read-only status | NOT TESTED | Hardware rendering/physical-priority validation. |
 | 3 | Semantic navigation | PASS for the safe local REMOTE navigation model; no raw TUNER input injection | NOT TESTED | Hardware touch, BACK/EXIT, sleep/wake and simultaneous-control validation. |
 | 4 | Saved/Favorites/Recent | PASS offline; bounded queries, play, delete confirmation, add-favorite, paging, HOME shortcut and gestures implemented | NOT TESTED | Hardware persistence, playback-confirmation and physical-priority validation. |
-| 5 | Radio Browser | PASS offline; bounded cooperative TUNER service and complete REMOTE flow implemented | NOT TESTED | Install TUNER first, then REMOTE, and perform the bounded hardware matrix below. |
+| 5 | Radio Browser | PASS offline; bounded cooperative TUNER service and complete REMOTE flow implemented | NOT TESTED | Execute `FULL_CONTROL_HARDWARE_VALIDATION.md`; do not infer hardware behavior from installation/readback. |
 | 6 | UI/lifecycle | PASS offline for all approved flows | NOT TESTED | Touch, cancellation, disconnect, sleep/wake and simultaneous physical-control validation. |
 | 7 | Final offline verification | IN PROGRESS; Milestone 5 focused tests and both production builds PASS | N/A | Remaining Full Control milestones and complete hardware acceptance. |
 
@@ -286,32 +296,33 @@ Production builds from the implementation commits:
   static RAM 61,052 / 327,680 bytes, linked flash 2,605,693 / 8,388,608
   bytes, and 5,782,416 bytes exact-image slot headroom.
 
-This is an offline software checkpoint. HTTPS latency, runtime internal/DMA
-headroom, PSRAM low-water marks, RTCP/audio coexistence and all physical UX
-remain hardware-pending; no device was accessed.
+At the Milestone 5 build checkpoint this was offline-only: HTTPS latency,
+runtime internal/DMA headroom, PSRAM low-water marks, RTCP/audio coexistence
+and all physical UX remained hardware-pending, and no device had been accessed.
 
 ## Known limitations and risk gates
 
-- No Full-Control feature has been installed or hardware-tested.
+- Both Full-Control applications are installed with exact readback PASS, but no
+  Full-Control functional hardware test has been credited yet.
 - Saved/Favorites/Recent and Radio Browser are implemented and offline-tested
-  but not installed or hardware-validated.
+  and installed, but remain hardware-unvalidated.
 - Runtime DMA headroom cannot be established from static build figures.
 - Existing intermittent REMOTE QMI8658 motion-wake initialization remains a
   separate known limitation and is not silently folded into this project.
 - Existing dependency warnings in the TUNER build are historical; the
   Full-Control sources compile with their configured warning policy.
 
-## Separately gated hardware plan and rollback
+## Hardware-validation plan and rollback
 
-These images are not authorized for installation by this offline task. If the
-owner later authorizes Full Control commissioning:
+Application-only installation and exact readback are complete. Functional
+acceptance must follow `FULL_CONTROL_HARDWARE_VALIDATION.md`:
 
-1. Reverify device identity, partition layout, each candidate hash, and all
-   local/external rollback copies without altering either device.
-2. Install TUNER first, application-only, then perform an independent exact-span
-   readback. With the installed REMOTE, verify legacy D-009/BTX, volume, Radio,
-   Bluetooth, HTTP and RTCP compatibility before proceeding.
-3. Install REMOTE application-only and verify exact readback. Test source
+1. Preserve the verified application identities, full backups and deployment
+   report without altering either device.
+2. First verify TUNER boot, saved-station playback and installed physical
+   controls; this gate was deferred by explicit owner instruction during
+   deployment and remains pending.
+3. Test source
    switching, independent navigation, read-only physical-menu projection,
    Saved/Favorites/Recent paging, and the complete Country/Name/Genre/Results
    Browser flow including empty/error states, page boundaries, play and
@@ -325,10 +336,10 @@ owner later authorizes Full Control commissioning:
 5. Stop on any authentication, audio, memory, persistence, UI or no-replay
    regression. Never auto-retry a write or mutation.
 
-The preserved installed REMOTE baseline is implementation `596cb71`,
+The preserved REMOTE rollback baseline is implementation `596cb71`,
 2,583,008 bytes, SHA-256
 `fad87bb2f50142f3758945c5a2276a2535008aec4f32a5ec29f021faa95f3b3f`, plus
-the verified full 16 MiB backup. The preserved installed TUNER baseline is
+the verified full 16 MiB backup. The preserved TUNER rollback baseline is
 implementation `dbf9896`, 2,072,416 bytes, SHA-256
 `6f02cdfd1576831a5d4a40f54eff88dcc3960fcdf72545d0909b0525cbceabf6`.
 Rollback, if separately authorized, restores REMOTE first and then TUNER so an
