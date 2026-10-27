@@ -8,6 +8,39 @@ The ordered owner-executable hardware procedure is
 [`FULL_CONTROL_HARDWARE_VALIDATION.md`](FULL_CONTROL_HARDWARE_VALIDATION.md).
 Its checkboxes are intentionally unmarked until physical evidence is recorded.
 
+## 2026-10-27 targeted-correction checkpoint
+
+Classification and evidence for the post-deployment defects:
+
+| Issue | Status | Offline result | Hardware requirement |
+| --- | --- | --- | --- |
+| FC-RB-02 Browser touch-through | **FIXED OFFLINE - hardware retest pending** | Browser `list_panel` alone is pointer-intercepting; executable/policy coverage verifies blank-area isolation and visible controls. | Exercise loading, error, empty and results overlays while ACTIVE; confirm no covered menu activation. |
+| FC-UI-02 source-switch HOME return | **FIXED OFFLINE - hardware retest pending** | Bounded `SourceConfirmation` handles ACK/state ordering, rejection, wrong/stale state, expiry and reconnect without replay; HOME is armed only by authoritative success. | Switch both directions and verify confirmed feedback followed by HOME after three seconds. |
+| FC-RB-01 whole-job deadline | **FIXED OFFLINE - hardware retest pending** | One 30-second deadline now spans both mirrors and cannot be extended by fallback. | Verify one physical Browser job respects the bound. |
+| FC-RB-01 HTTPS `error 8` cause | **DIAGNOSTIC ONLY - more evidence required** | TUNER retains first/final mirror, transport stage, `esp_err_t`, HTTP status, elapsed time and deadline result. Pinned client API has no safe TLS last-error accessor. | Capture diagnostics before and after exactly one Browser attempt. Do not call Browser fixed until retrieval succeeds. |
+| FC-FAV-02 blank disconnect popup | **DIAGNOSTIC ONLY - more evidence required** | REMOTE retains popup reason/lifecycle/session/close reason/command elapsed time; TUNER retains source/catalog/Browser response last/max duration. Behavior is not suppressed. | Reproduce one Favorite PLAY and correlate both endpoints. |
+| REMOTE `/api/status` 503 | **FIXED OFFLINE - hardware retest pending** | Worst-case serialization proved the old fixed buffer overflow. The bounded response area is 6,384 bytes inside unchanged 8,192-byte storage; 503 categories are distinct. | Confirm normal and long-running `/api/status`; if 503 occurs, retain its explicit body. |
+| Silent audio report | **UNCHANGED - deliberately outside scope** | Controlled Pause/Resume had not reproduced it; audio/I2S paths were untouched. | Report only if reproducible. |
+| `utf8_snapshot_bounds` | **UNRESOLVED - pre-existing unrelated test** | Reproduced before these corrections; broad runner stops there. | Track separately; no speculative change in this checkpoint. |
+
+Source/build checkpoints:
+
+- REMOTE implementation: `42c31034c64235d0625f226978e6d8900dc18195`.
+- TUNER implementation: `67f610a383dfca3b51f80ee4d734375578c197ed`.
+- REMOTE `remote01`: BIN 2,608,800 bytes, SHA-256
+  `99fe856562d62fbd138e7529080dc00baf65c647ce11cd8419b1fc63d070e8b9`;
+  ELF 20,025,164 bytes, SHA-256
+  `ef0a9553cc90d887b51099e598eb2b90b85d141525eccfc469829234f489c094`;
+  static RAM 61,180 bytes; exact-image slot headroom 5,779,808 bytes.
+- TUNER `esp32-lwip-psram`: BIN 2,130,896 bytes, SHA-256
+  `6a89b8388393ac2a9c962c6bcc9e3ad3ee980f6a42c9e73bf3166df54e9d4756`;
+  ELF 31,186,376 bytes, SHA-256
+  `5f64eef42f9b0d464ec7327af27673cd2c9d64d094a396882b97249effaba8d2`;
+  static RAM 80,032 bytes; exact-image slot headroom 1,014,832 bytes.
+
+No hardware was accessed. Both candidates require separate installation
+authorization and the focused retests above.
+
 ## Baselines
 
 - REMOTE branch: `remote/btx-1.0-implementation`

@@ -4,6 +4,37 @@ Status: **procedure ready; all results initially NOT TESTED**
 Firmware family: Full Control 1.3 (`+fc4`)
 Date prepared: 2026-10-26
 
+## Offline candidate checkpoint - 2026-10-27 (NOT INSTALLED)
+
+The targeted-correction candidates have passed focused tests and both production
+builds, but no device was accessed. Existing hardware observations below remain
+historical evidence for the installed 2026-10-26 images. Do not mark a defect
+closed on hardware until the corresponding retest passes.
+
+- [ ] **Overlay isolation:** keep REMOTE ACTIVE; open Browser loading, error,
+  empty and result states; touch blank panel areas. No covered TUNER CONTROL,
+  Favorites, Saved or Recent control may activate. Visible rows, scrolling,
+  BACK and EXIT must work.
+- [ ] **Source authoritative completion:** switch Radio -> Bluetooth and
+  Bluetooth -> Radio once each. Exactly one mutation is sent per selection;
+  success appears only after authoritative source confirmation and HOME returns
+  three seconds later. Disconnect/reconnect must not replay the mutation.
+- [ ] **Single Browser diagnosis:** capture TUNER diagnostics, make exactly one
+  Browser attempt, then capture again. Preserve active/last mirror, transport
+  stage, first failure stage/error/status, final error/status, elapsed time,
+  deadline-expired flag, generation, cancellation and last failure category.
+  TLS detail may be unavailable in this pinned client API. Do not retry.
+- [ ] **Favorite popup correlation:** select one Favorite, then retain REMOTE
+  popup reason/lifecycle/session/close-reason/elapsed events and TUNER catalog
+  response last/max timing. The popup must render its full disconnect text and
+  OK button if the transport actually disconnects.
+- [ ] **REMOTE status endpoint:** read `/api/status` in normal operation and at
+  long uptime. A successful response must be complete valid JSON. Any 503 body
+  must say storage unavailable, busy or serialization overflow; preserve it.
+
+The separately tracked `utf8_snapshot_bounds` host assertion is not evidence of
+any of these runtime defects and remains unresolved outside this checkpoint.
+
 ## Validation run — 2026-10-26 (in progress)
 
 - Smoke A1: PASS. TUNER build `e51e39db9ab4`; Wi-Fi connected at

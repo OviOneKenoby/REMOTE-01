@@ -1,5 +1,51 @@
 # Changelog
 
+## 2026-10-27 - Full Control 1.3 targeted corrections offline verified
+
+Corrected two confirmed REMOTE defects. The Radio Browser list overlay now
+intercepts pointer input locally, so visually covered TUNER CONTROL rows cannot
+receive blank-area touches while visible Browser rows, scrolling, BACK and EXIT
+remain interactive. Source selection now retains a bounded confirmation fence
+and completes only after both command acceptance and a fresh authoritative
+snapshot of the requested source (in either arrival order). Reconnect performs
+read-only reconciliation and never replays the source mutation; confirmed
+success retains the approved three-second HOME return.
+
+Added bounded REMOTE popup lifecycle evidence (reason, lifecycle transition,
+session/close reason and elapsed time from the relevant command), and bounded
+TUNER response-duration measurements for source, catalog and Browser commands.
+These are diagnostic-only and do not suppress the observed Favorites disconnect
+popup. TUNER Browser diagnostics now retain the first HTTPS transport failure,
+mirror/stage/error/status, final result, elapsed time and whether the single
+whole-job 30-second deadline expired. The pinned Arduino/ESP-IDF client API does
+not safely expose a TLS last-error category, so TLS-specific fields remain
+explicitly unavailable rather than guessed. The 250 ms transport timeout,
+certificate bundle, mirror set, two-mirror policy and protocol are unchanged.
+
+The Browser mirror deadline defect is fixed offline: one absolute job deadline
+is created once and is not restarted on fallback. The original `error 8`
+hardware cause remains diagnostic-only until one controlled ESP32 attempt
+captures the new fields.
+
+REMOTE `/api/status` 503 serialization overflow was reproduced at the former
+3,056-byte and intermediate 4,080-byte capacities using maximum-width counters
+and long uptime. Fixed diagnostic storage remains exactly 8,192 bytes by
+shrinking the event entry from 128 to 24 bytes and assigning a verified bounded
+6,384-byte response area. HTTP 503 bodies now distinguish storage unavailable,
+zero-wait lock contention and serialization overflow; JSON is never truncated.
+
+Focused Full Control, overlay, source-confirmation, Browser, popup, diagnostic,
+D-009, BTX, HOME, sleep/wake, volume and ownership tests pass. The broad runner
+passed Core 69/69, Profile 6/6, HOME 42/42 and RTCP ownership 4/4 before stopping
+at the separately tracked pre-existing `utf8_snapshot_bounds` assertion; no
+related code changed. Clean `remote01` production build at source
+`42c31034c64235d0625f226978e6d8900dc18195` passes: BIN 2,608,800 bytes,
+SHA-256 `99fe856562d62fbd138e7529080dc00baf65c647ce11cd8419b1fc63d070e8b9`;
+ELF 20,025,164 bytes, SHA-256
+`ef0a9553cc90d887b51099e598eb2b90b85d141525eccfc469829234f489c094`;
+61,180 bytes static RAM and 5,779,808 bytes exact-image slot headroom.
+This checkpoint is offline only; no device was accessed or flashed.
+
 ## 2026-10-26 - Full Control targeted popup/reconnect fixes and Browser diagnostics
 
 Corrected two hardware-confirmed REMOTE defects without changing the approved
