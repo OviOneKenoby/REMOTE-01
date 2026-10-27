@@ -8,6 +8,37 @@ The ordered owner-executable hardware procedure is
 [`FULL_CONTROL_HARDWARE_VALIDATION.md`](FULL_CONTROL_HARDWARE_VALIDATION.md).
 Its checkboxes are intentionally unmarked until physical evidence is recorded.
 
+## 2026-10-28 stability-correction checkpoint
+
+| Item | Offline status | Hardware requirement |
+| --- | --- | --- |
+| FC-RTCP-01 retained socket-close evidence | PASS, diagnostic-only | Capture both four-entry rings during one reproduced disconnect; do not call transport fixed without correlated evidence. |
+| FC-FAV-02 deferred station startup | PASS offline | Verify bounded admission, physical TUNER preemption, exactly-one playback and no replay after disconnect/revision change. |
+| FC-BT-01 AVRCP playback authority | PASS offline on TUNER | Pause/resume from phone and REMOTE; verify state and button across reconnect/source transitions. |
+| FC-RB-01 TLS failure evidence | PASS, diagnostic-only | Reproduce one Browser request and retain first/final ESP-TLS error categories; HTTPS retrieval is not declared fixed. |
+
+The optional capability is now version 1.4, revision 5, identity `+fc5`.
+Feature bit 32 explicitly advertises deferred catalog PLAY. Older peers fail
+closed for this operation; RTCP security and existing IDs remain compatible.
+
+Final offline identities:
+
+- REMOTE source `2ff3c9b0a0cfa07b2bd7282b1e41ef10f7b4c5c7`; BIN
+  2,610,752 bytes, SHA-256
+  `81986adf59e75b6df1f9af8ca6397c15ca1deb0cccc240146bc68b0e03a9b8dd`;
+  ELF SHA-256
+  `fa76d949cd9e7933f7e2783dbf9bffc5cba0337404864cadc8c800c2a151de20`;
+  static RAM 61,180 bytes; exact-image headroom 5,777,856 bytes; app version `2ff3c9b`.
+- TUNER source `014185ab1e2e25ce590dc67833350a4de98fc77e`; BIN
+  2,135,376 bytes, SHA-256
+  `c33ec3b137f2ba21b8dbdead00dd962efe21bd5b343273f4c50d62ed133e273f`;
+  ELF SHA-256
+  `16f3659d88a60065df00a7c687d841fc2f0d3eae07f7432e71cee656bdb1d1e4`;
+  static RAM 80,784 bytes; exact-image headroom 1,010,352 bytes; build ID `014185ab1e2e`.
+
+This checkpoint is offline only. Installation and physical acceptance remain
+pending separate authorization.
+
 ## 2026-10-27 targeted-correction checkpoint
 
 Classification and evidence for the post-deployment defects:

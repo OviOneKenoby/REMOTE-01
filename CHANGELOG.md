@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-10-28 - Full Control 1.3 stability corrections offline verified
+
+Added a four-entry, fixed-size RTCP close-history ring exposed by
+`/api/rtcp-history`. Each retained REMOTE record includes uptime, session and
+network generation, client state, close reason, socket error, request identity,
+awaited response type and pending-response state. Immediate socket errors are
+copied before cleanup. This is diagnostic instrumentation; it does not claim
+that the remaining transport instability is fixed.
+
+Full Control capability negotiation now uses `+fc5` / protocol 1.4 revision 5
+with the deferred-catalog-play feature bit. REMOTE sends catalog PLAY only when
+the TUNER advertises bounded deferred admission. Authentication, framing,
+timeouts, reconnect policy, revision fencing, no-replay behavior and volume
+semantics are unchanged.
+
+Focused RTCP diagnostics (15/15), Full Control (50 assertions) and diagnostics
+schema (9/9; 9,102 assertions; 1,000 cycles) pass. Clean `remote01` production
+build at source `2ff3c9b0a0cfa07b2bd7282b1e41ef10f7b4c5c7` passes: BIN
+2,610,752 bytes, SHA-256
+`81986adf59e75b6df1f9af8ca6397c15ca1deb0cccc240146bc68b0e03a9b8dd`;
+ELF 20,055,600 bytes, SHA-256
+`fa76d949cd9e7933f7e2783dbf9bffc5cba0337404864cadc8c800c2a151de20`;
+61,180 bytes static RAM, 2,610,245 bytes program usage and 5,777,856 bytes
+exact-image partition headroom. Embedded application version is `2ff3c9b`. No hardware was
+accessed or flashed. The separately tracked pre-existing
+`utf8_snapshot_bounds` issue remains unrelated.
+
 ## 2026-10-27 - Full Control 1.3 targeted corrections offline verified
 
 Corrected two confirmed REMOTE defects. The Radio Browser list overlay now

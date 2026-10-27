@@ -1,7 +1,26 @@
 # Full Control 1.3 Hardware Validation
 
 Status: **procedure ready; all results initially NOT TESTED**
-Firmware family: Full Control 1.3 (`+fc4`)
+Firmware family: Full Control 1.3 (`+fc5` for the 2026-10-28 stability candidate)
+
+## Offline stability candidate - 2026-10-28 (NOT INSTALLED)
+
+The new pair adds retained RTCP close evidence, revision-fenced deferred
+station startup, authoritative Bluetooth AVRCP state and bounded Radio Browser
+ESP-TLS error capture. Builds and focused regressions pass; none is hardware
+validation.
+
+- [ ] Correlate both four-entry close rings during one disconnect or a
+  five-minute ACTIVE interval.
+- [ ] Start one saved/favorite station and verify bounded admission, exactly one
+  eventual start, physical-control preemption and no replay.
+- [ ] Pause/resume Bluetooth from phone and REMOTE and verify authoritative
+  state follows AVRCP.
+- [ ] Perform one Radio Browser request and preserve first/final TLS categories
+  if it fails.
+
+RTCP stability and Browser HTTPS remain unresolved until physical evidence
+passes; diagnostic fields alone are not functional fixes.
 Date prepared: 2026-10-26
 
 ## Offline candidate checkpoint - 2026-10-27 (NOT INSTALLED)
