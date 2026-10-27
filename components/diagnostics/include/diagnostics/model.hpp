@@ -5,7 +5,7 @@
 #include <string_view>
 namespace diagnostics {
 using U64 = std::uint64_t;
-inline constexpr std::size_t response_bytes=3056;
+inline constexpr std::size_t response_bytes=6384;
 struct RtcpDiagnostic {
   std::array<std::uint8_t,10> counters{};
   std::int16_t error=0;
@@ -55,9 +55,9 @@ struct Power { U64 time=0; std::array<U64,23> values{}; std::uint32_t resets[4][
 struct Network { U64 time=0; std::array<U64,16> values{}; char ip[16]{}, ssid[33]{}; std::int8_t rssi=0; bool http_dns_off=false; };
 struct Snapshots { Core core; Power power; Network network; };
 static_assert(sizeof(Snapshots)<=1024);
-enum class Event : unsigned { BOOT, NETWORK, NETWORK_ERROR, POWER, POWER_ERROR, CORE, CORE_REFUSED, REBOOT_REQUEST, REBOOT_REFUSED, REBOOT_EXECUTE, VOLUME_FAILURE };
-struct Entry { U64 sequence=0,time=0; Event event{}; unsigned detail=0; std::array<unsigned char,104> reserved{}; };
-static_assert(sizeof(Entry)==128);
+enum class Event : unsigned { BOOT, NETWORK, NETWORK_ERROR, POWER, POWER_ERROR, CORE, CORE_REFUSED, REBOOT_REQUEST, REBOOT_REFUSED, REBOOT_EXECUTE, VOLUME_FAILURE, UI_POPUP_OPEN, UI_POPUP_CLOSE, UI_POPUP_CONTEXT };
+struct Entry { U64 sequence=0,time=0; Event event{}; unsigned detail=0; };
+static_assert(sizeof(Entry)==24);
 struct Ring {
   std::array<Entry,32> slots{}; U64 next=1, overflow=0;
   void push(U64 time, Event event, unsigned detail);

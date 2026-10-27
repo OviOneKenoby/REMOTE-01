@@ -43,7 +43,7 @@ bool allowed_socket(int fd) {
   return !getsockname(fd,reinterpret_cast<sockaddr*>(&local),&ln)&&!getpeername(fd,reinterpret_cast<sockaddr*>(&peer),&pn)&&decode(local,ln,l)&&decode(peer,pn,p)&&socket_allowed(a,l,p)&&ctl.enabled.load();
 }
 esp_err_t open_socket(httpd_handle_t,int fd) {margin();if(allowed_socket(fd))return ESP_OK;++ctl.failures;return ESP_FAIL;}
-esp_err_t refuse(httpd_req_t *r,const char *status) {++ctl.failures;httpd_resp_set_status(r,status);httpd_resp_set_hdr(r,"Connection","close");httpd_resp_sendstr(r,"Diagnostics unavailable");return ESP_FAIL;}
+esp_err_t refuse(httpd_req_t *r,const char *status,const char *message="Diagnostics unavailable") {++ctl.failures;httpd_resp_set_status(r,status);httpd_resp_set_hdr(r,"Connection","close");httpd_resp_sendstr(r,message);return ESP_FAIL;}
 bool request_allowed(httpd_req_t*r) {
   margin();char host[32]{};
   return route(r->uri,r->method==HTTP_GET,r->content_len)!=Route::DENY&&allowed_socket(httpd_req_to_sockfd(r))&&
@@ -57,10 +57,10 @@ constexpr char page[]=R"HTML(<!doctype html><meta name="viewport" content="width
 esp_err_t home(httpd_req_t*r) {if(!request_allowed(r)||std::strcmp(r->uri,"/"))return refuse(r,"403 Forbidden");headers(r,"text/html");return httpd_resp_send(r,page,sizeof page-1);}
 esp_err_t status(httpd_req_t*r) {
   if(!request_allowed(r)||std::strcmp(r->uri,"/api/status"))return refuse(r,"403 Forbidden");
-  auto*s=ctl.storage.load();Snapshots copy{};if(!s||!take())return refuse(r,"503 Service Unavailable");copy=s->copies;give();
+  auto*s=ctl.storage.load();Snapshots copy{};if(!s)return refuse(r,"503 Service Unavailable","Diagnostics storage unavailable");if(!take())return refuse(r,"503 Service Unavailable","Diagnostics busy");copy=s->copies;give();
   const auto*app=esp_app_get_description();char sha[65]{};constexpr char hex[]="0123456789abcdef";
   for(unsigned i=0;i<32;++i) {sha[2*i]=hex[app->app_elf_sha256[i]>>4];sha[2*i+1]=hex[app->app_elf_sha256[i]&15];}
-  if(!status_json(copy,time_now(),app->project_name,app->version,sha,esp_reset_reason(),s->response,sizeof s->response))return refuse(r,"503 Service Unavailable");
+  if(!status_json(copy,time_now(),app->project_name,app->version,sha,esp_reset_reason(),s->response,sizeof s->response))return refuse(r,"503 Service Unavailable","Diagnostics serialization overflow");
   headers(r,"application/json");return httpd_resp_sendstr(r,s->response);
 }
 esp_err_t events(httpd_req_t*r) {
