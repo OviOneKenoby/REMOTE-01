@@ -24,6 +24,9 @@ struct FullControlSnapshot {
   TunerSource source = TunerSource::UNKNOWN;
   TunerSource requested_source = TunerSource::UNKNOWN;
   SourceTransition transition = SourceTransition::STABLE;
+  std::uint8_t rtcp_close_reason = 0;
+  std::uint64_t command_id = 0;
+  std::uint64_t session = 0;
   std::uint64_t source_generation = 0;
 };
 

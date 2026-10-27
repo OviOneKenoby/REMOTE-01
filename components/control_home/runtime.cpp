@@ -83,6 +83,8 @@ void publish_full_control(const FullControlSnapshot &next) {
       old.last_error == next.last_error && old.source == next.source &&
       old.requested_source == next.requested_source &&
       old.transition == next.transition &&
+      old.rtcp_close_reason == next.rtcp_close_reason &&
+      old.command_id == next.command_id && old.session == next.session &&
       old.source_generation == next.source_generation) return;
   full_control.view = next;
   if (full_control.generation != UINT64_MAX) ++full_control.generation;
@@ -375,6 +377,8 @@ void task(void *) {
       next.transition = static_cast<SourceTransition>(source.transition);
       next.bluetooth_connected = source.bluetooth_connected;
       next.source_generation = source.generation;
+      next.session = s->snapshot().session;
+      next.rtcp_close_reason = s->rtcp.diagnostic().close_reason;
       portENTER_CRITICAL(&mux);
       next.command_pending = full_control.pending_request != 0 || full_control.requested;
       next.requested_source = full_control.pending_request || full_control.requested ||
@@ -384,6 +388,9 @@ void task(void *) {
       next.result_present = full_control.view.result_present;
       next.result_accepted = full_control.view.result_accepted;
       next.last_error = full_control.view.last_error;
+      next.command_id = full_control.pending_request
+                            ? full_control.pending_request
+                            : full_control.handled_result;
       if (!next.connected) {
         full_control.requested = false;
         full_control.pending_request = 0;

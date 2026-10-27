@@ -6,15 +6,18 @@
 #include "lcd_bl_pwm_bsp.h"
 #include "control_home/api.hpp"
 #include "control_home/catalog_confirmation.hpp"
+#include "control_home/source_confirmation.hpp"
 #include "control_home/full_control.hpp"
 #include "control_home/full_control_navigation.hpp"
 #include "power_management/api.hpp"
 #include "network_manager/presentation.hpp"
 #include "encoder_volume.hpp"
 #include "button_inputs.hpp"
+#include "diagnostics/api.hpp"
 #include "driver/gpio.h"
 #include "esp_timer.h"
 #include <atomic>
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 
@@ -49,6 +52,7 @@ struct TunerControlWidgets {
 	control_home::navigation::Gesture gestures[27]{};
 	control_home::BrowserSnapshot browser{};
 	control_home::CatalogPlaybackConfirmation playback_confirmation{};
+	control_home::SourceConfirmation source_confirmation{};
 	std::uint64_t generation = 0;
 	std::uint64_t catalog_generation = 0, browser_generation = 0, playback_generation = 0,
 	              menu_generation = 0;
@@ -66,7 +70,8 @@ struct TunerControlWidgets {
 	bool awaiting_action = false, awaiting_playback = false;
 	bool return_home_after_popup = false;
 	bool delete_confirmation = false, disconnect_popup = false;
-	bool source_result_handled = false;
+	std::uint32_t last_command_ms = 0;
+	std::uint8_t popup_reason = 0;
 	bool visible = false, last_commands_allowed = true;
 } tuner_control;
 
@@ -158,6 +163,7 @@ static void tuner_control_close()
 	tuner_control.awaiting_action = false;
 	tuner_control.awaiting_playback = false;
 	tuner_control.playback_confirmation.clear();
+	tuner_control.source_confirmation.clear();
 	tuner_control.browser_session = tuner_control.browser_revision = 0;
 	control_home::browser_ui_diagnostic(
 		static_cast<std::uint8_t>(control_home::navigation::Page::HOME),
@@ -165,8 +171,30 @@ static void tuner_control_close()
 	lv_obj_add_flag(tuner_control.popup, LV_OBJ_FLAG_HIDDEN);
 }
 
+enum : std::uint8_t {
+	POPUP_GENERAL = 0,
+	POPUP_SOURCE = 1,
+	POPUP_CATALOG = 2,
+	POPUP_BROWSER = 3,
+	POPUP_DISCONNECTED = 4,
+};
+
+static void popup_diagnostic(diagnostics::Event event, std::uint8_t reason)
+{
+	const auto now = std::uint64_t(esp_timer_get_time() / 1000);
+	const unsigned detail = unsigned(reason) |
+		(unsigned(tuner_control.state.rtcp_close_reason) << 8) |
+		(unsigned(tuner_control.state.session & 0xffffU) << 16);
+	diagnostics::event(now, event, detail);
+	const unsigned elapsed = tuner_control.last_command_ms
+		? unsigned(std::min<std::uint64_t>(UINT32_MAX, now - tuner_control.last_command_ms))
+		: UINT32_MAX;
+	diagnostics::event(now, diagnostics::Event::UI_POPUP_CONTEXT, elapsed);
+}
+
 static void tuner_control_popup(const char *text, bool busy,
-	                            bool confirm = false, bool ok = false)
+	                            bool confirm = false, bool ok = false,
+	                            std::uint8_t reason = POPUP_GENERAL)
 {
 	home_text(tuner_control.popup_text, text);
 	if (busy) lv_obj_clear_flag(tuner_control.spinner, LV_OBJ_FLAG_HIDDEN);
@@ -182,14 +210,19 @@ static void tuner_control_popup(const char *text, bool busy,
 	else lv_obj_add_flag(tuner_control.popup_ok, LV_OBJ_FLAG_HIDDEN);
 	lv_obj_clear_flag(tuner_control.popup, LV_OBJ_FLAG_HIDDEN);
 	lv_obj_move_foreground(tuner_control.popup);
+	tuner_control.popup_reason = reason;
+	popup_diagnostic(diagnostics::Event::UI_POPUP_OPEN, reason);
 }
 
 static void tuner_control_popup_hide()
 {
+	popup_diagnostic(diagnostics::Event::UI_POPUP_CLOSE,
+	                 tuner_control.popup_reason);
 	lv_obj_add_flag(tuner_control.popup, LV_OBJ_FLAG_HIDDEN);
 	tuner_control.delete_confirmation = false;
 	tuner_control.disconnect_popup = false;
 	tuner_control.popup_until = 0;
+	tuner_control.popup_reason = POPUP_GENERAL;
 }
 
 static const char *source_error(std::uint8_t error)
@@ -270,9 +303,13 @@ static void tuner_control_source_event(lv_event_t *event)
 		tuner_control_popup("TUNER unavailable", false);
 		return;
 	}
-	tuner_control.source_result_handled = false;
+	tuner_control.last_command_ms = lv_tick_get();
+	tuner_control.source_confirmation.start(target,
+		tuner_control.state.source_generation, tuner_control.playback.session,
+		tuner_control.last_command_ms);
 	tuner_control_popup(target == control_home::TunerSource::BLUETOOTH
-		? "Starting Bluetooth..." : "Switching to Radio...", true);
+		? "Starting Bluetooth..." : "Switching to Radio...", true,
+		false, false, POPUP_SOURCE);
 }
 
 static void tuner_control_open_event(lv_event_t *)
@@ -285,7 +322,8 @@ static void tuner_control_open_event(lv_event_t *)
 	lv_obj_move_foreground(tuner_control.view);
 	if (!tuner_control.state.connected) {
 		tuner_control.disconnect_popup = true;
-		tuner_control_popup("TUNER disconnected", false, false, true);
+		tuner_control_popup("TUNER disconnected", false, false, true,
+		                   POPUP_DISCONNECTED);
 	}
 }
 
@@ -350,8 +388,10 @@ static void tuner_control_open_browser()
 	tuner_control.browser_session=tuner_control.browser_revision=0;tuner_control_clear_rows();
 	home_text(tuner_control.list_title,"RADIO BROWSER");lv_obj_clear_flag(tuner_control.list_panel,LV_OBJ_FLAG_HIDDEN);
 	if(!control_home::request_browser_start()){tuner_control_popup("TUNER busy",false);return;}
+	tuner_control.last_command_ms = lv_tick_get();
 	tuner_control.pending_browser_operation=control_home::BrowserOperation::START;
-	tuner_control.awaiting_action=true;tuner_control_popup("Searching stations...",true);
+	tuner_control.awaiting_action=true;tuner_control_popup("Searching stations...",true,
+		false, false, POPUP_BROWSER);
 }
 
 static void tuner_control_open_catalog(control_home::CatalogCollection collection,
@@ -405,6 +445,7 @@ static void tuner_control_request_action(std::uint8_t row,
 		tuner_control_popup("TUNER busy", false);
 		return;
 	}
+	tuner_control.last_command_ms = lv_tick_get();
 	tuner_control.awaiting_action = true;
 	if (operation == control_home::CatalogOperation::PLAY) {
 		tuner_control.playback_confirmation.begin(
@@ -414,11 +455,12 @@ static void tuner_control_request_action(std::uint8_t row,
 		char message[72];
 		std::snprintf(message, sizeof message, "Tuning to %s...",
 		              tuner_control.row_names[row]);
-		tuner_control_popup(message, true);
+		tuner_control_popup(message, true, false, false, POPUP_CATALOG);
 	} else if (operation == control_home::CatalogOperation::REMOVE) {
-		tuner_control_popup("Deleting...", true);
+		tuner_control_popup("Deleting...", true, false, false, POPUP_CATALOG);
 	} else {
-		tuner_control_popup("Adding to Favorites...", true);
+		tuner_control_popup("Adding to Favorites...", true, false, false,
+		                   POPUP_CATALOG);
 	}
 }
 
@@ -617,6 +659,8 @@ static void tuner_control_refresh(lv_timer_t *)
 	                                    tuner_control.generation);
 	(void)control_home::read(tuner_control.playback,
 	                       tuner_control.playback_generation);
+	const auto source_decision = tuner_control.source_confirmation.observe(
+		tuner_control.state, tuner_control.playback.session, lv_tick_get());
 	const bool browser_changed=control_home::browser_read(tuner_control.browser,
 	                                                     tuner_control.browser_generation);
 	if (control_home::menu_read(tuner_control.menu,
@@ -649,7 +693,8 @@ static void tuner_control_refresh(lv_timer_t *)
 		}
 		if (!tuner_control.disconnect_popup) {
 			tuner_control.disconnect_popup = true;
-			tuner_control_popup("TUNER disconnected", false, false, true);
+			tuner_control_popup("TUNER disconnected", false, false, true,
+			                   POPUP_DISCONNECTED);
 		}
 		return;
 	}
@@ -665,22 +710,24 @@ static void tuner_control_refresh(lv_timer_t *)
 			tuner_control.playback_confirmation.disconnected();
 		}
 	}
-	if (tuner_control.state.command_pending) return;
-	if (tuner_control.state.result_present && !tuner_control.source_result_handled) {
-		tuner_control.source_result_handled = true;
-		if (!tuner_control.state.result_accepted) {
-			tuner_control_popup(source_error(tuner_control.state.last_error), false);
-			return;
-		}
-		if (source == tuner_control.state.requested_source) {
-			tuner_control_popup(source == control_home::TunerSource::BLUETOOTH
-				? "Bluetooth ready" : "Radio ready", false);
-			if (!tuner_control.popup_until) {
-				tuner_control.popup_until = lv_tick_get() + 3000;
-				tuner_control.return_home_after_popup = true;
-			}
-		}
+	if (source_decision == control_home::SourceConfirmationDecision::REJECTED) {
+		tuner_control_popup(source_error(tuner_control.source_confirmation.error),
+		                   false, false, false, POPUP_SOURCE);
+		return;
 	}
+	if (source_decision == control_home::SourceConfirmationDecision::EXPIRED) {
+		tuner_control_popup("Source confirmation expired", false, false, false,
+		                   POPUP_SOURCE);
+		return;
+	}
+	if (source_decision == control_home::SourceConfirmationDecision::SUCCESS) {
+		tuner_control_popup(source == control_home::TunerSource::BLUETOOTH
+			? "Bluetooth ready" : "Radio ready", false, false, false,
+			POPUP_SOURCE);
+		tuner_control.popup_until = lv_tick_get() + 3000;
+		tuner_control.return_home_after_popup = true;
+	}
+	if (tuner_control.state.command_pending) return;
 	if(browser_changed&&tuner_control.browser.sequence&&tuner_control.browser_session==0)
 		tuner_control.browser_session=tuner_control.browser.session_generation;
 	if(tuner_control.awaiting_action&&tuner_control.browser.result_present&&
@@ -961,6 +1008,10 @@ static void tuner_control_create()
 	                    LV_LABEL_LONG_CLIP, LV_TEXT_ALIGN_CENTER);
 	tuner_control.list_panel = remote01_panel(tuner_control.view, 0, 50, 172, 590,
 	                                      background, 0);
+	// The visible overlay owns its entire hit-test area. Child rows and the
+	// scrollable list remain interactive, while covered main-menu rows cannot
+	// receive blank-area touches.
+	lv_obj_add_flag(tuner_control.list_panel, LV_OBJ_FLAG_CLICKABLE);
 	lv_obj_add_flag(tuner_control.list_panel, LV_OBJ_FLAG_HIDDEN);
 	tuner_control.list_title = remote01_single_line(
 		tuner_control.list_panel, "STATIONS", &lv_font_montserrat_16, text,
