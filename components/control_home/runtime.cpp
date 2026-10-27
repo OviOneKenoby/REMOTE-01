@@ -378,7 +378,8 @@ void task(void *) {
       next.bluetooth_connected = source.bluetooth_connected;
       next.source_generation = source.generation;
       next.session = s->snapshot().session;
-      next.rtcp_close_reason = s->rtcp.diagnostic().close_reason;
+      next.rtcp_close_reason =
+          static_cast<std::uint8_t>(s->rtcp.diagnostic().close_reason);
       portENTER_CRITICAL(&mux);
       next.command_pending = full_control.pending_request != 0 || full_control.requested;
       next.requested_source = full_control.pending_request || full_control.requested ||
