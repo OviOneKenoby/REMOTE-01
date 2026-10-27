@@ -59,6 +59,7 @@ private:
   wire::Identity identity_{};wire::Capabilities capabilities_{};wire::BtxCapabilities btx_capabilities_{};wire::FullControlCapabilities full_control_capabilities_{};wire::SourceState source_state_{};wire::MenuState menu_state_{};wire::CatalogPage catalog_page_{};wire::BrowserPage browser_page_{};wire::Snapshot snapshot_{};wire::NowPlaying now_playing_{};wire::Result result_{};
   wire::BtxNegotiation btx_negotiation_{};
   Awaited awaited_{Awaited::none};bool source_state_due_{false},menu_state_due_{false},now_playing_due_{false},btx_state_due_{false};
+  std::int32_t last_receive_error_{0};
   Diagnostic diagnostic_{};NetworkStatusGate network_status_{};
   EndpointSelection endpoints_{};std::uint64_t discovery_at_{0};
   DiscoveryBatch pending_discovery_{};bool pending_discovery_present_{false};bool discovery_ready_{false};

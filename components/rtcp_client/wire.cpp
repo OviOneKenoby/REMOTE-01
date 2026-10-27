@@ -23,11 +23,12 @@ bool text(const std::uint8_t*p,std::size_t n){
 }
 }
 bool Identity::full_control_advertised()const{
-  constexpr char marker1[]="+fc1",marker2[]="+fc2",marker3[]="+fc3",marker4[]="+fc4";const auto n=std::strlen(firmware),m=sizeof(marker1)-1;
+  constexpr char marker1[]="+fc1",marker2[]="+fc2",marker3[]="+fc3",marker4[]="+fc4",marker5[]="+fc5";const auto n=std::strlen(firmware),m=sizeof(marker1)-1;
   return n>=m&&(std::memcmp(firmware+n-m,marker1,m)==0||
                 std::memcmp(firmware+n-m,marker2,m)==0||
                  std::memcmp(firmware+n-m,marker3,m)==0||
-                 std::memcmp(firmware+n-m,marker4,m)==0);
+                 std::memcmp(firmware+n-m,marker4,m)==0||
+                 std::memcmp(firmware+n-m,marker5,m)==0);
 }
 std::size_t identity_request(std::span<std::uint8_t>o){if(o.size()<4)return 0;o[0]=1;o[1]=1;o[2]=1;o[3]=0;return 4;}
 std::size_t capability_request(std::span<std::uint8_t>o){if(o.empty())return 0;o[0]=3;return 1;}
@@ -95,7 +96,7 @@ bool parse(std::span<const std::uint8_t>p,BtxCapabilities&o){
   o={1,2000,p[3],p[4],p[5],true};return true;
 }
 bool parse(std::span<const std::uint8_t>p,FullControlCapabilities&o){
-  if(p.size()!=20||p[0]!=17||p[1]!=1||p[2]>3||p[3]!=0||
+  if(p.size()!=20||p[0]!=17||p[1]!=1||p[2]>4||p[3]!=0||
      (std::uint16_t(p[8])<<8|p[9])!=2000||p[10]||p[11])return false;
   const std::uint32_t features=g32(p.data()+4);
   const std::uint64_t revision=g64(p.data()+12);
@@ -103,7 +104,8 @@ bool parse(std::span<const std::uint8_t>p,FullControlCapabilities&o){
   const bool menu=p[2]==1&&features==3&&revision==2;
   const bool catalog=p[2]==2&&features==15&&revision==3;
   const bool browser=p[2]==3&&features==31&&revision==4;
-  if(!legacy&&!menu&&!catalog&&!browser)return false;
+  const bool deferred=p[2]==4&&features==63&&revision==5;
+  if(!legacy&&!menu&&!catalog&&!browser&&!deferred)return false;
   o={revision,features,2000,true};return true;
 }
 bool parse(std::span<const std::uint8_t>p,SourceState&o){

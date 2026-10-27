@@ -333,6 +333,10 @@ void task(void *) {
       for(std::size_t i=0;i<d.rtcp.counters.size();++i)d.rtcp.counters[i]=std::uint8_t(rc[i]>255?255:rc[i]);
       d.browser=browser_diagnostic;
       diagnostics::publish(d);
+      diagnostics::RtcpCloseHistory close_history{};
+      close_history.next=rd.close_history.next;close_history.count=rd.close_history.count;
+      for(std::size_t i=0;i<close_history.events.size();++i){const auto&source=rd.close_history.events[i];auto&target=close_history.events[i];target.uptime_ms=source.uptime_ms;target.session=source.session;target.network_generation=source.network_generation;target.socket_error=source.socket_error;target.request=source.request;target.state=source.state;target.reason=std::uint8_t(source.reason);target.awaited=source.awaited;target.response_pending=source.response_pending;}
+      diagnostics::publish(close_history);
       if(ds.session!=diagnostic_session || ds.capability_revision!=diagnostic_revision)diagnostics::event(time,diagnostics::Event::CORE,unsigned(ds.session));
       diagnostic_time=time;diagnostic_session=ds.session;diagnostic_revision=ds.capability_revision;
     }

@@ -47,6 +47,7 @@ struct FullControlCapabilities{
   bool catalog_query()const{return negotiated&&(features&4u);}
   bool catalog_command()const{return negotiated&&(features&8u);}
   bool radio_browser()const{return negotiated&&(features&16u);}
+  bool deferred_catalog_play()const{return negotiated&&(features&32u);}
 };
 struct SourceState{
   std::uint64_t sequence=0,generation=0;

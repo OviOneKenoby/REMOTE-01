@@ -5,7 +5,20 @@
 #include <string_view>
 namespace diagnostics {
 using U64 = std::uint64_t;
-inline constexpr std::size_t response_bytes=6384;
+inline constexpr std::size_t response_bytes=6248;
+struct RtcpCloseEvent {
+  std::uint32_t uptime_ms=0,session=0,network_generation=0;
+  std::int32_t socket_error=0;
+  U64 request=0;
+  std::uint8_t state=0,reason=0,awaited=0,response_pending=0;
+};
+static_assert(sizeof(RtcpCloseEvent)==32);
+struct RtcpCloseHistory {
+  std::array<RtcpCloseEvent,4> events{};
+  std::uint8_t next=0,count=0;
+  std::uint16_t reserved=0;
+};
+static_assert(sizeof(RtcpCloseHistory)==136);
 struct RtcpDiagnostic {
   std::array<std::uint8_t,10> counters{};
   std::int16_t error=0;
@@ -68,7 +81,7 @@ bool normalize(bool ipv6,const unsigned char*,std::size_t,std::uint32_t&);
 bool socket_allowed(Address,std::uint32_t local,std::uint32_t peer);
 bool host_allowed(std::string_view,std::uint32_t ip);
 bool cursor(std::string_view,U64&);
-enum class Route { DENY, HOME, STATUS, EVENTS };
+enum class Route { DENY, HOME, STATUS, EVENTS, RTCP_HISTORY };
 Route route(std::string_view uri,bool get,std::size_t body);
 struct Reboot {
   U64 due=0; bool pending=false;

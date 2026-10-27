@@ -34,6 +34,7 @@ Route route(std::string_view uri,bool get,std::size_t body) {
   if(!get || body) return Route::DENY;
   if(uri=="/")return Route::HOME;
   if(uri=="/api/status")return Route::STATUS;
+  if(uri=="/api/rtcp-history")return Route::RTCP_HISTORY;
   constexpr std::string_view prefix="/api/events?after=";U64 value=0;
   if(uri.starts_with(prefix)&&cursor(uri.substr(prefix.size()),value))return Route::EVENTS;
   return Route::DENY;

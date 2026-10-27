@@ -15,7 +15,7 @@
 #include <new>
 namespace diagnostics {
 namespace {
-struct Storage { Snapshots copies; Ring ring; char response[response_bytes]{}; };
+struct Storage { Snapshots copies; Ring ring; RtcpCloseHistory close_history; char response[response_bytes]{}; };
 static_assert(sizeof(Storage)<=8192);
 struct Control {
   std::atomic<Storage*> storage{nullptr}; std::atomic_flag lock=ATOMIC_FLAG_INIT;
@@ -81,6 +81,23 @@ esp_err_t events(httpd_req_t*r) {
   }
   j.text("],\"after\":");j.number(last);j.text("}");if(!j.ok)return refuse(r,"503 Service Unavailable");headers(r,"application/json");return httpd_resp_sendstr(r,s->response);
 }
+esp_err_t rtcp_history(httpd_req_t*r) {
+  if(!request_allowed(r)||std::strcmp(r->uri,"/api/rtcp-history"))return refuse(r,"403 Forbidden");
+  auto*s=ctl.storage.load();RtcpCloseHistory copy{};if(!s)return refuse(r,"503 Service Unavailable");
+  if(!take())return refuse(r,"503 Service Unavailable","Diagnostics busy");
+  copy=s->close_history;give();
+  Json j{s->response,sizeof s->response};j.text("{\"count\":");j.number(copy.count);j.text(",\"events\":[");
+  for(unsigned age=0;age<copy.count&&age<copy.events.size();++age){
+    const auto index=(copy.next+copy.events.size()-1-age)%copy.events.size();const auto&e=copy.events[index];
+    if(age)j.text(",");
+    j.text("{\"uptime_ms\":");j.number(e.uptime_ms);j.text(",\"session\":");j.number(e.session);
+    j.text(",\"network_generation\":");j.number(e.network_generation);j.text(",\"state\":");j.number(e.state);
+    j.text(",\"reason\":");j.number(e.reason);j.text(",\"socket_error\":");j.signed_number(e.socket_error);
+    j.text(",\"request\":");j.number(e.request);j.text(",\"awaited\":");j.number(e.awaited);
+    j.text(",\"response_pending\":");j.number(e.response_pending);j.text("}");
+  }
+  j.text("]}");if(!j.ok)return refuse(r,"503 Service Unavailable");headers(r,"application/json");return httpd_resp_sendstr(r,s->response);
+}
 esp_err_t reject_handler(httpd_req_t*r,httpd_err_code_t) {return refuse(r,"403 Forbidden");}
 void stop() {ctl.enabled=false;if(ctl.server) {if(httpd_stop(ctl.server)==ESP_OK)ctl.server=nullptr;else ++ctl.failures;}}
 }
@@ -96,6 +113,7 @@ template<class T> void publish_copy(const T&v,T Snapshots::*member) {
 void publish(const Core&v){publish_copy(v,&Snapshots::core);}
 void publish(const Power&v){publish_copy(v,&Snapshots::power);}
 void publish(const Network&v){publish_copy(v,&Snapshots::network);}
+void publish(const RtcpCloseHistory&v){auto*s=ctl.storage.load();if(!s||!take()){++ctl.drops;return;}s->close_history=v;give();}
 void event(U64 time,Event e,unsigned detail){auto*s=ctl.storage.load();if(!s||!take()){++ctl.drops;return;}s->ring.push(time,e,detail);give();}
 void revoke(){ctl.enabled=false;}
 bool quiesce(){stop();return ctl.server==nullptr;}
@@ -107,10 +125,10 @@ void service(Address desired) {
   if(time_now()<ctl.retry)return;
   ctl.retry=time_now()+5000;
   if(!initialize())return;
-  httpd_config_t c=HTTPD_DEFAULT_CONFIG();c.stack_size=6144;c.task_priority=1;c.max_open_sockets=2;c.max_uri_handlers=3;c.max_req_hdr_len=1024;c.max_uri_len=64;c.recv_wait_timeout=3;c.send_wait_timeout=3;c.lru_purge_enable=true;c.open_fn=open_socket;
+  httpd_config_t c=HTTPD_DEFAULT_CONFIG();c.stack_size=6144;c.task_priority=1;c.max_open_sockets=2;c.max_uri_handlers=4;c.max_req_hdr_len=1024;c.max_uri_len=64;c.recv_wait_timeout=3;c.send_wait_timeout=3;c.lru_purge_enable=true;c.open_fn=open_socket;
   if(httpd_start(&ctl.server,&c)!=ESP_OK){ctl.server=nullptr;++ctl.failures;return;}
   auto route=[](const char*uri,esp_err_t(*fn)(httpd_req_t*)){httpd_uri_t u{};u.uri=uri;u.method=HTTP_GET;u.handler=fn;return httpd_register_uri_handler(ctl.server,&u)==ESP_OK;};
-  bool ok=route("/",home)&&route("/api/status",status)&&route("/api/events",events);
+  bool ok=route("/",home)&&route("/api/status",status)&&route("/api/events",events)&&route("/api/rtcp-history",rtcp_history);
   for(auto code:{HTTPD_400_BAD_REQUEST,HTTPD_404_NOT_FOUND,HTTPD_405_METHOD_NOT_ALLOWED,HTTPD_408_REQ_TIMEOUT,HTTPD_413_CONTENT_TOO_LARGE,HTTPD_414_URI_TOO_LONG,HTTPD_431_REQ_HDR_FIELDS_TOO_LARGE,HTTPD_500_INTERNAL_SERVER_ERROR})ok=ok&&httpd_register_err_handler(ctl.server,code,reject_handler)==ESP_OK;
   if(!ok){++ctl.failures;stop();return;}
   ctl.enabled=true;ESP_LOGI("DIAGNOSTICS","running=1 STA_ONLY port=80 read_only=1 clients=2 psram_bytes=%u",unsigned(sizeof(Storage)));

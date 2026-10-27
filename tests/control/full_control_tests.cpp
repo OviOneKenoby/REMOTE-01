@@ -63,6 +63,10 @@ int main() {
   browser_capability[2]=3;browser_capability[7]=31;browser_capability[19]=4;
   CHECK(parse(browser_capability,capability));
   CHECK(capability.radio_browser()&&capability.revision==4);
+  auto deferred_capability=capabilities;
+  deferred_capability[2]=4;deferred_capability[7]=63;deferred_capability[19]=5;
+  CHECK(parse(deferred_capability,capability));
+  CHECK(capability.deferred_catalog_play()&&capability.revision==5);
 
   std::array<std::uint8_t, 24> state{};
   state[0] = 19; state[1] = 1; state[2] = 2; state[3] = 0; state[4] = 1;
@@ -147,6 +151,8 @@ int main() {
   CHECK(parse(identity3,identity) && identity.full_control_advertised());
   auto identity4=identity_bytes;identity4.back()='4';
   CHECK(parse(identity4,identity) && identity.full_control_advertised());
+  std::array<std::uint8_t,15> identity5{2,1,1,0,10,'1','.','1','.','1','2','+','f','c','5'};
+  CHECK(parse(identity5,identity) && identity.full_control_advertised());
   auto legacy_identity=identity_bytes;legacy_identity[4]=6;
   CHECK(parse({legacy_identity.data(),11},identity)&&!identity.full_control_advertised());
   std::printf("FULL_CONTROL: PASS=1 FAIL=0 assertions=%u\n", assertions);

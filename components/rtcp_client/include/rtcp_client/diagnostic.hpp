@@ -26,6 +26,31 @@ enum class DiagnosticCounter : std::size_t {
   identity_request_sent, identity_response_received, identity_accepted,
   failures, count
 };
+struct CloseEvent {
+  std::uint32_t uptime_ms = 0;
+  std::uint32_t session = 0;
+  std::uint32_t network_generation = 0;
+  std::int32_t socket_error = 0;
+  std::uint64_t request = 0;
+  std::uint8_t state = 0;
+  CloseReason reason = CloseReason::none;
+  std::uint8_t awaited = 0;
+  std::uint8_t response_pending = 0;
+};
+static_assert(sizeof(CloseEvent) == 32);
+struct CloseHistory {
+  std::array<CloseEvent,4> events{};
+  std::uint8_t next = 0;
+  std::uint8_t count = 0;
+  void retain(const CloseEvent& event) {
+    events[next] = event;
+    next = std::uint8_t((next + 1) % events.size());
+    if (count < events.size()) ++count;
+  }
+  const CloseEvent& newest(std::size_t age) const {
+    return events[(next + events.size() - 1 - age) % events.size()];
+  }
+};
 struct Diagnostic {
   DiagnosticStage stage = DiagnosticStage::disabled;
   DiagnosticFailure failure = DiagnosticFailure::none;
@@ -41,6 +66,8 @@ struct Diagnostic {
   std::int32_t last_response_timeout_queued_bytes = -1;
   std::uint32_t response_timeouts_with_unread = 0;
   std::uint8_t last_response_timeout_state = 0;
+  std::uint32_t session = 0;
+  CloseHistory close_history{};
   void polled(std::uint64_t now_ms) {
     if(previous_poll_ms!=std::numeric_limits<std::uint64_t>::max() && now_ms>=previous_poll_ms) {
       const auto delta=now_ms-previous_poll_ms;
@@ -59,6 +86,8 @@ struct Diagnostic {
     stage = s; failure = DiagnosticFailure::none; error = 0;
     auto &v = counters[static_cast<std::size_t>(c)];
     if (v != std::numeric_limits<std::uint32_t>::max()) ++v;
+    if (c == DiagnosticCounter::identity_accepted &&
+        session != std::numeric_limits<std::uint32_t>::max()) ++session;
   }
   void fail(DiagnosticFailure f, std::int32_t e = 0) {
     failure = f; error = e;
@@ -68,6 +97,10 @@ struct Diagnostic {
   void closed(CloseReason reason, std::int32_t e = 0) {
     close_reason = reason; error = e;
     if (close_count != std::numeric_limits<std::uint32_t>::max()) ++close_count;
+  }
+  void closed(const CloseEvent& event) {
+    closed(event.reason, event.socket_error);
+    close_history.retain(event);
   }
 };
 } // namespace rtcp_client
