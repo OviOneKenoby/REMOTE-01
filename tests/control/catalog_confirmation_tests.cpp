@@ -26,7 +26,7 @@ int main() {
   // Immediate acknowledgement followed by authoritative confirmation.
   confirmation.begin(CatalogCollection::FAVORITES, 2, 7, 0, 100);
   confirmation.accepted();
-  assert(confirmation.observe(true, page(CatalogCollection::FAVORITES, 2, true)) ==
+  assert(confirmation.observe(true, page(CatalogCollection::FAVORITES, 2, true), 101) ==
          CatalogConfirmationDecision::CONFIRMED);
 
   // Playback may start before the transport drops. Reconnect only queries;
@@ -36,28 +36,42 @@ int main() {
   assert(confirmation.connected() == CatalogConfirmationDecision::QUERY);
   assert(confirmation.connected() == CatalogConfirmationDecision::NONE);
   confirmation.query_started();
-  assert(confirmation.observe(true, page(CatalogCollection::FAVORITES, 2, true)) ==
+  assert(confirmation.observe(true, page(CatalogCollection::FAVORITES, 2, true), 1001) ==
          CatalogConfirmationDecision::CONFIRMED);
 
-  // A different active item and stopped playback both refuse success.
+  // Admission precedes a deferred stream open. Inactive/not-yet-playing
+  // observations remain pending and trigger bounded read-only polling.
   confirmation.begin(CatalogCollection::FAVORITES, 2, 7, 0, 2000);
-  assert(confirmation.observe(true, page(CatalogCollection::FAVORITES, 2, false)) ==
-         CatalogConfirmationDecision::FAILED);
+  confirmation.accepted();
+  assert(confirmation.observe(true, page(CatalogCollection::FAVORITES, 2, false), 2001) ==
+         CatalogConfirmationDecision::NONE);
+  assert(confirmation.query_due(2500) == CatalogConfirmationDecision::NONE);
+  assert(confirmation.query_due(2501) == CatalogConfirmationDecision::QUERY);
+  auto pending = page(CatalogCollection::FAVORITES, 2, false);
+  pending.sequence = 2;
+  assert(confirmation.observe(false, pending, 2502) ==
+         CatalogConfirmationDecision::NONE);
+  assert(confirmation.query_due(3002) == CatalogConfirmationDecision::QUERY);
+  auto confirmed = page(CatalogCollection::FAVORITES, 2, true);
+  confirmed.sequence = 3;
+  assert(confirmation.observe(true, confirmed, 3003) ==
+         CatalogConfirmationDecision::CONFIRMED);
   confirmation.begin(CatalogCollection::FAVORITES, 2, 7, 0, 3000);
-  assert(confirmation.observe(false, page(CatalogCollection::FAVORITES, 2, true)) ==
-         CatalogConfirmationDecision::FAILED);
+  confirmation.accepted();
+  assert(confirmation.observe(false, page(CatalogCollection::FAVORITES, 2, true), 3001) ==
+         CatalogConfirmationDecision::NONE);
 
   // Older revisions and unrelated collections cannot confirm the operation.
   confirmation.begin(CatalogCollection::FAVORITES, 2, 7, 1, 4000);
-  assert(confirmation.observe(true, page(CatalogCollection::FAVORITES, 2, true, 8)) ==
+  assert(confirmation.observe(true, page(CatalogCollection::FAVORITES, 2, true, 8), 4001) ==
          CatalogConfirmationDecision::NONE);
   auto fresh = page(CatalogCollection::FAVORITES, 2, true, 6);
   fresh.sequence = 2;
-  assert(confirmation.observe(true, fresh) ==
+  assert(confirmation.observe(true, fresh, 4002) ==
          CatalogConfirmationDecision::NONE);
   fresh = page(CatalogCollection::RECENT, 2, true, 8);
   fresh.sequence = 2;
-  assert(confirmation.observe(true, fresh) ==
+  assert(confirmation.observe(true, fresh, 4003) ==
          CatalogConfirmationDecision::NONE);
 
   // The lifecycle is bounded and a new operation replaces only local state.

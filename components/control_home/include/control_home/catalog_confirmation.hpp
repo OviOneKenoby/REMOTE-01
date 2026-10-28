@@ -24,6 +24,7 @@ struct CatalogPlaybackConfirmation {
   std::uint64_t minimum_revision = 0;
   std::uint64_t previous_sequence = 0;
   std::uint32_t deadline = 0;
+  std::uint32_t next_query = 0;
   bool active = false;
   bool command_accepted = false;
   bool reconnect_pending = false;
@@ -37,6 +38,7 @@ struct CatalogPlaybackConfirmation {
     minimum_revision = revision;
     previous_sequence = sequence;
     deadline = now + deadline_ms;
+    next_query = now;
     active = true;
     command_accepted = false;
     reconnect_pending = false;
@@ -46,7 +48,10 @@ struct CatalogPlaybackConfirmation {
   void clear() { *this = {}; }
 
   void accepted() {
-    if (active) command_accepted = true;
+    if (active) {
+      command_accepted = true;
+      next_query = 0;
+    }
   }
 
   void disconnected() {
@@ -67,8 +72,17 @@ struct CatalogPlaybackConfirmation {
     if (active) query_pending = true;
   }
 
+  CatalogConfirmationDecision query_due(std::uint32_t now) {
+    if (!active || !command_accepted || reconnect_pending || query_pending ||
+        static_cast<std::int32_t>(now - next_query) < 0)
+      return CatalogConfirmationDecision::NONE;
+    query_pending = true;
+    return CatalogConfirmationDecision::QUERY;
+  }
+
   CatalogConfirmationDecision observe(bool playing,
-                                      const CatalogSnapshot &page) {
+                                      const CatalogSnapshot &page,
+                                      std::uint32_t now) {
     if (!active || !page.connected || page.collection != collection ||
         !page.sequence || page.sequence <= previous_sequence || !page.revision ||
         page.revision < minimum_revision)
@@ -85,11 +99,16 @@ struct CatalogPlaybackConfirmation {
       break;
     }
     if (selected_present) {
-      const auto decision = playing && selected_active
-                                ? CatalogConfirmationDecision::CONFIRMED
-                                : CatalogConfirmationDecision::FAILED;
-      clear();
-      return decision;
+      if (playing && selected_active) {
+        clear();
+        return CatalogConfirmationDecision::CONFIRMED;
+      }
+      // PLAY is admitted before the TUNER completes its bounded deferred
+      // network open. An inactive row or not-yet-PLAYING snapshot is pending,
+      // not a refusal. Poll read-only state at a bounded cadence until the
+      // authoritative state confirms it or the existing deadline expires.
+      next_query = now + 500;
+      return CatalogConfirmationDecision::NONE;
     }
     if (std::uint32_t(page.start) + page.item_count >= page.count) {
       clear();

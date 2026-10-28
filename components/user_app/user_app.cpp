@@ -611,6 +611,18 @@ static void tuner_control_apply_browser()
 		tuner_control.browser_poll_at=lv_tick_get()+300;return;
 	}
 	if(page.status==control_home::BrowserStatus::FAILED){
+		// Leave a meaningful, navigable Browser page behind the modal error.
+		// Previously dismissing the card exposed a blank grey panel.
+		if(page.stage==control_home::BrowserStage::COUNTRIES)
+			tuner_control_show_country_filters();
+		else {
+			tuner_control_clear_rows();
+			home_text(tuner_control.list_title,
+				page.stage==control_home::BrowserStage::GENRES?"GENRE":"STATIONS");
+			home_text(tuner_control.empty_text,"Unable to load. Press BACK.");
+			lv_obj_clear_flag(tuner_control.empty_text,LV_OBJ_FLAG_HIDDEN);
+			lv_obj_clear_flag(tuner_control.list_panel,LV_OBJ_FLAG_HIDDEN);
+		}
 		tuner_control_popup(page.last_error==9?"Results too large":"Radio Browser error",false);
 		return;
 	}
@@ -815,9 +827,10 @@ static void tuner_control_refresh(lv_timer_t *)
 		}
 	}
 	if (tuner_control.awaiting_playback) {
+		const auto now = lv_tick_get();
 		const auto decision = tuner_control.playback_confirmation.observe(
 			tuner_control.playback.playback == control_home::Playback::PLAYING,
-			tuner_control.catalog);
+			tuner_control.catalog, now);
 		if (decision == control_home::CatalogConfirmationDecision::CONFIRMED) {
 			tuner_control.awaiting_playback = false;
 			tuner_control_popup("Now Playing", false);
@@ -828,6 +841,13 @@ static void tuner_control_refresh(lv_timer_t *)
 			tuner_control_close();
 			tuner_control_popup("Station unavailable", false);
 			tuner_control.popup_until = lv_tick_get() + 3000;
+		}
+		if (tuner_control.awaiting_playback &&
+		    tuner_control.playback_confirmation.query_due(now) ==
+		        control_home::CatalogConfirmationDecision::QUERY) {
+			if (!control_home::request_catalog(
+					tuner_control.playback_confirmation.collection, 0))
+				tuner_control.playback_confirmation.disconnected();
 		}
 	}
 	if (tuner_control.awaiting_playback && tuner_control.state.connected &&
