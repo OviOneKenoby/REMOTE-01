@@ -8,6 +8,47 @@ The ordered owner-executable hardware procedure is
 [`FULL_CONTROL_HARDWARE_VALIDATION.md`](FULL_CONTROL_HARDWARE_VALIDATION.md).
 Its checkboxes are intentionally unmarked until physical evidence is recorded.
 
+## 2026-10-28 post-hardware correction checkpoint
+
+The first joint `+fc5` hardware run proved several action-time failures after
+the clean five-minute idle interval. The minimum paired correction is now
+offline verified; it is not installed and has no hardware PASS yet.
+
+| Observed failure | Correction | Verification state |
+| --- | --- | --- |
+| Accepted Favorite PLAY was reported unavailable before deferred startup completed; a repeat then coincided with a three-second RTCP timeout. | REMOTE retains the accepted confirmation fence and issues bounded read-only catalog re-queries every 500 ms under the existing 15-second deadline. TUNER temporarily lowers only the persistent audio task's priority during the blocking stream-open call, then restores it. No mutation retry/replay was added. | Focused confirmation/deferred-start and protocol regressions PASS; hardware retest required. |
+| REMOTE and physical TUNER Bluetooth Play/Pause produced no phone action. | TUNER submits checked AVRCP press/release commands with rotating transaction labels that do not collide with the pinned library's label-0 capability request. Link state and both API results are checked. | Authority, BTX and integration tests PASS; phone hardware response required. |
+| Phone Pause could be reported as STOPPED. | Once A2DP reports `REMOTE_SUSPEND`, a simultaneous AVRCP STOPPED report preserves authoritative PAUSED for phones using that representation. | Behavioral authority tests PASS; hardware retest required. |
+| Both Browser mirrors failed connection establishment within 618 ms using a 250 ms per-transport timeout. | Asynchronous per-transport timeout is 1,000 ms; the two-mirror limit and one 30-second absolute deadline remain unchanged. Error dismissal renders a real Browser page instead of an empty grey backing view. | Policy/UI tests PASS; HTTPS success remains hardware-pending. |
+| Radio could report Playing but remain silent after Bluetooth until a physical volume action. | TUNER reapplies the authoritative gain after decoder startup following the Bluetooth I2S handoff. | Source/audio hardware retest required. |
+
+Implementation commits:
+
+- REMOTE `91424013726cf9ede72de68d579842445141c2f2`.
+- TUNER `0ed0ffb366b8b5f12e773bc7bfb658a09f8523a4`.
+
+Production artifacts:
+
+- REMOTE `remote01`: BIN 2,610,928 bytes, SHA-256
+  `e7105144fcca1faf0d6a998b39603262d459132394d36da03cf833cb129508ef`;
+  ELF 20,057,180 bytes, SHA-256
+  `0380d8b56bd417e2bc15c1496ec1a0515d1693c075a6dd296331aafa02e1a206`;
+  static RAM 61,180 / 327,680 bytes; linked flash 2,610,433 / 8,388,608
+  bytes; exact-image slot headroom 5,777,680 bytes; embedded ID `9142401`.
+- TUNER `esp32-lwip-psram`: BIN 2,135,904 bytes, SHA-256
+  `129f7c9e276e4e06c3c007eef7290409720f899845a244d97b704768a40d321e`;
+  ELF 31,252,700 bytes, SHA-256
+  `746786cae402b1e96231b8db1d14b3178aa75ba522cef5786d04867b926276ed`;
+  static RAM 80,784 / 327,680 bytes; linked flash 2,129,321 / 3,145,728
+  bytes; exact-image slot headroom 1,009,824 bytes; embedded ID `0ed0ffb`.
+
+Hardware acceptance still requires one Favorite start, outbound Bluetooth
+Pause/Play from both controls, phone-originated Pause mapping, one complete
+Browser flow plus error dismissal, Bluetooth-to-Radio audible startup without
+a gain nudge, and action-time RTCP counter correlation. AAC/AAC+ and a longer
+mixed-use soak remain untested. The unrelated pre-existing
+`utf8_snapshot_bounds` failure remains open.
+
 ## 2026-10-28 stability-correction checkpoint
 
 | Item | Offline status | Hardware requirement |

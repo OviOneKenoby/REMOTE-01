@@ -1,5 +1,37 @@
 # Changelog
 
+## 2026-10-28 - Full Control 1.3 joint hardware-failure corrections ready offline
+
+Corrected the demonstrated paired failures without changing RTCP security,
+mutation replay policy, protocol framing, source-switch semantics or the
+approved Bluetooth-to-Radio stopped state. A deferred catalog PLAY that has
+already been accepted is no longer failed by the first inactive catalog
+snapshot: REMOTE performs bounded read-only re-queries under the existing
+15-second confirmation deadline and never resends the mutation. On TUNER, the
+existing audio task temporarily yields priority only while opening that
+deferred stream, allowing the RTCP/main-loop owner to continue servicing the
+request; revision revalidation and physical-control preemption remain intact.
+
+The Radio Browser error overlay now has a meaningful underlying Browser page,
+so dismissing it cannot expose the hardware-observed blank grey screen. The
+paired TUNER correction also raises the asynchronous per-transport connect
+timeout from the hardware-failing 250 ms to a still-bounded 1,000 ms while
+preserving the two-mirror policy and 30-second absolute job deadline. This is
+an evidence-backed timing correction, but actual HTTPS retrieval remains a
+hardware test rather than an offline claim.
+
+Focused catalog-confirmation, Full-Control wire, source-confirmation, overlay,
+Browser diagnostics, RTCP, BTX, D-009 and integration-policy tests pass. Clean
+`remote01` production build at source
+`91424013726cf9ede72de68d579842445141c2f2` passes: BIN 2,610,928 bytes,
+SHA-256 `e7105144fcca1faf0d6a998b39603262d459132394d36da03cf833cb129508ef`;
+ELF 20,057,180 bytes, SHA-256
+`0380d8b56bd417e2bc15c1496ec1a0515d1693c075a6dd296331aafa02e1a206`;
+61,180 bytes static RAM, 2,610,433 bytes linked program usage and 5,777,680
+bytes exact-image slot headroom. Embedded application version is `9142401`.
+No device was accessed or flashed. The pre-existing `utf8_snapshot_bounds`
+failure remains separately tracked and unchanged.
+
 ## 2026-10-28 - Full Control 1.3 `+fc5` joint hardware validation PARTIAL / FAIL
 
 Installed and independently read back the verified REMOTE application

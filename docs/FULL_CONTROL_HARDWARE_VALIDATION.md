@@ -3,6 +3,28 @@
 Status: **2026-10-28 joint stability deployment completed; hardware validation PARTIAL / FAIL**
 Firmware family: Full Control 1.3 (`+fc5` for the 2026-10-28 stability candidate)
 
+## Corrective pair prepared offline - 2026-10-28 (NOT INSTALLED)
+
+The paired implementation commits are REMOTE `9142401` and TUNER `0ed0ffb`.
+Focused tests and both production builds pass. These artifacts address the
+demonstrated premature deferred-PLAY failure, action-time main-loop starvation,
+Bluetooth outbound AVRCP submission, phone Pause normalization, Browser
+connect timing/error backdrop and post-Bluetooth gain restoration. They have
+not been installed, so the current hardware verdict below remains
+**PARTIAL / FAIL** until the focused retest passes.
+
+- [ ] One Favorite short tap starts exactly once without `Station unavailable`,
+  false disconnect, mutation replay or physical-control loss.
+- [ ] REMOTE and physical TUNER Pause/Play control the Bluetooth phone; phone
+  Pause/Resume updates REMOTE authoritatively.
+- [ ] Country -> Name -> Genre -> Results completes; on a forced error, BACK
+  reveals a usable Browser page rather than a blank grey screen.
+- [ ] Bluetooth -> Radio remains stopped until an explicit station selection;
+  the selected station is immediately audible without a volume nudge.
+- [ ] During those actions, RTCP remains authenticated and retained close
+  histories show no new response timeout or unexplained reset.
+- [ ] AAC/AAC+ playback and a longer mixed-use soak remain separate tests.
+
 ## Joint `+fc5` deployment and validation - 2026-10-28
 
 Both application-only installations and independent exact-span readbacks
