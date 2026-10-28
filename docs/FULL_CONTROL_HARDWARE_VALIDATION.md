@@ -1,7 +1,81 @@
 # Full Control 1.3 Hardware Validation
 
-Status: **procedure ready; all results initially NOT TESTED**
+Status: **2026-10-28 joint stability deployment completed; hardware validation PARTIAL / FAIL**
 Firmware family: Full Control 1.3 (`+fc5` for the 2026-10-28 stability candidate)
+
+## Joint `+fc5` deployment and validation - 2026-10-28
+
+Both application-only installations and independent exact-span readbacks
+passed. TUNER `014185ab1e2e` on COM5 is 2,135,376 bytes with SHA-256
+`c33ec3b137f2ba21b8dbdead00dd962efe21bd5b343273f4c50d62ed133e273f`.
+REMOTE `2ff3c9b` on COM3 is 2,610,752 bytes with SHA-256
+`81986adf59e75b6df1f9af8ca6397c15ca1deb0cccc240146bc68b0e03a9b8dd`.
+Only `0x10000` application regions were written; the verified partition
+tables, NVS, credentials, pairing, station data and original D: full-flash
+backups were preserved. Private commands, readbacks and partition-table
+evidence are retained under
+`FULL_CONTROL_PRIVATE_HARDWARE_EVIDENCE/20261028T040652Z-joint-fc13-stability`.
+
+### Verified results
+
+- **Startup PASS:** owner confirmed TUNER e-paper/controls and REMOTE portrait
+  HOME. Both joined Wi-Fi; RTCP authenticated; station/state/metadata and
+  authoritative volume were visible. HTTP endpoints returned valid 200 JSON.
+- **Five-minute ACTIVE RTCP window PASS:** 31 samples over 316 seconds; REMOTE
+  remained ACTIVE/READY in session 34, TUNER connections/closes stayed 6/5,
+  every HTTP read succeeded and no session, attempt or close count changed.
+  REMOTE's lifetime close counter was already saturated, so this result uses
+  the session plus TUNER counters and is not a lifetime-stability claim.
+- **Favorites deferred PLAY FAIL:** the first owner attempt reported `Station
+  unavailable` and started no audio. A second attempt (not to be repeated)
+  displayed `TUNER disconnected`. REMOTE retained a 3,008 ms response timeout
+  while awaiting source-state response type 6, then `ECONNRESET` 104; TUNER
+  recorded peer EOF and a 3,004,044 us maximum RTCP response. Wi-Fi remained
+  connected and RTCP later recovered. Exactly-once audible start was not
+  demonstrated.
+- **Bluetooth inbound state PARTIAL PASS:** phone Play/Pause/Resume updated
+  audio and REMOTE correctly. TUNER's HTTP diagnostic represented phone Pause
+  as `stopped`, not `paused`; this semantic discrepancy remains recorded.
+  Phone disconnect/reconnect, waiting state, metadata removal/restoration and
+  restartable SBC playback passed.
+- **Bluetooth outbound control FAIL:** neither REMOTE Play/Pause nor the
+  physical TUNER Play/Pause control changed phone playback, audio or state.
+  No popup or transport close accompanied either attempt.
+- **Source transition PASS:** Radio -> Bluetooth and Bluetooth -> Radio worked;
+  HOME returned and no false popup appeared. Owner clarified that entering
+  Radio must not automatically start a station, so stopped Radio state is the
+  approved result.
+- **Radio Browser FAIL with bounded diagnosis:** exactly one START attempted
+  both mirrors. First failure was mirror 0 at `event_error`; final mirror 1
+  ended `disconnected` with `ESP_ERR_HTTP_CONNECT` (`0x7002`, 28674), HTTP
+  status 0, elapsed 618 ms and no whole-job deadline expiry. Captured system,
+  mbedTLS, ESP-TLS and certificate errors were all zero, so the evidence proves
+  connection establishment failure before an HTTP response but does not
+  distinguish DNS from the underlying TCP connect failure. The error card,
+  BACK and EXIT passed; the underlying Browser page was empty.
+- **Physical priority/catalog preservation PASS:** TUNER physical station
+  selection remained responsive and REMOTE updated authoritatively. Saved,
+  Favorites and Recent lists remained present and unchanged.
+- **MP3/volume PARTIAL PASS:** West City MP3 was initially reported Playing but
+  inaudible; audio resumed after the physical TUNER volume action. A subsequent
+  single REMOTE detent changed authoritative volume 100 -> 98%, incremented the
+  TUNER RTCP volume counter and applied in 410 us without an in-flight latch.
+- **SYSTEM_SLEEP/wake PASS:** after DISPLAY_IDLE, REMOTE entered SYSTEM_SLEEP
+  at the configured inactivity threshold while TUNER audio continued. One
+  touch restored HOME; authoritative Radio state, metadata and 98% volume
+  returned in about five seconds with no stale action or popup. Retained
+  history shows the expected suspend and one transient connect timeout before
+  successful session 40 recovery.
+
+### Remaining failures and untested scope
+
+RTCP is not classified fixed: outside the clean ACTIVE window, retained
+evidence includes Browser peer EOF plus a later snapshot response timeout and
+`ECONNRESET`, with matching TUNER closes. Favorite deferred start, outbound
+Bluetooth transport control and Radio Browser remain hardware FAIL. AAC/AAC+
+and a longer mixed-use soak were NOT TESTED. Motion wake remains separately
+limited as documented. Overall Full Control 1.3 `+fc5` acceptance is therefore
+**PARTIAL / FAIL**, not release-ready hardware PASS.
 
 ## Offline stability candidate - 2026-10-28 (NOT INSTALLED)
 

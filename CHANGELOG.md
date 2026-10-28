@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-10-28 - Full Control 1.3 `+fc5` joint hardware validation PARTIAL / FAIL
+
+Installed and independently read back the verified REMOTE application
+`2ff3c9b`, 2,610,752 bytes, SHA-256
+`81986adf59e75b6df1f9af8ca6397c15ca1deb0cccc240146bc68b0e03a9b8dd`,
+after the paired TUNER installation. Startup and a 316-second uninterrupted
+ACTIVE RTCP window passed; volume, source switching, Bluetooth phone-originated
+state, disconnect/reconnect, catalog preservation and SYSTEM_SLEEP/touch-wake
+recovery passed within the recorded limits.
+
+Hardware validation remains FAIL overall. Favorite PLAY produced Station
+Unavailable then a false disconnect with a 3,008 ms source-state timeout and
+ECONNRESET. REMOTE and physical TUNER Bluetooth Play/Pause did not control the
+phone. The single Radio Browser START failed both mirrors before HTTP response
+with ESP_ERR_HTTP_CONNECT 0x7002; bounded TLS error categories were zero and do
+not prove a TLS/certificate failure. Additional RTCP EOF/response-timeout
+closes occurred outside the clean idle window. Full evidence is in
+`docs/FULL_CONTROL_HARDWARE_VALIDATION.md`; no source/build/pairing/NVS change,
+rollback, push, merge or release was performed.
+
 ## 2026-10-28 - Full Control 1.3 stability corrections offline verified
 
 Added a four-entry, fixed-size RTCP close-history ring exposed by
