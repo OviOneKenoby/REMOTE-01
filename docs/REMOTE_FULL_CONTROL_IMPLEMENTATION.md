@@ -8,6 +8,32 @@ The ordered owner-executable hardware procedure is
 [`FULL_CONTROL_HARDWARE_VALIDATION.md`](FULL_CONTROL_HARDWARE_VALIDATION.md).
 Its checkboxes are intentionally unmarked until physical evidence is recorded.
 
+## 2026-10-29 focused hardware follow-up
+
+The `0ed0ffb` TUNER / `9142401` REMOTE pair passed startup, idle RTCP baseline,
+Radio/Bluetooth source switching, Bluetooth audio/metadata, phone-, REMOTE- and
+physical-TUNER Play/Pause, Radio gain recovery, authoritative volume and
+SYSTEM_SLEEP/touch-wake restoration. Audio continued without interruption
+while REMOTE slept. TUNER does not render playback state; only audible behavior
+and REMOTE's authoritative label were verified.
+
+Favorite playback succeeds, but action-time transport is not accepted: both
+trials produced a brief disconnect overlay and retained response-timeout/
+`ECONNRESET` evidence. The TUNER response maximum reached 3,011,296 us while
+its e-paper redraw was in the deferred-completion path. Browser START tried two
+endpoints, each ending before HTTP status with `ESP_ERR_HTTP_CONNECT`; audio,
+BACK/EXIT and the underlying Country list remained usable.
+
+The minimum follow-up is TUNER-only source
+`579f412691df6ffc4d03513d1c64f7a65ea18320`: authoritative deferred-play state
+is published before a delayed e-paper redraw, and Browser transport begins at
+the official DNS hostname with two resolving fallbacks and a five-second
+per-operation timeout under the unchanged 30-second job fence. Focused tests
+and production build pass. Candidate BIN: 2,135,920 bytes, SHA-256
+`663983a35e060eb1fee6943512dc60d22ef7414255725a46f329b7c5915aed3c`;
+static RAM 80,792 bytes; exact-image headroom 1,009,808 bytes. It is not
+installed. REMOTE source and installed firmware are unchanged.
+
 ## 2026-10-28 post-hardware correction checkpoint
 
 The first joint `+fc5` hardware run proved several action-time failures after

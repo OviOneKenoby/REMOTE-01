@@ -1,7 +1,35 @@
 # Full Control 1.3 Hardware Validation
 
-Status: **2026-10-28 joint stability deployment completed; hardware validation PARTIAL / FAIL**
+Status: **2026-10-29 focused validation completed; TUNER follow-up candidate pending installation**
 Firmware family: Full Control 1.3 (`+fc5` for the 2026-10-28 stability candidate)
+
+## Focused run - 2026-10-29
+
+Installed pair: TUNER `0ed0ffb`, REMOTE `9142401`; both prior exact readbacks
+remain the deployment authority. Verified PASS: startup/UI, idle RTCP baseline,
+Radio/Bluetooth source switching, Bluetooth audio and metadata, phone/REMOTE/
+physical-TUNER Play/Pause, Bluetooth-to-Radio stopped state, immediate Radio
+audio recovery, one-detent volume and later authoritative 30% volume, REMOTE
+display sleep/touch-wake restoration and uninterrupted audio during sleep.
+TUNER has never displayed playback state; previous answers saying otherwise
+are corrected.
+
+Remaining FAIL:
+
+- Favorite playback starts, but each explicit start briefly reports TUNER
+  disconnected. Retained REMOTE evidence is response timeout then
+  `ECONNRESET` 104; TUNER records peer EOF and a 3,011,296 us maximum response.
+- Radio Browser START reaches an error after both endpoint attempts with
+  `ESP_ERR_HTTP_CONNECT`, HTTP status 0 and no nonzero TLS category. BACK
+  exposes the Country list, EXIT restores HOME and audio remains continuous.
+
+TUNER-only candidate `579f412` publishes/clears deferred playback before the
+synchronous e-paper update and changes only the bounded asynchronous Browser
+endpoint/transport policy. BIN 2,135,920 bytes, SHA-256
+`663983a35e060eb1fee6943512dc60d22ef7414255725a46f329b7c5915aed3c`.
+It is **NOT INSTALLED**. Required retest is one Favorite start with no new close
+history and one complete Country -> Name -> Genre -> Results flow. AAC/AAC+
+and the full mixed-use soak remain not tested.
 
 ## Corrective pair prepared offline - 2026-10-28 (NOT INSTALLED)
 

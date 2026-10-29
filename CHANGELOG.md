@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-10-29 - Paired hardware follow-up and TUNER-only candidate
+
+The installed REMOTE `9142401` passed Bluetooth metadata/state and phone,
+REMOTE and physical-TUNER Play/Pause authority, Bluetooth-to-Radio stopped
+semantics, Radio audio/gain recovery, authoritative volume, display sleep/wake
+restoration and uninterrupted TUNER playback while REMOTE slept. TUNER has no
+playback-state display; prior notes that counted one are superseded.
+
+Favorite playback now starts audibly, but the installed TUNER still performs a
+synchronous e-paper redraw before the post-command RTCP query chain settles.
+The retained evidence shows response timeout then `ECONNRESET`; TUNER shows
+peer EOF and a 3,011,296 us maximum response. Radio Browser still fails before
+HTTP status with `ESP_ERR_HTTP_CONNECT` after approximately one second per
+endpoint. Error dismissal correctly reveals the Country list and EXIT returns
+HOME without interrupting audio.
+
+No REMOTE source or firmware changed. TUNER source
+`579f412691df6ffc4d03513d1c64f7a65ea18320` contains the bounded follow-up and
+builds successfully; its 2,135,920-byte BIN SHA-256 is
+`663983a35e060eb1fee6943512dc60d22ef7414255725a46f329b7c5915aed3c`.
+It is not installed and requires separate authorization and focused hardware
+validation. The installed REMOTE and rollback artifacts remain unchanged.
+
 ## 2026-10-28 - Full Control 1.3 joint hardware-failure corrections ready offline
 
 Corrected the demonstrated paired failures without changing RTCP security,
