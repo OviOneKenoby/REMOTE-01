@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-10-31 - Browser disconnect recovery candidate
+
+Corrected the demonstrated blank Browser screen after a transient authenticated
+RTCP disconnect. When transport loss invalidates the Browser snapshot, REMOTE
+now fences the interrupted Browser session and returns HOME exactly once after
+reconnection instead of exposing the cleared page. Browser START is not
+replayed, and non-Browser disconnect handling is unchanged.
+
+The executable navigation policy test covers disconnects during Country and
+Results pages, non-Browser disconnects, single-shot reconnect recovery and
+explicit cancellation. The clean `remote01` build passed at implementation
+`efed8f0`; its 2,610,976-byte BIN has SHA-256
+`0dcd32a955db8788af064f15bd063290c867eb45f4ff5439d3ef3940403d22f6`.
+Static RAM is 61,180 bytes and factory-slot headroom is 5,777,632 bytes.
+
+TUNER evidence still proves `peer_eof`, not the initiating REMOTE close path.
+The pre-reset REMOTE close history was lost when opening native USB/JTAG caused
+a USB reset despite disabled DTR/RTS, so no timeout or scheduling correction was
+made. The same Radio Browser IPv4 endpoints later returned HTTP 200 from the
+development PC; the earlier all-mirror HTTP 503 remains a verified transient
+upstream condition rather than a demonstrated firmware request defect.
+
 ## 2026-10-29 - Paired hardware follow-up and TUNER-only candidate
 
 The installed REMOTE `9142401` passed Bluetooth metadata/state and phone,

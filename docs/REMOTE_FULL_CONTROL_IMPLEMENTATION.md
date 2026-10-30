@@ -552,3 +552,25 @@ build and memory evidence, hardware status, limitations, and remaining work.
 Never convert an offline PASS into hardware PASS. Before any future UI,
 navigation, source, station, or persistence change, re-read
 `REMOTE_FULL_CONTROL_SPEC.md`.
+
+## 2026-10-31 Browser disconnect recovery checkpoint
+
+- Implementation `efed8f0` adds deterministic single-shot HOME recovery when
+  authenticated RTCP loss invalidates an active Browser page.
+- The interrupted Browser session and revision are fenced immediately; no
+  Browser START or other mutation is replayed after reconnect.
+- Executable navigation/recovery and existing overlay-policy tests: PASS.
+- Clean `remote01` build: PASS; BIN 2,610,976 bytes, static RAM 61,180 bytes,
+  factory-slot headroom 5,777,632 bytes.
+- BIN SHA-256:
+  `0dcd32a955db8788af064f15bd063290c867eb45f4ff5439d3ef3940403d22f6`.
+- ELF SHA-256:
+  `d8f45d3191130c8245f0736b5fe9e226fbf6441a314d771430b6b6241b2fefd6`.
+- Hardware validation remains pending: interrupt Browser loading with a genuine
+  transport loss, verify popup dismissal returns HOME, and verify no replay or
+  stale result. The initiating RTCP close remains unproven because the retained
+  REMOTE history was lost to a USB/JTAG-open reset during read-only collection.
+- TUNER Browser HTTP 503 was verified across all configured mirrors in the
+  failed run, while the same IPv4 URLs later returned HTTP 200 from the PC.
+  This is tracked as transient upstream availability; no timeout, TLS, endpoint
+  or scheduler change is justified by the current evidence.
