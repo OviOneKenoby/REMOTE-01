@@ -16,6 +16,23 @@ enum class Page : std::uint8_t {
   BROWSER_RESULTS
 };
 
+constexpr bool is_browser_page(Page page) {
+  return page == Page::BROWSER_COUNTRY || page == Page::BROWSER_NAME ||
+         page == Page::BROWSER_GENRE || page == Page::BROWSER_RESULTS;
+}
+
+struct BrowserDisconnectRecovery {
+  bool return_home = false;
+
+  void disconnected(Page page) { return_home = is_browser_page(page); }
+  bool reconnected() {
+    const bool result = return_home;
+    return_home = false;
+    return result;
+  }
+  void clear() { return_home = false; }
+};
+
 struct Model {
   Page page = Page::HOME;
   bool favorites_from_home = false;

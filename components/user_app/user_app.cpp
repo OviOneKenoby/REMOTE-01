@@ -49,6 +49,7 @@ struct TunerControlWidgets {
 	control_home::MenuSnapshot menu{};
 	control_home::Snapshot playback{};
 	control_home::navigation::Model navigation{};
+	control_home::navigation::BrowserDisconnectRecovery browser_disconnect{};
 	control_home::navigation::Gesture gestures[27]{};
 	control_home::BrowserSnapshot browser{};
 	control_home::CatalogPlaybackConfirmation playback_confirmation{};
@@ -158,6 +159,7 @@ static void tuner_control_close()
 	lv_obj_add_flag(tuner_control.view, LV_OBJ_FLAG_HIDDEN);
 	tuner_control.visible = false;
 	tuner_control.navigation.exit();
+	tuner_control.browser_disconnect.clear();
 	tuner_control.popup_until = 0;
 	tuner_control.return_home_after_popup = false;
 	tuner_control.awaiting_action = false;
@@ -704,13 +706,26 @@ static void tuner_control_refresh(lv_timer_t *)
 			tuner_control.awaiting_playback = true;
 		}
 		if (!tuner_control.disconnect_popup) {
+			tuner_control.browser_disconnect.disconnected(tuner_control.navigation.page);
+			if (tuner_control.browser_disconnect.return_home) {
+				// The adapter invalidates Browser data at disconnect. Fence the old
+				// session now so reconnect cannot reveal an empty page or replay START.
+				tuner_control.navigation.exit();
+				tuner_control.browser_session = tuner_control.browser_revision = 0;
+				tuner_control.awaiting_action = tuner_control.awaiting_playback = false;
+				tuner_control_clear_rows();
+			}
 			tuner_control.disconnect_popup = true;
 			tuner_control_popup("TUNER disconnected", false, false, true,
 			                   POPUP_DISCONNECTED);
 		}
 		return;
 	}
-	if (tuner_control.disconnect_popup) tuner_control_popup_hide();
+	if (tuner_control.disconnect_popup) {
+		const bool return_home = tuner_control.browser_disconnect.reconnected();
+		tuner_control_popup_hide();
+		if (return_home) { tuner_control_close(); return; }
+	}
 	if (tuner_control.playback_confirmation.connected() ==
 	    control_home::CatalogConfirmationDecision::QUERY) {
 		if (control_home::request_catalog(

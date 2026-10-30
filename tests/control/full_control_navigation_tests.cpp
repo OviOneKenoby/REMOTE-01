@@ -21,6 +21,19 @@ int main() {
   assert(model.page == Page::BROWSER_COUNTRY);
   model.wake(); assert(model.page == Page::HOME);
 
+  BrowserDisconnectRecovery recovery;
+  recovery.disconnected(Page::BROWSER_COUNTRY);
+  assert(recovery.return_home);
+  assert(recovery.reconnected());
+  assert(!recovery.reconnected());
+  recovery.disconnected(Page::BROWSER_RESULTS);
+  assert(recovery.reconnected());
+  recovery.disconnected(Page::CONTROL);
+  assert(!recovery.reconnected());
+  recovery.disconnected(Page::BROWSER_NAME);
+  recovery.clear();
+  assert(!recovery.reconnected());
+
   Gesture gesture;
   gesture.press(100, 20, 30);
   assert(gesture.release(500) == GestureResult::SHORT_TAP);
