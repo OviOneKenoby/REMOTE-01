@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-10-31 - Full Control 1.3 integrated into main
+
+Fast-forwarded `main` from `d0a6ae5` through the complete Full Control history.
+The hardware-validated REMOTE implementation remains `8fdabc6` (2,610,992-byte
+BIN, SHA-256
+`ba37f42ef9bb520ad94ba0b76bd20f7a08bf38c293e6332f2e6d4af0b89b5c9f`).
+Focused D-009, BTX, RTCP discovery, Browser, navigation, overlay, popup,
+metadata, catalog-confirmation and diagnostics tests passed at integration
+head `e285fc1`.
+
+The clean `remote01` production build at that head passed: BIN 2,611,040 bytes,
+SHA-256
+`0fa3d4d701e45c3e362391a5b5c463dbec716a3545023ef07e960e208718cbeb`;
+ELF SHA-256
+`cedcac4e9bb0d992d48104135a7a1faf87614a86507d92ef5d4ff6312ab983d8`;
+static RAM 61,180 bytes and exact-image factory-slot headroom 5,777,568
+bytes. The hash differs from the installed image because later documentation
+and test commits changed the embedded Git identity; no firmware implementation
+changed after the hardware-validated `8fdabc6`. This integrated build was not
+flashed or hardware-tested. Extended soak and exhaustive Browser error,
+empty-result and cancellation paths remain untested.
+
 ## 2026-10-31 - Radio Browser paired hardware validation PASS
 
 Installed REMOTE `8fdabc6` with exact 2,610,992-byte application readback
