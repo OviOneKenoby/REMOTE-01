@@ -15,6 +15,14 @@ Focused deadline and lifecycle regressions cover no response, a still-pending
 expired response, and a response accepted exactly at expiry. Hardware
 validation with the existing TUNER correlation firmware remains required.
 
+The clean `remote01` production build passed with embedded build ID `c148035`:
+BIN 2,611,264 bytes (SHA-256
+`a90adfe9d4673beed3136737f6570fab5a85b83ebba2790ae6dd1ba5815af22e`),
+ELF 20,060,992 bytes (SHA-256
+`c8a4b39494930772f44b71f7bad9b813fc3ceb8e6b30383c4724e4267c86cf42`).
+Static RAM use is 61,180 of 327,680 bytes; the 8 MiB application slot has
+5,777,344 bytes remaining after the 2,611,264-byte application image.
+
 ## 2026-10-31 - Larger top navigation targets and HOME label correction
 
 Increased the shared TUNER CONTROL and Radio Browser BACK/EXIT buttons from
