@@ -2,6 +2,16 @@
 
 ## 2026-10-31 - Browser disconnect recovery candidate
 
+Hardware validation of the first candidate exposed one additional bounded UI
+defect: an accepted Country selection advanced to the local Name filter without
+dismissing its `Loading...` overlay. RTCP stayed authenticated, the request and
+response counters matched, and TUNER reported HTTP 200 with no TLS or socket
+error. REMOTE now dismisses that overlay before rendering the Name filters.
+The focused overlay policy regression and clean production build pass at
+implementation `8fdabc6`. The resulting 2,610,992-byte BIN SHA-256 is
+`ba37f42ef9bb520ad94ba0b76bd20f7a08bf38c293e6332f2e6d4af0b89b5c9f`;
+static RAM is 61,180 bytes and factory-slot headroom is 5,777,616 bytes.
+
 Corrected the demonstrated blank Browser screen after a transient authenticated
 RTCP disconnect. When transport loss invalidates the Browser snapshot, REMOTE
 now fences the interrupted Browser session and returns HOME exactly once after

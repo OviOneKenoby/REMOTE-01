@@ -555,6 +555,17 @@ navigation, source, station, or persistence change, re-read
 
 ## 2026-10-31 Browser disconnect recovery checkpoint
 
+Hardware follow-up on the installed `efed8f0` candidate established that the
+Country list loads successfully (HTTP 200, 2,087 ms, one attempt, no RTCP/TLS/
+socket error), but an accepted Country selection left `Loading...` visible even
+though the Name-filter page had been admitted. Implementation `8fdabc6` closes
+that overlay before rendering Name filters. The directly affected executable
+overlay-policy test passes. Clean `remote01` build: PASS; BIN 2,610,992 bytes,
+SHA-256 `ba37f42ef9bb520ad94ba0b76bd20f7a08bf38c293e6332f2e6d4af0b89b5c9f`;
+ELF SHA-256 `01f57c2c2d6c13901498911fd34614f83123ab4ced9491acbcb67ec6f45b4f81`;
+static RAM 61,180 bytes; factory-slot headroom 5,777,616 bytes. Hardware
+revalidation of Country -> Name -> Genre -> Results remains pending.
+
 - Implementation `efed8f0` adds deterministic single-shot HOME recovery when
   authenticated RTCP loss invalidates an active Browser page.
 - The interrupted Browser session and revision are fenced immediately; no
