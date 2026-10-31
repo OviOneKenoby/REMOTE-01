@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-10-31 - Larger top navigation targets and HOME label correction
+
+Increased the shared TUNER CONTROL and Radio Browser BACK/EXIT buttons from
+70x34 to 70x42 pixels without changing their positions, order, styling or
+actions. The clickable LVGL objects grow with the visible controls, retain an
+8-pixel horizontal separation and remain within the 172x640 portrait display.
+
+Bounded the HOME navigation labels to the space before their arrows and applied
+one pixel of tighter letter spacing only to `TUNER CONTROL`. This preserves the
+Montserrat 14 font and existing row geometry while preventing the 126-pixel
+title from colliding with the trailing arrow. Focused layout and navigation
+verification plus a `remote01` production build are recorded with the feature
+branch; hardware touch and visual confirmation remain pending.
+
 ## 2026-10-31 - Full Control 1.3 integrated into main
 
 Fast-forwarded `main` from `d0a6ae5` through the complete Full Control history.

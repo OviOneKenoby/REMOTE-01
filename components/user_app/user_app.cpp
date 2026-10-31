@@ -1008,6 +1008,12 @@ static lv_obj_t *tuner_control_button(lv_obj_t *parent, const char *text,
 	return button;
 }
 
+constexpr lv_coord_t kTopNavigationButtonWidth = 70;
+constexpr lv_coord_t kTopNavigationButtonHeight = 42;
+constexpr lv_coord_t kTopNavigationBackX = 12;
+constexpr lv_coord_t kTopNavigationExitX = 90;
+constexpr lv_coord_t kTopNavigationY = 8;
+
 static void tuner_control_create()
 {
 	const lv_color_t background = lv_color_hex(0x11191d);
@@ -1017,10 +1023,14 @@ static void tuner_control_create()
 	                                  background, 0);
 	lv_obj_clear_flag(tuner_control.view, LV_OBJ_FLAG_SCROLLABLE);
 	lv_obj_add_flag(tuner_control.view, LV_OBJ_FLAG_HIDDEN);
-	lv_obj_t *back = tuner_control_button(tuner_control.view, LV_SYMBOL_LEFT " BACK", 8, 34);
-	lv_obj_set_width(back, 70);
-	lv_obj_t *exit = tuner_control_button(tuner_control.view, "EXIT", 8, 34);
-	lv_obj_set_pos(exit, 90, 8); lv_obj_set_width(exit, 70);
+	lv_obj_t *back = tuner_control_button(tuner_control.view, LV_SYMBOL_LEFT " BACK",
+	                                      kTopNavigationY, kTopNavigationButtonHeight);
+	lv_obj_set_pos(back, kTopNavigationBackX, kTopNavigationY);
+	lv_obj_set_width(back, kTopNavigationButtonWidth);
+	lv_obj_t *exit = tuner_control_button(tuner_control.view, "EXIT",
+	                                      kTopNavigationY, kTopNavigationButtonHeight);
+	lv_obj_set_pos(exit, kTopNavigationExitX, kTopNavigationY);
+	lv_obj_set_width(exit, kTopNavigationButtonWidth);
 	lv_obj_add_event_cb(back, tuner_control_back_event, LV_EVENT_CLICKED, nullptr);
 	lv_obj_add_event_cb(exit, tuner_control_exit_event, LV_EVENT_CLICKED, nullptr);
 	remote01_label(tuner_control.view, "TUNER CONTROL", &lv_font_montserrat_20,
@@ -1182,7 +1192,13 @@ static void remote01_mockup_create(void)
 	for (int i = 0; i < 3; ++i) {
 		lv_obj_t *row = remote01_panel(page, 12, 486 + i * 40, 148, 36, panel, 4);
 		lv_obj_add_flag(row, LV_OBJ_FLAG_CLICKABLE);
-		lv_obj_t *name = remote01_label(row, navigation[i], &lv_font_montserrat_14, text, 0, 0);
+		lv_obj_t *name = remote01_single_line(row, navigation[i], &lv_font_montserrat_14,
+		                                     text, 0, 0, 116, LV_LABEL_LONG_CLIP,
+		                                     LV_TEXT_ALIGN_LEFT);
+		if (i == 2) {
+			// Preserve Montserrat 14 while fitting the 126 px title beside the arrow.
+			lv_obj_set_style_text_letter_space(name, -1, LV_PART_MAIN);
+		}
 		lv_obj_align(name, LV_ALIGN_LEFT_MID, 10, 0);
 		lv_obj_t *arrow = remote01_label(row, LV_SYMBOL_RIGHT, &lv_font_montserrat_14, text, 0, 0);
 		lv_obj_align(arrow, LV_ALIGN_RIGHT_MID, -10, 0);
