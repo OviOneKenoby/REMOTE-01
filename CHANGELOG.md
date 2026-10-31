@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-11-01 - Accept an authenticated RTCP response at the deadline boundary
+
+Paired hardware correlation proved that a post-station-start BTX state request
+reached TUNER only near the end of REMOTE's existing three-second deadline.
+TUNER generated and fully wrote the correct response 10 ms before REMOTE
+closed, but `Client::poll()` enforced expiry before its bounded nonblocking
+receive path. REMOTE now performs that existing receive and authenticated
+record-accept pass first, then closes only if the transaction is still
+outstanding. The deadline, retry policy, single-in-flight contract, wire
+format, counters, cryptography and session fencing are unchanged.
+
+Focused deadline and lifecycle regressions cover no response, a still-pending
+expired response, and a response accepted exactly at expiry. Hardware
+validation with the existing TUNER correlation firmware remains required.
+
 ## 2026-10-31 - Larger top navigation targets and HOME label correction
 
 Increased the shared TUNER CONTROL and Radio Browser BACK/EXIT buttons from

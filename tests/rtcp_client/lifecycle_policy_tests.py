@@ -18,7 +18,13 @@ checks = {
     "status unavailability retained": "NetworkDecision::unavailable)return Event::none" in source,
     "confirmed disconnect classified": "network==NetworkDecision::disconnected" in source,
     "generation change classified": "network==NetworkDecision::generation_changed" in source,
+    "deadline receive helper used": "response_deadline_requires_close" in source,
 }
+
+receive = source.index("const auto before=rx_used_;const auto reading=receive()")
+accept = source.index("auto e=accept_record()", receive)
+deadline = source.index("if(response_deadline_requires_close", accept)
+checks["response serviced before deadline close"] = receive < accept < deadline
 failed = [name for name, ok in checks.items() if not ok]
 if failed:
     raise SystemExit("FAIL: " + ", ".join(failed))

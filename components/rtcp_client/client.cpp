@@ -83,7 +83,7 @@ Client::Event Client::poll(std::uint64_t now,bool command_waiting){
   DiscoveryBatch batch{};
   if(discovery_ready_&&discovery_take(batch)){pending_discovery_=batch;pending_discovery_present_=true;}
   if(awaiting_&&!deadline_)deadline_=now+3000;
-  if(((state_==State::connecting||state_==State::server_hello)||awaiting_)&&deadline_&&now>=deadline_){
+  if((state_==State::connecting||state_==State::server_hello)&&deadline_&&now>=deadline_){
     diagnostic_.server_hello_bytes=state_==State::server_hello?std::uint16_t(rx_used_):diagnostic_.server_hello_bytes;
     const bool partial=rx_used_!=0;
     if(!partial&&state_!=State::connecting){
@@ -152,6 +152,23 @@ Client::Event Client::poll(std::uint64_t now,bool command_waiting){
   if(state_>=State::authenticated){
     auto e=accept_record();
     if(e==Event::disconnected){close(close_reason(diagnostic_.failure),true,diagnostic_.error);return e;}
+    // Preserve the same three-second deadline, but do not discard a valid
+    // response that became readable at its boundary. receive() above is
+    // nonblocking and bounded to 128 bytes; accept_record() authenticates and
+    // validates it before this check. If no complete valid response cleared
+    // awaiting_, retain the existing timeout/partial-read teardown exactly.
+    const bool response_deadline_expired = awaiting_&&deadline_&&now>=deadline_;
+    if(response_deadline_requires_close(response_deadline_expired,awaiting_)){
+      const bool partial=rx_used_!=0;
+      if(!partial){
+        int queued=-1;if(socket_>=0){int available=0;if(lwip_ioctl(socket_,FIONREAD,&available)==0&&available>=0)queued=available;}
+        const auto started=deadline_>=3000?deadline_-3000:0;
+        diagnostic_.response_timeout(std::uint8_t(state_),now>=started?now-started:0,queued);
+      }
+      diagnostic_.fail(partial?DiagnosticFailure::short_read:DiagnosticFailure::timeout);
+      close(partial?CloseReason::short_read:CloseReason::response_timeout);
+      return Event::disconnected;
+    }
     if(!command_waiting&&state_==State::ready&&!pending_request_&&!awaiting_&&source_state_due_&&!tx_used_){
       std::uint8_t p[1];auto z=wire::source_state_request(p);
       if(!send_plain(p,z)){diagnostic_.fail(DiagnosticFailure::send);close(CloseReason::send_failed);return Event::disconnected;}
