@@ -770,7 +770,10 @@ static void tuner_control_refresh(lv_timer_t *)
 			(void)control_home::request_browser_page(control_home::BrowserStage::COUNTRIES,0,0,0);
 			break;
 		case control_home::BrowserOperation::SELECT_COUNTRY:
-			tuner_control.navigation.browser_next();tuner_control_show_name_filters();break;
+				tuner_control.navigation.browser_next();
+				tuner_control_popup_hide();
+				tuner_control_show_name_filters();
+				break;
 		case control_home::BrowserOperation::SELECT_NAME:
 			tuner_control.navigation.browser_next();
 			(void)control_home::request_browser_page(control_home::BrowserStage::GENRES,0,0,tuner_control.browser_session);break;
