@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-10-31 - Radio Browser paired hardware validation PASS
+
+Installed REMOTE `8fdabc6` with exact 2,610,992-byte application readback
+SHA-256 `ba37f42ef9bb520ad94ba0b76bd20f7a08bf38c293e6332f2e6d4af0b89b5c9f`
+against TUNER `12b1b24`. The owner completed one Country -> Name -> Genre ->
+Results flow, selected one station, and observed no stuck overlay, false
+disconnect, duplicate start or presentation error. Audio started exactly once;
+metadata, PLAYING and authoritative volume were correct.
+
+Post-test REMOTE remained authenticated at RTCP stage 13 with
+`volume_connected/known/set=1/1/1`. Browser counters advanced without a
+generation mismatch, and the retained four-entry RTCP close history was
+unchanged from baseline. This validates the Browser disconnect recovery and
+Country-overlay correction for the tested flow. It does not constitute a
+long-duration soak or exhaustive empty/error/cancellation validation.
+
 ## 2026-10-31 - Browser disconnect recovery candidate
 
 Hardware validation of the first candidate exposed one additional bounded UI

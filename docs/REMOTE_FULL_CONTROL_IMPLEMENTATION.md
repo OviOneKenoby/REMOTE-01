@@ -8,6 +8,22 @@ The ordered owner-executable hardware procedure is
 [`FULL_CONTROL_HARDWARE_VALIDATION.md`](FULL_CONTROL_HARDWARE_VALIDATION.md).
 Its checkboxes are intentionally unmarked until physical evidence is recorded.
 
+## 2026-10-31 Radio Browser paired hardware checkpoint
+
+REMOTE `8fdabc6` and TUNER `12b1b24` were installed application-only and both
+exact-span readbacks matched their approved SHA-256 identities. A complete
+Country -> Name -> Genre -> Results flow and one station selection passed on
+hardware: overlays cleared, no disconnect card appeared, audio started once,
+and metadata, PLAYING and volume were authoritative. REMOTE stayed at RTCP
+stage 13 and its retained close history did not change. TUNER recorded one
+Browser start/result, nine produced pages, three completed HTTPS jobs, HTTP
+200, zero Browser job failures, and authoritative MP3 playback.
+
+This closes the specific blank-page, Country-overlay and synchronous Browser
+PLAY regressions. Extended mixed-use soak, exhaustive cancellation/error/empty
+results, and unrelated historical UTF-8 snapshot bounds remain outside this
+checkpoint.
+
 ## 2026-10-29 focused hardware follow-up
 
 The `0ed0ffb` TUNER / `9142401` REMOTE pair passed startup, idle RTCP baseline,
