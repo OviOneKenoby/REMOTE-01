@@ -68,10 +68,33 @@ changes.
   incremental retry.
 
 Final firmware identity and partition headroom are recorded in the private
-candidate manifest after the source commit. Hardware validation remains
-**NOT TESTED** until the REMOTE-only candidate is installed through the existing
-validated OTA/USB recovery workflow and the required source/sleep lifecycle is
-observed. TUNER is not part of this milestone.
+candidate manifest after the source commit.
+
+## Hardware validation
+
+The exact candidate was installed through the previously accepted local Wi-Fi
+OTA workflow. The updater reported successful REMOTE//01 image verification
+before reboot. Post-reboot diagnostics independently identified project
+`REMOTE01`, version `8b0b406` and the candidate ELF SHA-256.
+
+Owner-observed checks passed:
+
+- Radio mode displayed the Radio placeholder.
+- Bluetooth mode displayed the Bluetooth placeholder and HOME remained
+  responsive.
+- Bluetooth to Radio restored the Radio placeholder without a stale image or
+  persistent error.
+- Leaving and recreating HOME retained the correct source image, metadata and
+  touch behavior.
+- Display idle followed by SYSTEM_SLEEP/wake restored HOME, artwork, metadata,
+  volume and responsive touch without unintended playback behavior.
+
+The final read-only snapshot reported Wi-Fi connected at -52 dBm, RTCP stage
+13 with no current failure, authoritative volume connected/known/set, no
+outstanding operation, zero allocation/network/power errors, 29,311 bytes free
+internal heap (9,728-byte largest block), and 7,533,728 bytes free PSRAM.
+Artwork Stage 1 hardware validation is therefore **PASS**. TUNER was not
+flashed, reset or otherwise modified by this milestone.
 
 ## Next milestone boundary
 

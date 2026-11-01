@@ -19,6 +19,11 @@
 - Production `remote01` build and hardware validation are recorded in
   `docs/REMOTE_ARTWORK_IMPLEMENTATION.md`. No protocol, partition, NVS, OTA,
   TUNER firmware or TUNER configuration change is included.
+- Hardware validation passed after a verified local Wi-Fi OTA installation.
+  Radio, Bluetooth, source reversal, HOME recreation and SYSTEM_SLEEP/wake all
+  retained the correct placeholder and responsive UI. Post-wake diagnostics
+  confirmed build `8b0b406`, RTCP READY, authoritative volume synchronized,
+  zero allocation/network/power errors and 7,533,728 bytes free PSRAM.
 
 ## 2026-11-01 - Authenticated local Wi-Fi OTA candidate
 
