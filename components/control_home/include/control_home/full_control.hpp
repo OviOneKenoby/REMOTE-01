@@ -30,6 +30,24 @@ struct FullControlSnapshot {
   std::uint64_t source_generation = 0;
 };
 
+// Protocol-neutral, fixed-size artwork observation. The RTCP owner publishes
+// this copy so UI/network artwork code never reaches into authenticated wire
+// objects or retains adapter-owned pointers.
+struct ArtworkMetadataSnapshot {
+  bool connected = false;
+  TunerSource source = TunerSource::UNKNOWN;
+  std::uint64_t session = 0;
+  std::uint64_t source_generation = 0;
+  std::uint64_t sequence = 0;
+  std::uint64_t media_generation = 0;
+  std::uint64_t metadata_revision = 0;
+  std::array<char, 64> station{};
+  std::array<char, 97> artist{};
+  std::array<char, 256> title{};
+  std::array<char, 256> combined{};
+  bool operator==(const ArtworkMetadataSnapshot &) const = default;
+};
+
 enum class TunerMenuMode : std::uint8_t {
   UNAVAILABLE = 0,
   STATION_SELECT = 1,
@@ -124,6 +142,8 @@ struct BrowserSnapshot {
 };
 
 bool full_control_read(FullControlSnapshot &snapshot, std::uint64_t &generation);
+bool artwork_metadata_read(ArtworkMetadataSnapshot &snapshot,
+                           std::uint64_t &generation);
 bool menu_read(MenuSnapshot &snapshot, std::uint64_t &generation);
 bool catalog_read(CatalogSnapshot &snapshot, std::uint64_t &generation);
 bool browser_read(BrowserSnapshot &snapshot, std::uint64_t &generation);

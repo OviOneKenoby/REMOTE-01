@@ -121,9 +121,9 @@ bool Surface::initialize() {
   return true;
 }
 
-bool Surface::render(Source source) {
+bool Surface::render(Source source, bool force) {
   if (!ready()) return false;
-  if (source == source_) return true;
+  if (!force && source == source_) return true;
   draw(pixels_, source);
   source_ = source;
   commit_ui_buffer();

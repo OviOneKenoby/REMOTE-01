@@ -20,7 +20,7 @@ public:
   // Called by the LVGL owner. The one PSRAM surface is retained until reboot,
   // so a deleted/recreated HOME widget can never outlive its image descriptor.
   bool initialize();
-  bool render(Source source);
+  bool render(Source source, bool force = false);
 
   bool ready() const { return pixels_ != nullptr; }
   bool allocation_attempted() const { return attempted_; }

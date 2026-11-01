@@ -23,6 +23,7 @@
 #include "control_home/api.hpp"
 #include "network_manager/api.hpp"
 #include "power_management/api.hpp"
+#include "artwork/online.hpp"
 #include "power_management/reset_diagnostic.hpp"
 
 static const char *TAG = "example";
@@ -219,6 +220,7 @@ extern "C" void app_main(void)
     control_home::start();
 #endif
     network_manager::start();
+    artwork::online::start();
 }
 static void example_lvgl_flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *color_map)
 {

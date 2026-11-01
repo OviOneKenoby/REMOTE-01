@@ -38,6 +38,10 @@ struct FullControlChannel {
   bool requested = false;
   TunerSource requested_source = TunerSource::UNKNOWN;
 } full_control;
+struct ArtworkMetadataChannel {
+  ArtworkMetadataSnapshot view{};
+  std::uint64_t generation = 1;
+} artwork_metadata;
 struct MenuChannel {
   MenuSnapshot view{};
   std::uint64_t generation = 1;
@@ -88,6 +92,11 @@ void publish_full_control(const FullControlSnapshot &next) {
       old.source_generation == next.source_generation) return;
   full_control.view = next;
   if (full_control.generation != UINT64_MAX) ++full_control.generation;
+}
+void publish_artwork_metadata(const ArtworkMetadataSnapshot &next) {
+  if (artwork_metadata.view == next) return;
+  artwork_metadata.view = next;
+  if (artwork_metadata.generation != UINT64_MAX) ++artwork_metadata.generation;
 }
 void publish_menu(const rtcp_client::wire::MenuState &source, bool connected,
                   bool supported) {
@@ -384,6 +393,21 @@ void task(void *) {
       next.session = s->snapshot().session;
       next.rtcp_close_reason =
           static_cast<std::uint8_t>(s->rtcp.diagnostic().close_reason);
+      ArtworkMetadataSnapshot artwork_next{};
+      artwork_next.connected = next.connected;
+      artwork_next.source = next.source;
+      artwork_next.session = next.session;
+      artwork_next.source_generation = next.source_generation;
+      if (next.connected) {
+        const auto &media = s->rtcp.now_playing();
+        artwork_next.sequence = media.sequence;
+        artwork_next.media_generation = media.media_generation;
+        artwork_next.metadata_revision = media.metadata_revision;
+        artwork_next.station = media.station;
+        artwork_next.artist = media.artist;
+        artwork_next.title = media.title;
+        artwork_next.combined = media.combined;
+      }
       portENTER_CRITICAL(&mux);
       next.command_pending = full_control.pending_request != 0 || full_control.requested;
       next.requested_source = full_control.pending_request || full_control.requested ||
@@ -417,6 +441,7 @@ void task(void *) {
         next.last_error = result.error;
       }
       publish_full_control(next);
+      publish_artwork_metadata(artwork_next);
       publish_menu(s->rtcp.menu_state(), next.connected,
                    capability.menu_projection());
       if (!next.connected) {
@@ -712,6 +737,17 @@ bool full_control_read(FullControlSnapshot &snapshot, std::uint64_t &generation)
   if (changed) {
     snapshot = full_control.view;
     generation = full_control.generation;
+  }
+  portEXIT_CRITICAL(&mux);
+  return changed;
+}
+bool artwork_metadata_read(ArtworkMetadataSnapshot &snapshot,
+                           std::uint64_t &generation) {
+  portENTER_CRITICAL(&mux);
+  const bool changed = artwork_metadata.generation != generation;
+  if (changed) {
+    snapshot = artwork_metadata.view;
+    generation = artwork_metadata.generation;
   }
   portEXIT_CRITICAL(&mux);
   return changed;

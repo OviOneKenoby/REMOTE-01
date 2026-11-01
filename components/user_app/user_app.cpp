@@ -5,6 +5,7 @@
 #include "gui_guider.h"
 #include "lcd_bl_pwm_bsp.h"
 #include "artwork/surface.hpp"
+#include "artwork/online.hpp"
 #include "control_home/api.hpp"
 #include "control_home/catalog_confirmation.hpp"
 #include "control_home/source_confirmation.hpp"
@@ -42,6 +43,10 @@ struct HomeWidgets {
 // widgets may be destroyed and recreated without invalidating the descriptor.
 static artwork::Surface artwork_surface;
 static artwork::Model artwork_model;
+static control_home::ArtworkMetadataSnapshot artwork_metadata{};
+static std::uint64_t artwork_metadata_generation = 0;
+static std::uint64_t artwork_request_generation = 0;
+static artwork::online::Identity artwork_identity{};
 
 struct OtaWidgets {
 	lv_obj_t *panel = nullptr;
@@ -673,6 +678,44 @@ static void home_artwork_refresh()
 	const auto authoritative = static_cast<std::uint8_t>(tuner_control.state.source);
 	(void)artwork_model.observe(tuner_control.state.connected, authoritative);
 	(void)artwork_surface.render(artwork_model.source);
+	if (control_home::artwork_metadata_read(artwork_metadata,
+	                                       artwork_metadata_generation)) {
+		artwork::online::Metadata metadata{};
+		metadata.connected = artwork_metadata.connected;
+		metadata.source = artwork::authoritative_source(
+			artwork_metadata.connected,
+			static_cast<std::uint8_t>(artwork_metadata.source));
+		metadata.session = artwork_metadata.session;
+		metadata.source_generation = artwork_metadata.source_generation;
+		metadata.media_generation = artwork_metadata.media_generation;
+		metadata.metadata_revision = artwork_metadata.metadata_revision;
+		metadata.station = artwork_metadata.station.data();
+		metadata.artist = artwork_metadata.artist.data();
+		metadata.title = artwork_metadata.title.data();
+		metadata.combined = artwork_metadata.combined.data();
+		artwork::online::Identity next{};
+		if (++artwork_request_generation == 0) ++artwork_request_generation;
+		if (artwork::online::make_identity(metadata, artwork_request_generation,
+		                                  next)) {
+			if (!artwork::online::same_media(next, artwork_identity)) {
+				artwork_identity = next;
+				(void)artwork_surface.render(artwork_model.source, true);
+				(void)artwork::online::submit(artwork_identity);
+			}
+		} else {
+			artwork_identity = {};
+			artwork::online::cancel();
+			(void)artwork_surface.render(artwork_model.source, true);
+		}
+	}
+	if (artwork_identity.usable() && artwork_surface.ready()) {
+		auto *pixels = reinterpret_cast<std::uint16_t *>(
+			artwork_surface.ui_write_buffer());
+		if (artwork::online::copy_completion(
+				artwork_identity,
+				std::span<std::uint16_t>(pixels, artwork::Surface::pixel_count)))
+			artwork_surface.commit_ui_buffer();
+	}
 
 	// A failed one-time PSRAM allocation retains a useful local text fallback.
 	// These labels are also present beneath the image, but hidden while ready.

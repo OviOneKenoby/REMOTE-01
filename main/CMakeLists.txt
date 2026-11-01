@@ -8,6 +8,7 @@ idf_component_register(
         network_manager
         power_management
         user_app
+        artwork
         i2c_bsp
         lvgl
         esp_lcd_axs15231b

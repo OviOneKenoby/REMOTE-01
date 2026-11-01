@@ -4,6 +4,7 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[2]
 ui = (root / "components/user_app/user_app.cpp").read_text(encoding="utf-8")
 surface = (root / "components/artwork/surface.cpp").read_text(encoding="utf-8")
+online = (root / "components/artwork/online_runtime.cpp").read_text(encoding="utf-8")
 header = (root / "components/artwork/include/artwork/surface.hpp").read_text(encoding="utf-8")
 sdk = (root / "sdkconfig.remote01").read_text(encoding="utf-8")
 
@@ -24,6 +25,15 @@ checks = {
     "no_decoder_enabled": all(token in sdk for token in (
         "# CONFIG_LV_USE_PNG is not set", "# CONFIG_LV_USE_SJPG is not set")),
     "no_network_dependency": "esp_http_client" not in surface,
+    "single_worker": online.count("xTaskCreatePinnedToCore(") == 1,
+    "bounded_encoded_buffer": "encoded_limit = 128 * 1024" in (root / "components/artwork/include/artwork/online.hpp").read_text(encoding="utf-8"),
+    "psram_worker_buffers": online.count("heap_caps_malloc(") == 3 and
+                            online.count("MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT") >= 3,
+    "allocation_failure_cleanup": all(token in online for token in (
+        "heap_caps_free(encoded)", "heap_caps_free(decoded)", "heap_caps_free(jpeg_pool)")),
+    "no_worker_lvgl_calls": "lv_obj_" not in online and "lv_img_" not in online,
+    "tls_bundle_required": "esp_crt_bundle_attach" in online,
+    "ota_exclusion": "ota_service::busy()" in online,
 }
 
 failed = [name for name, ok in checks.items() if not ok]

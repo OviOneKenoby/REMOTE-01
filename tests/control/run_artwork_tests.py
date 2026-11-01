@@ -14,7 +14,10 @@ with tempfile.TemporaryDirectory(prefix="remote01-artwork-") as work:
     binary = Path(work) / ("artwork_tests.exe" if os.name == "nt" else "artwork_tests")
     command = [str(compiler), "-std=c++23", "-O1", "-Wall", "-Wextra", "-Werror",
                "-I", str(root / "components/artwork/include"),
-               str(root / "tests/control/artwork_tests.cpp"), "-o", str(binary)]
+               str(root / "tests/control/artwork_tests.cpp"),
+               str(root / "components/artwork/online_policy.cpp"),
+               str(root / "components/artwork/musicbrainz.cpp"),
+               "-o", str(binary)]
     subprocess.run(command, cwd=root, env=env, check=True)
     subprocess.run([str(binary)], cwd=root, env=env, check=True)
 subprocess.run([shutil.which("python") or "python",
