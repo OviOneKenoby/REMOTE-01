@@ -9,6 +9,17 @@
   or unrelated disconnect still follows the normal disconnected UI path.
 - Add deterministic coverage for transient recovery and deadline expiry.
 
+Hardware validation passed with source commit `eb2199c`: the application-only
+install and independent 2,611,312-byte readback matched SHA-256
+`d823480653f2f231e09166e7a24756cab04f56062530d628a8752a2464d1eec8`.
+Selecting West City Radio through HOME -> Favorites produced no false disconnect
+card, started audio exactly once and returned REMOTE to HOME with RTCP READY and
+authoritative volume synchronized. The image retained the earlier embedded
+`502d206` descriptor because it was an incremental build; exact source ancestry,
+the rebuilt `user_app` object, candidate hash and readback establish the installed
+`eb2199c` correction. No functional rebuild was performed merely to alter that
+version string.
+
 ## 2026-11-01 - Bound the post-deadline RTCP response drain
 
 Hardware validation of the receive-before-timeout correction reproduced one
