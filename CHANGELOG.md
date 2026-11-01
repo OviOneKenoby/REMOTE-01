@@ -22,9 +22,10 @@
   `remote01` build at implementation `37cabec` succeeds with 61,356 bytes
   static RAM, 2,633,257 bytes linked flash, and a 2,633,760-byte BIN
   (`6efd529c1f3a20009aa6c2082cf6c987c371398c722c45f931d2fa55b1935f3e`).
-  Each 3 MiB OTA slot retains 511,968 bytes exact-image headroom. Initial USB
-  installation and one real Wi-Fi OTA remain hardware gates before this
-  feature can be accepted or merged.
+  Each 3 MiB OTA slot retains 511,968 bytes exact-image headroom in that
+  initial candidate. The corrected USB installation and one real authenticated
+  browser OTA subsequently passed; see the hardware notes below. Merge remains
+  separately controlled.
 - During the initial USB hardware gate, the OTA-capable image booted and its
   exact application readback passed, but the diagnostics HTTP task's temporary
   8192-byte stack left no contiguous internal block for the mDNS task. A first
@@ -34,7 +35,19 @@
   bytes unused (about 1676 bytes maximum observed use), leaving about 2420
   bytes measured reserve at the corrected size. OTA upload storage remains a
   fixed 4096-byte PSRAM allocation. A policy regression protects both memory
-  decisions. Wi-Fi OTA acceptance remains pending.
+  decisions. Wi-Fi OTA acceptance was still pending at that intermediate gate.
+
+Hardware acceptance completed after the memory correction. Source `50e6da9`
+was installed application-only at `0x10000`; its independent 2,633,744-byte
+readback matched SHA-256
+`9c3233580e79fa2e4ed9264b2f48f39b77ac4454a2ed30647e1cc2a8b80355ad`.
+The local `/ota` page then authenticated an owner browser with the on-device
+PIN and installed docs-identity build `486037f` (2,634,112 bytes, SHA-256
+`59f293df22af137740672f50681e3e7b79104f1b2c9ba5dd152166dbbae96f96`).
+After the controlled software reboot, diagnostics reported build `486037f`,
+retained Wi-Fi and RTCP pairing, RTCP READY, authoritative volume known/set,
+zero allocation failures and responsive HTTP. No TUNER firmware or settings
+were accessed.
 
 ## 2026-11-01 - Catalog playback transient disconnect presentation
 

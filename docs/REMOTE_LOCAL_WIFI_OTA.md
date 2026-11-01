@@ -119,7 +119,19 @@ SHA-256
 `9c3233580e79fa2e4ed9264b2f48f39b77ac4454a2ed30647e1cc2a8b80355ad`.
 After boot, stored Wi-Fi and RTCP pairing were retained; HTTP diagnostics were
 responsive, RTCP reached READY, authoritative volume was known/set, and no
-allocation failure was reported. The real browser OTA gate remains pending.
+allocation failure was reported.
+
+The real browser OTA gate then passed. The owner opened the local `/ota` page,
+authorized with the six-digit PIN displayed only on REMOTE, selected the
+separately identified `486037f` image and received the explicit verified-image
+success response. REMOTE rebooted into project `REMOTE01`, version `486037f`,
+with ELF SHA-256
+`8fb4df9c36bdf341e6b2b60baae5f14139ec6c0f4e21cd44d03ac2c5710e3c1c`.
+The image is 2,634,112 bytes (SHA-256
+`59f293df22af137740672f50681e3e7b79104f1b2c9ba5dd152166dbbae96f96`),
+leaving 511,616 bytes in the 3 MiB slot. Post-reboot diagnostics confirmed
+retained Wi-Fi and pairing, authenticated RTCP READY, authoritative volume
+connected/known/set, responsive HTTP and zero allocation failures.
 
 ## Offline candidate checkpoint
 
