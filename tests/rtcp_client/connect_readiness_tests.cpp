@@ -20,5 +20,10 @@ int main() {
   assert(response_deadline_requires_close(true,true)); ++passed;
   assert(!response_deadline_requires_close(true,false)); ++passed;
   assert(!response_deadline_requires_close(false,true)); ++passed;
+  static_assert(response_service_deadline_ms == 3000);
+  static_assert(response_drain_grace_ms == 64);
+  static_assert(response_close_deadline_ms == 3064);
+  assert(!connect_deadline_expired(3063,response_close_deadline_ms)); ++passed;
+  assert(connect_deadline_expired(3064,response_close_deadline_ms)); ++passed;
   std::cout << passed << "/" << passed << " PASS\n";
 }

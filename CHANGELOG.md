@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-11-01 - Bound the post-deadline RTCP response drain
+
+Hardware validation of the receive-before-timeout correction reproduced one
+remaining transient disconnect. TUNER received the post-play catalog query,
+generated and fully wrote response type 23, then observed REMOTE peer EOF only
+10 ms later. REMOTE had already performed its single receive pass before those
+bytes arrived. Application responses now retain the existing three-second
+service deadline followed by one fixed 64 ms drain window, sufficient for one
+normal poll interval plus jitter. The receive remains nonblocking and bounded;
+requests are not retried or replayed. Connect/server-hello deadlines, protocol,
+cryptography, session fencing and TUNER firmware are unchanged.
+
 ## 2026-11-01 - Accept an authenticated RTCP response at the deadline boundary
 
 Paired hardware correlation proved that a post-station-start BTX state request

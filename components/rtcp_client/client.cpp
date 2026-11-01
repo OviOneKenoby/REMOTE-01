@@ -82,7 +82,7 @@ Client::Event Client::poll(std::uint64_t now,bool command_waiting){
   discovery_set_network(discovery_ready_);
   DiscoveryBatch batch{};
   if(discovery_ready_&&discovery_take(batch)){pending_discovery_=batch;pending_discovery_present_=true;}
-  if(awaiting_&&!deadline_)deadline_=now+3000;
+  if(awaiting_&&!deadline_)deadline_=now+response_close_deadline_ms;
   if((state_==State::connecting||state_==State::server_hello)&&deadline_&&now>=deadline_){
     diagnostic_.server_hello_bytes=state_==State::server_hello?std::uint16_t(rx_used_):diagnostic_.server_hello_bytes;
     const bool partial=rx_used_!=0;
@@ -152,17 +152,18 @@ Client::Event Client::poll(std::uint64_t now,bool command_waiting){
   if(state_>=State::authenticated){
     auto e=accept_record();
     if(e==Event::disconnected){close(close_reason(diagnostic_.failure),true,diagnostic_.error);return e;}
-    // Preserve the same three-second deadline, but do not discard a valid
-    // response that became readable at its boundary. receive() above is
-    // nonblocking and bounded to 128 bytes; accept_record() authenticates and
-    // validates it before this check. If no complete valid response cleared
-    // awaiting_, retain the existing timeout/partial-read teardown exactly.
+    // Preserve the three-second service deadline and allow only one bounded
+    // 64 ms drain window. Paired hardware evidence proved that TUNER can fully
+    // write a valid response just after the service boundary while REMOTE is
+    // already executing its timeout poll. receive() above remains nonblocking
+    // and bounded to 128 bytes; no request is retried or replayed.
     const bool response_deadline_expired = awaiting_&&deadline_&&now>=deadline_;
     if(response_deadline_requires_close(response_deadline_expired,awaiting_)){
       const bool partial=rx_used_!=0;
       if(!partial){
         int queued=-1;if(socket_>=0){int available=0;if(lwip_ioctl(socket_,FIONREAD,&available)==0&&available>=0)queued=available;}
-        const auto started=deadline_>=3000?deadline_-3000:0;
+        const auto started=deadline_>=response_close_deadline_ms?
+                           deadline_-response_close_deadline_ms:0;
         diagnostic_.response_timeout(std::uint8_t(state_),now>=started?now-started:0,queued);
       }
       diagnostic_.fail(partial?DiagnosticFailure::short_read:DiagnosticFailure::timeout);

@@ -19,6 +19,14 @@ inline bool response_deadline_requires_close(bool deadline_expired,
   return deadline_expired && awaiting_after_receive;
 }
 
+// Application responses retain the three-second service deadline, followed by
+// one bounded 64 ms drain window. This covers one normal REMOTE poll interval
+// plus scheduling jitter without retrying or replaying the request.
+inline constexpr unsigned long long response_service_deadline_ms = 3000;
+inline constexpr unsigned long long response_drain_grace_ms = 64;
+inline constexpr unsigned long long response_close_deadline_ms =
+    response_service_deadline_ms + response_drain_grace_ms;
+
 inline ConnectCheck classify_connect_readiness(int select_result, bool writable,
                                                 int select_error, int option_result,
                                                 int socket_error) {

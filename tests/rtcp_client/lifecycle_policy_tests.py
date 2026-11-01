@@ -19,6 +19,8 @@ checks = {
     "confirmed disconnect classified": "network==NetworkDecision::disconnected" in source,
     "generation change classified": "network==NetworkDecision::generation_changed" in source,
     "deadline receive helper used": "response_deadline_requires_close" in source,
+    "bounded response drain used": "now+response_close_deadline_ms" in source,
+    "diagnostic keeps service origin": "deadline_-response_close_deadline_ms" in source,
 }
 
 receive = source.index("const auto before=rx_used_;const auto reading=receive()")
