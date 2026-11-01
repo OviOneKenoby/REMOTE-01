@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-11-01 - Artwork Stage 2 bounded online album covers
+
+- Add a single low-priority, fixed-state artwork worker for MusicBrainz exact
+  recording lookup, Cover Art Archive 250-pixel front-cover retrieval and
+  ESP32-S3 ROM baseline-JPEG decode. HTTPS certificate verification remains
+  enabled; MusicBrainz starts are globally paced to one per second.
+- Publish a protocol-neutral RTCP metadata observation to artwork code without
+  changing the wire protocol. Bluetooth retains separate artist/title fields;
+  Radio accepts only documented unambiguous StreamTitle separators.
+- Fence every request and completion by source, station, RTCP session, source
+  generation, media generation, metadata revision and local request identity.
+  New metadata immediately restores generic artwork, and stale completions can
+  never overwrite the current source/track.
+- Bound MusicBrainz JSON to 32 KiB, encoded covers to 128 KiB, redirects to
+  three HTTPS hops and network calls to eight seconds each. Exact normalized
+  artist/title compatibility and one unambiguous release group are mandatory;
+  missing, conflicting, live/remix, malformed and unsupported results fall
+  back safely.
+- Retain one decoded cover and four 15-minute negative results in RAM. Large
+  encoded, decoded and JPEG scratch buffers are fixed PSRAM allocations; no
+  filesystem, NVS, partition, OTA, authentication or TUNER change is included.
+- Focused artwork tests pass (64 behavioral and 22 integration-policy
+  assertions), as do relevant HOME, navigation, BTX, OTA, sleep and power
+  checks. Production build passes; hardware validation remains pending. The
+  unrelated historical `utf8_snapshot_bounds` assertion remains separately
+  tracked and unchanged.
+
 ## 2026-11-01 - Artwork Stage 1 local image foundation
 
 - Replace the static HOME artwork labels with a centered 144 x 144 RGB565

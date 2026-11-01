@@ -1,5 +1,81 @@
 # REMOTE Artwork Implementation
 
+## Stage 2: bounded online album covers
+
+Stage 2 adds album-cover lookup without changing the RTCP wire protocol,
+TUNER firmware, HOME geometry, NVS or partitions. The RTCP owner publishes a
+fixed protocol-neutral metadata copy containing source, station, separate BTX
+artist/title fields, Radio StreamTitle, session, source generation, media
+generation and metadata revision. A local request generation completes the
+stale-result fence.
+
+Radio metadata is accepted only for one unambiguous `Artist - Title`,
+`Artist – Title` or `Artist — Title` separator. Missing, repeated, URL-like,
+advertising, station-identification and slogan metadata stays on the generic
+source placeholder. Bluetooth uses its existing separate artist and title
+fields and never splits the HOME display string.
+
+One low-priority worker performs HTTPS activity and never calls LVGL. It is
+eligible only while Wi-Fi is connected, provisioning/scanning are inactive,
+OTA is idle, commands are allowed and the UI is not parked for sleep. New
+metadata immediately restores the generic Radio/Bluetooth placeholder. A
+completed image is copied to the boot-lifetime Stage 1 surface only if every
+identity fence still matches; track/source/session changes discard stale work.
+
+### Lookup and transport policy
+
+- MusicBrainz recording search uses HTTPS, `fmt=json`, a maximum of five
+  results and the descriptive User-Agent
+  `REMOTE01/<build> (https://github.com/OviOneKenoby/REMOTE-01)`.
+- Global MusicBrainz starts are paced to at most one per second, following the
+  published API limit. The JSON body is capped at 32 KiB and parsed without
+  dynamic allocation.
+- Selection requires score 90 or above plus exact normalized artist and title.
+  Conflicting titles (including live/remix variants) and multiple materially
+  different release-group IDs are rejected rather than guessed.
+- Cover Art Archive uses the accepted release-group `front-250` endpoint.
+  Certificate-bundle verification remains enabled; at most three HTTPS-only
+  redirects are accepted. Each request has an 8-second timeout.
+- Only successful JSON or JPEG responses are accepted. The encoded image is
+  capped at 128 KiB. Missing, ambiguous, oversized, malformed, truncated,
+  progressive, non-JPEG or decode-failed results retain the generic artwork.
+  There is no automatic network retry; later identical observations use the
+  bounded negative cache instead of generating traffic.
+
+### Decode, cache and memory bounds
+
+The ESP32-S3 ROM Tiny JPEG decoder handles baseline JPEG only. The preflight
+scanner requires SOI/SOF0/SOS/EOI, rejects progressive JPEG, and limits both
+dimensions to 2,048 pixels. Decode occurs on the artwork worker, scales by a
+ROM-supported power of two and center-crops proportionally to 144 x 144.
+
+Permanent dynamic storage is explicit PSRAM: one 128 KiB encoded buffer, one
+41,472-byte RGB565 staging/cache buffer and one 8 KiB JPEG work pool, in
+addition to Stage 1's 41,472-byte displayed surface. The worker has one fixed
+request, one fixed completion and a four-entry negative cache with a 15-minute
+boot-local TTL. Allocation failure disables online covers and leaves local
+fallback artwork available. No image is written to filesystem or NVS.
+
+### Offline verification
+
+- Artwork identity/matching/parser/cache/transport/JPEG policy: **PASS**
+  (64 assertions).
+- Artwork UI/ownership/memory/TLS/worker policy: **PASS** (22 assertions).
+- HOME metadata UI: **PASS** (15 assertions).
+- UI navigation: **PASS** (12 assertions).
+- BTX integration policy: **PASS** (15 assertions).
+- OTA policy and preflight: **PASS** (8 preflight tests / 685 assertions).
+- Sleep boundary and power publication: **PASS** (23 and 82,668 assertions).
+- Core, HOME and RTCP ownership passed before the broad harness reached the
+  separately documented, pre-existing `utf8_snapshot_bounds` assertion. That
+  unrelated expectation remains unchanged.
+- Production `remote01` build: **PASS**. Final candidate identity and exact
+  3 MiB OTA headroom are recorded after the documentation commit.
+
+Hardware validation remains **NOT TESTED** until the final candidate passes
+the existing local OTA safety gates. Stage 3 artist photographs remain
+deferred; album lookup failure therefore falls directly to Stage 1 artwork.
+
 ## Stage 1 scope
 
 Artwork Stage 1 supplies a local, hardware-testable image path for the HOME
@@ -96,7 +172,7 @@ internal heap (9,728-byte largest block), and 7,533,728 bytes free PSRAM.
 Artwork Stage 1 hardware validation is therefore **PASS**. TUNER was not
 flashed, reset or otherwise modified by this milestone.
 
-## Next milestone boundary
+## Stage 1 next-milestone boundary (historical)
 
 The next artwork milestone may add one bounded decoder and network worker only
 after this lifecycle and memory ownership have passed hardware validation. It
