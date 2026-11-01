@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-11-01 - Artwork Stage 1 local image foundation
+
+- Replace the static HOME artwork labels with a centered 144 x 144 RGB565
+  surface that renders local Radio, Bluetooth and neutral placeholders from
+  the authoritative Full Control source state.
+- Retain one 41,472-byte PSRAM surface for the boot lifetime. HOME destruction,
+  recreation, display sleep/wake and RTCP reconnects therefore cannot leave an
+  LVGL image descriptor pointing at released storage, and ordinary refreshes
+  perform neither allocation nor image redraw when the source is unchanged.
+- Keep all LVGL object creation and image-source updates in the existing UI
+  owner. A failed one-time PSRAM allocation falls back to bounded local text;
+  it does not consume internal RAM or retry on every timer tick.
+- Add portable source-lifecycle and allocation-fallback behavior tests plus UI
+  ownership, layout, decoder-policy and memory-policy checks. Runtime PNG/JPEG
+  decoding, network retrieval, cache management, album covers and artist
+  photographs remain explicitly deferred.
+- Production `remote01` build and hardware validation are recorded in
+  `docs/REMOTE_ARTWORK_IMPLEMENTATION.md`. No protocol, partition, NVS, OTA,
+  TUNER firmware or TUNER configuration change is included.
+
 ## 2026-11-01 - Authenticated local Wi-Fi OTA candidate
 
 - Add a responsive, self-contained `/ota` page to the existing station-mode

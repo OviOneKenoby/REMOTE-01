@@ -4,6 +4,7 @@
 #include "lvgl.h"
 #include "gui_guider.h"
 #include "lcd_bl_pwm_bsp.h"
+#include "artwork/surface.hpp"
 #include "control_home/api.hpp"
 #include "control_home/catalog_confirmation.hpp"
 #include "control_home/source_confirmation.hpp"
@@ -29,11 +30,18 @@ struct HomeWidgets {
 	lv_obj_t *playback = nullptr, *volume = nullptr, *level = nullptr;
 	lv_obj_t *ip = nullptr;
 	lv_obj_t *battery_icon = nullptr, *battery_tip = nullptr, *plug = nullptr;
+	lv_obj_t *artwork_image = nullptr, *artwork_fallback = nullptr,
+	         *artwork_caption = nullptr;
 	lv_obj_t *buttons[3]{}, *symbols[3]{};
 	lv_timer_t *timer = nullptr;
 	lv_obj_t *page = nullptr;
 	std::uint64_t generation = 0;
 } home;
+
+// One explicitly PSRAM-backed RGB565 surface is retained until reboot. HOME
+// widgets may be destroyed and recreated without invalidating the descriptor.
+static artwork::Surface artwork_surface;
+static artwork::Model artwork_model;
 
 struct OtaWidgets {
 	lv_obj_t *panel = nullptr;
@@ -660,6 +668,34 @@ static void tuner_control_apply_browser()
 	lv_obj_clear_flag(tuner_control.list_panel,LV_OBJ_FLAG_HIDDEN);
 }
 
+static void home_artwork_refresh()
+{
+	const auto authoritative = static_cast<std::uint8_t>(tuner_control.state.source);
+	(void)artwork_model.observe(tuner_control.state.connected, authoritative);
+	(void)artwork_surface.render(artwork_model.source);
+
+	// A failed one-time PSRAM allocation retains a useful local text fallback.
+	// These labels are also present beneath the image, but hidden while ready.
+	if (!home.artwork_fallback || !home.artwork_caption) return;
+	const char *name = artwork_model.source == artwork::Source::radio ? "RADIO" :
+	                   artwork_model.source == artwork::Source::bluetooth ? "BLUETOOTH" :
+	                   "TUNER//01";
+	const char *caption = artwork_model.source == artwork::Source::neutral ? "ARTWORK" : "SOURCE";
+	home_text(home.artwork_fallback, name);
+	home_text(home.artwork_caption, caption);
+	if (artwork::presentation(artwork_surface.ready() && home.artwork_image) ==
+	    artwork::Presentation::image) {
+		lv_obj_clear_flag(home.artwork_image, LV_OBJ_FLAG_HIDDEN);
+		lv_obj_add_flag(home.artwork_fallback, LV_OBJ_FLAG_HIDDEN);
+		lv_obj_add_flag(home.artwork_caption, LV_OBJ_FLAG_HIDDEN);
+		lv_obj_invalidate(home.artwork_image);
+	} else {
+		if (home.artwork_image) lv_obj_add_flag(home.artwork_image, LV_OBJ_FLAG_HIDDEN);
+		lv_obj_clear_flag(home.artwork_fallback, LV_OBJ_FLAG_HIDDEN);
+		lv_obj_clear_flag(home.artwork_caption, LV_OBJ_FLAG_HIDDEN);
+	}
+}
+
 static void tuner_control_refresh(lv_timer_t *)
 {
 	control_home::browser_ui_diagnostic(
@@ -678,6 +714,7 @@ static void tuner_control_refresh(lv_timer_t *)
 	}
 	(void)control_home::full_control_read(tuner_control.state,
 	                                    tuner_control.generation);
+	home_artwork_refresh();
 	(void)control_home::read(tuner_control.playback,
 	                       tuner_control.playback_generation);
 	const auto source_decision = tuner_control.source_confirmation.observe(
@@ -982,7 +1019,7 @@ static void home_refresh(lv_timer_t *)
 static void home_delete(lv_event_t *)
 {
 	if (home.timer) lv_timer_del(home.timer);
-	home = {}; // No retained objects/timer survive page destruction.
+	home = {}; // ArtworkSurface remains boot-lifetime; no widget pointer survives.
 }
 
 static void remote01_mockup_create(void);
@@ -1190,10 +1227,17 @@ static void remote01_mockup_create(void)
 	                                  LV_LABEL_LONG_CLIP, LV_TEXT_ALIGN_LEFT);
 
 	lv_obj_t *artwork = remote01_panel(page, 12, 96, 148, 148, panel, 6);
-	lv_obj_t *device = remote01_label(artwork, "TUNER//01", &lv_font_montserrat_20, text, 0, 0);
-	lv_obj_align(device, LV_ALIGN_CENTER, 0, -10);
-	lv_obj_t *artwork_caption = remote01_label(artwork, "ARTWORK", &lv_font_montserrat_12, muted, 0, 0);
-	lv_obj_align(artwork_caption, LV_ALIGN_CENTER, 0, 18);
+	home.artwork_fallback = remote01_label(artwork, "TUNER//01", &lv_font_montserrat_20, text, 0, 0);
+	lv_obj_align(home.artwork_fallback, LV_ALIGN_CENTER, 0, -10);
+	home.artwork_caption = remote01_label(artwork, "ARTWORK", &lv_font_montserrat_12, muted, 0, 0);
+	lv_obj_align(home.artwork_caption, LV_ALIGN_CENTER, 0, 18);
+	if (artwork_surface.initialize()) {
+		home.artwork_image = lv_img_create(artwork);
+		lv_img_set_src(home.artwork_image, artwork_surface.descriptor());
+		lv_obj_center(home.artwork_image);
+		lv_obj_clear_flag(home.artwork_image, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+	}
+	home_artwork_refresh();
 
 	home.title = remote01_single_line(page, "--", &lv_font_montserrat_20, text, 12, 262, 148,
 	                     LV_LABEL_LONG_SCROLL, LV_TEXT_ALIGN_LEFT);
