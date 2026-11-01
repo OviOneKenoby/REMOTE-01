@@ -27,10 +27,14 @@
   feature can be accepted or merged.
 - During the initial USB hardware gate, the OTA-capable image booted and its
   exact application readback passed, but the diagnostics HTTP task's temporary
-  8192-byte stack left no contiguous internal block for the mDNS task. Restore
-  the previously validated 6144-byte HTTP stack; OTA upload storage remains a
-  fixed 4096-byte PSRAM allocation. A policy regression now protects both
-  memory-placement decisions. Wi-Fi OTA acceptance remains pending.
+  8192-byte stack left no contiguous internal block for the mDNS task. A first
+  6144-byte correction allowed mDNS to start but left only 403 internal bytes
+  and repeated Wi-Fi allocation failures. Use ESP-IDF's supported 4096-byte
+  HTTP default; measured hardware high-water data at 6144 bytes showed 4468
+  bytes unused (about 1676 bytes maximum observed use), leaving about 2420
+  bytes measured reserve at the corrected size. OTA upload storage remains a
+  fixed 4096-byte PSRAM allocation. A policy regression protects both memory
+  decisions. Wi-Fi OTA acceptance remains pending.
 
 ## 2026-11-01 - Catalog playback transient disconnect presentation
 

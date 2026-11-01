@@ -19,7 +19,7 @@ assert "ESP_CHIP_ID" not in source  # portable prefix parser owns the chip gate
 assert "erase_flash" not in source and "nvs_erase" not in source and "nvs_set" not in source
 assert "ota_session=" in source and "HttpOnly; SameSite=Strict" in source
 assert "MALLOC_CAP_SPIRAM" in source and "transfer_buffer_bytes = 4096" in source
-assert "c.stack_size=6144" in diagnostics_source
+assert "c.stack_size=4096" in diagnostics_source
 assert "crypto.subtle" not in source  # unavailable on ordinary local-HTTP origins
 
 # Execute the exact browser-side SHA-256 implementation against standard
