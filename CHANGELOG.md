@@ -25,6 +25,12 @@
   Each 3 MiB OTA slot retains 511,968 bytes exact-image headroom. Initial USB
   installation and one real Wi-Fi OTA remain hardware gates before this
   feature can be accepted or merged.
+- During the initial USB hardware gate, the OTA-capable image booted and its
+  exact application readback passed, but the diagnostics HTTP task's temporary
+  8192-byte stack left no contiguous internal block for the mDNS task. Restore
+  the previously validated 6144-byte HTTP stack; OTA upload storage remains a
+  fixed 4096-byte PSRAM allocation. A policy regression now protects both
+  memory-placement decisions. Wi-Fi OTA acceptance remains pending.
 
 ## 2026-11-01 - Catalog playback transient disconnect presentation
 

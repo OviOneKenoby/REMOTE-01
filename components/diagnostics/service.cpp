@@ -127,7 +127,7 @@ void service(Address desired) {
   if(time_now()<ctl.retry)return;
   ctl.retry=time_now()+5000;
   if(!initialize())return;
-  httpd_config_t c=HTTPD_DEFAULT_CONFIG();c.stack_size=8192;c.task_priority=1;c.max_open_sockets=2;c.max_uri_handlers=7;c.max_req_hdr_len=1024;c.max_uri_len=64;c.recv_wait_timeout=3;c.send_wait_timeout=3;c.lru_purge_enable=true;c.open_fn=open_socket;
+  httpd_config_t c=HTTPD_DEFAULT_CONFIG();c.stack_size=6144;c.task_priority=1;c.max_open_sockets=2;c.max_uri_handlers=7;c.max_req_hdr_len=1024;c.max_uri_len=64;c.recv_wait_timeout=3;c.send_wait_timeout=3;c.lru_purge_enable=true;c.open_fn=open_socket;
   if(httpd_start(&ctl.server,&c)!=ESP_OK){ctl.server=nullptr;++ctl.failures;return;}
   ota_service::configure({desired.ip,desired.mask,desired.generation,desired.ready});
   auto route=[](const char*uri,esp_err_t(*fn)(httpd_req_t*)){httpd_uri_t u{};u.uri=uri;u.method=HTTP_GET;u.handler=fn;return httpd_register_uri_handler(ctl.server,&u)==ESP_OK;};
