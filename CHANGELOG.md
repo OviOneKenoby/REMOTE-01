@@ -12,6 +12,13 @@ normal poll interval plus jitter. The receive remains nonblocking and bounded;
 requests are not retried or replayed. Connect/server-hello deadlines, protocol,
 cryptography, session fencing and TUNER firmware are unchanged.
 
+The clean `remote01` build passed at implementation `502d206`: BIN 2,611,280
+bytes (SHA-256
+`20c19f99d6c72a0b0e05ccf248fbb2c6ef396cceaa912a140aeacd4752bb0419`),
+ELF 20,061,024 bytes (SHA-256
+`a5d9d970179468a925b728e380cebfcd12614e766f93c81d262a8d3c51d0be30`),
+61,180 bytes static RAM, and 5,777,328 bytes application-slot headroom.
+
 ## 2026-11-01 - Accept an authenticated RTCP response at the deadline boundary
 
 Paired hardware correlation proved that a post-station-start BTX state request
