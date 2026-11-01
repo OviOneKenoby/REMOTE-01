@@ -103,6 +103,24 @@ of the first OTA-capable image, exact-span readback, then one real browser OTA
 to a separately identified compatible build. Destructive rollback testing is
 not part of acceptance.
 
+## Corrected USB hardware checkpoint
+
+The first USB gate exposed internal-memory pressure before any Wi-Fi OTA was
+attempted. An 8192-byte HTTP task prevented mDNS task creation; 6144 bytes let
+mDNS start but left only 403 internal bytes and repeated Wi-Fi allocation
+failures. Hardware high-water reporting showed 4468 bytes unused at the
+6144-byte setting, so the service now uses ESP-IDF's supported 4096-byte
+default (about 2420 bytes measured reserve) while retaining the fixed 4096-byte
+OTA transfer buffer in PSRAM.
+
+Corrected source `50e6da9b6d440c3205277026cc54f5d31be815de` was installed
+application-only at `0x10000`. The independent 2,633,744-byte readback matched
+SHA-256
+`9c3233580e79fa2e4ed9264b2f48f39b77ac4454a2ed30647e1cc2a8b80355ad`.
+After boot, stored Wi-Fi and RTCP pairing were retained; HTTP diagnostics were
+responsive, RTCP reached READY, authoritative volume was known/set, and no
+allocation failure was reported. The real browser OTA gate remains pending.
+
 ## Offline candidate checkpoint
 
 Implementation commit `37cabec4a314630df9590f783f5c786def699094` passed the
