@@ -16,4 +16,7 @@ set(EXCLUDE_COMPONENTS
 	sdcard_bsp
 	SensorLib
 )
-project(12_LVGL_Test)
+# The ESP application descriptor is part of the local-OTA compatibility gate.
+# Keep this stable and device-specific; uploaded images with another project
+# identity are rejected before the inactive slot is erased.
+project(REMOTE01)

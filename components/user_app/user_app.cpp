@@ -14,6 +14,7 @@
 #include "encoder_volume.hpp"
 #include "button_inputs.hpp"
 #include "diagnostics/api.hpp"
+#include "ota_service/api.hpp"
 #include "driver/gpio.h"
 #include "esp_timer.h"
 #include <atomic>
@@ -33,6 +34,12 @@ struct HomeWidgets {
 	lv_obj_t *page = nullptr;
 	std::uint64_t generation = 0;
 } home;
+
+struct OtaWidgets {
+	lv_obj_t *panel = nullptr;
+	lv_obj_t *text = nullptr;
+	ota_service::State state = ota_service::State::IDLE;
+} ota;
 
 struct TunerControlWidgets {
 	lv_obj_t *view = nullptr, *radio = nullptr, *bluetooth = nullptr;
@@ -885,6 +892,30 @@ static void tuner_control_refresh(lv_timer_t *)
 
 static void home_refresh(lv_timer_t *)
 {
+	ota_service::UiView update{};
+	if (ota.panel && ota_service::ui_view(update)) {
+		if (update.state != ota.state || update.state == ota_service::State::CHALLENGE) {
+			ota.state = update.state;
+			char message[96]{};
+			if (update.state == ota_service::State::CHALLENGE && update.pin[0])
+				std::snprintf(message, sizeof message,
+				              "LOCAL UPDATE\nPIN  %s\nEnter this PIN in your browser",
+				              update.pin);
+			else if (update.state == ota_service::State::AUTHENTICATED)
+				std::snprintf(message, sizeof message, "OTA authorized\nSelect REMOTE//01 firmware");
+			else if (update.state == ota_service::State::UPLOADING)
+				std::snprintf(message, sizeof message, "Installing firmware...\nDo not power off");
+			else if (update.state == ota_service::State::VERIFIED)
+				std::snprintf(message, sizeof message, "Update verified\nRebooting...");
+			if (message[0]) {
+				home_text(ota.text, message);
+				lv_obj_clear_flag(ota.panel, LV_OBJ_FLAG_HIDDEN);
+				lv_obj_move_foreground(ota.panel);
+			} else {
+				lv_obj_add_flag(ota.panel, LV_OBJ_FLAG_HIDDEN);
+			}
+		}
+	}
 	const bool home_active = home.page &&
 	                         lv_carousel_get_element_act(src_ui.screen_carousel_1) ==
 	                             home.page;
@@ -1222,6 +1253,19 @@ static void remote01_mockup_create(void)
 	home.timer = lv_timer_create(home_refresh, 20, nullptr);
 }
 
+static void ota_overlay_create()
+{
+	const lv_color_t text = lv_color_hex(0xf3f5f2);
+	ota.panel = remote01_panel(src_ui.screen, 16, 238, 140, 164,
+	                           lv_color_hex(0x24343a), 8);
+	ota.text = remote01_label(ota.panel, "", &lv_font_montserrat_14,
+	                         text, 8, 34);
+	lv_label_set_long_mode(ota.text, LV_LABEL_LONG_WRAP);
+	lv_obj_set_size(ota.text, 124, 96);
+	lv_obj_set_style_text_align(ota.text, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+	lv_obj_add_flag(ota.panel, LV_OBJ_FLAG_HIDDEN);
+}
+
 static void example_color_task(void *arg)
 {
 	lv_ui *ui = (lv_ui *)arg;
@@ -1261,6 +1305,7 @@ static void lvgl_obj_event_callback(lv_event_t *event)
 
 void user_app_init(void)
 {
+	ota_service::set_activity_callback(power_management::activity);
 	setup_ui(&src_ui);
 	// Existing blank factory status row, no added container or touch target.
 	lv_obj_set_style_text_font(src_ui.screen_label_21, &lv_font_montserrat_12, LV_PART_MAIN);
@@ -1269,6 +1314,7 @@ void user_app_init(void)
 	lv_label_set_text(src_ui.screen_label_21, "--");
 	remote01_mockup_create();
 	tuner_control_create();
+	ota_overlay_create();
 	lv_obj_set_element_id(src_ui.screen_carousel_1, 0, LV_ANIM_OFF);
 	lcd_bl_pwm_bsp_init(LCD_PWM_MODE_255);
 	lv_obj_add_event_cb(src_ui.screen_slider_1, lvgl_obj_event_callback, LV_EVENT_ALL, NULL);

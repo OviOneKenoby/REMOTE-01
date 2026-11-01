@@ -1,4 +1,6 @@
 #include "diagnostics/api.hpp"
+#include "ota_service/api.hpp"
+#include "ota_service/server.hpp"
 #include "esp_http_server.h"
 #include "esp_netif.h"
 #include "esp_wifi.h"
@@ -99,7 +101,7 @@ esp_err_t rtcp_history(httpd_req_t*r) {
   j.text("]}");if(!j.ok)return refuse(r,"503 Service Unavailable");headers(r,"application/json");return httpd_resp_sendstr(r,s->response);
 }
 esp_err_t reject_handler(httpd_req_t*r,httpd_err_code_t) {return refuse(r,"403 Forbidden");}
-void stop() {ctl.enabled=false;if(ctl.server) {if(httpd_stop(ctl.server)==ESP_OK)ctl.server=nullptr;else ++ctl.failures;}}
+void stop() {ctl.enabled=false;ota_service::revoke();if(ctl.server) {if(httpd_stop(ctl.server)==ESP_OK)ctl.server=nullptr;else ++ctl.failures;}}
 }
 bool initialize() {
   if(ctl.storage.load())return true;
@@ -125,13 +127,14 @@ void service(Address desired) {
   if(time_now()<ctl.retry)return;
   ctl.retry=time_now()+5000;
   if(!initialize())return;
-  httpd_config_t c=HTTPD_DEFAULT_CONFIG();c.stack_size=6144;c.task_priority=1;c.max_open_sockets=2;c.max_uri_handlers=4;c.max_req_hdr_len=1024;c.max_uri_len=64;c.recv_wait_timeout=3;c.send_wait_timeout=3;c.lru_purge_enable=true;c.open_fn=open_socket;
+  httpd_config_t c=HTTPD_DEFAULT_CONFIG();c.stack_size=8192;c.task_priority=1;c.max_open_sockets=2;c.max_uri_handlers=7;c.max_req_hdr_len=1024;c.max_uri_len=64;c.recv_wait_timeout=3;c.send_wait_timeout=3;c.lru_purge_enable=true;c.open_fn=open_socket;
   if(httpd_start(&ctl.server,&c)!=ESP_OK){ctl.server=nullptr;++ctl.failures;return;}
+  ota_service::configure({desired.ip,desired.mask,desired.generation,desired.ready});
   auto route=[](const char*uri,esp_err_t(*fn)(httpd_req_t*)){httpd_uri_t u{};u.uri=uri;u.method=HTTP_GET;u.handler=fn;return httpd_register_uri_handler(ctl.server,&u)==ESP_OK;};
-  bool ok=route("/",home)&&route("/api/status",status)&&route("/api/events",events)&&route("/api/rtcp-history",rtcp_history);
+  bool ok=route("/",home)&&route("/api/status",status)&&route("/api/events",events)&&route("/api/rtcp-history",rtcp_history)&&ota_service::register_handlers(ctl.server);
   for(auto code:{HTTPD_400_BAD_REQUEST,HTTPD_404_NOT_FOUND,HTTPD_405_METHOD_NOT_ALLOWED,HTTPD_408_REQ_TIMEOUT,HTTPD_413_CONTENT_TOO_LARGE,HTTPD_414_URI_TOO_LONG,HTTPD_431_REQ_HDR_FIELDS_TOO_LARGE,HTTPD_500_INTERNAL_SERVER_ERROR})ok=ok&&httpd_register_err_handler(ctl.server,code,reject_handler)==ESP_OK;
   if(!ok){++ctl.failures;stop();return;}
-  ctl.enabled=true;ESP_LOGI("DIAGNOSTICS","running=1 STA_ONLY port=80 read_only=1 clients=2 psram_bytes=%u",unsigned(sizeof(Storage)));
+  ctl.enabled=true;ESP_LOGI("DIAGNOSTICS","running=1 STA_ONLY port=80 diagnostics_read_only=1 ota_authenticated=1 clients=2 psram_bytes=%u",unsigned(sizeof(Storage)));
 }
 unsigned errors(){return ctl.failures.load();}
 unsigned stack_min(){return ctl.margin.load();}

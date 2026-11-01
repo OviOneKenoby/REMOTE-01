@@ -7,6 +7,9 @@ Control project are maintained separately in
 navigation, source-switching, and station-management work must follow the
 specification rather than silently changing approved behavior.
 
+The authenticated, browser-based local firmware update design and recovery
+boundary are documented in [REMOTE local Wi-Fi OTA](docs/REMOTE_LOCAL_WIFI_OTA.md).
+
 PlatformIO firmware for REMOTE//01 on the Waveshare ESP32-S3-Touch-LCD-3.49B V2, PCB Rev1.1. The accepted A-REMOTE-012 baseline retains the factory demo and brightness pages, provides an active 172x640 HOME status/control page, and rotates the complete display/touch coordinate path 180 degrees.
 
 The installed accepted application is 2,526,848 bytes with SHA-256 `b6053c04c03114a24a59f178da4eb03d4bada77faded43b6009667579c21d5da`. It interoperates with TUNER v1.1.12 through authenticated RTCP/1 for identity, capabilities, authoritative volume/playback observations and correlated `volume.set`. This repository has no public REMOTE firmware release yet.

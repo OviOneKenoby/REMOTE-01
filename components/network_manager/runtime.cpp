@@ -1,4 +1,5 @@
 #include "diagnostics/api.hpp"
+#include "ota_service/api.hpp"
 #include "power_management/api.hpp"
 #include "esp_system.h"
 #include "driver/usb_serial_jtag.h"
@@ -56,7 +57,10 @@ void event(void *, esp_event_base_t base, int32_t id, void *data) {
     return;
   }
   if(!driver_events.load())return;
-  if ((base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) || base == IP_EVENT) diagnostics::revoke();
+  if ((base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) || base == IP_EVENT) {
+    diagnostics::revoke();
+    ota_service::revoke();
+  }
   Message m{}; m.generation = generation.load();
   if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) m.kind = Kind::GOT_IP;
   else if (base == IP_EVENT && id == IP_EVENT_STA_LOST_IP) { m.kind = Kind::DISCONNECTED; m.detail = 65536; }
@@ -250,7 +254,7 @@ void task(void *) {
   for (;;) {
     if(armed_until && now()>armed_until)armed_until=0; // existing 10s confirmation expiry
     const bool can_sleep=sleep::eligible(ready,policy.stored,policy.portal,policy.candidate,
-      scanning.load(),submitting.load(),recovery.ticket || armed_until,reboot.pending,policy.generation,barrier_sequence);
+      scanning.load(),submitting.load(),recovery.ticket || armed_until || ota_service::busy(),reboot.pending,policy.generation,barrier_sequence);
     sleep_owner.tick(sleep_channel,sleep_port,can_sleep,now());
     if(sleep_owner.paused()) {ulTaskNotifyTake(pdTRUE,pdMS_TO_TICKS(50));continue;}
     dns_tick();
@@ -263,6 +267,11 @@ void task(void *) {
     if (reboot.execute(time,power_management::owner_request()!=power_management::Request::NONE,false)) {
       diagnostics::event(time,diagnostics::Event::REBOOT_EXECUTE);
       ESP_LOGW("NETWORK_DEV","reboot=EXECUTING SOFTWARE DEVELOPMENT_ONLY preserve_nvs=1");
+      if(usb_serial_jtag_is_driver_installed()) (void)usb_serial_jtag_wait_tx_done(pdMS_TO_TICKS(20));
+      esp_restart();
+    }
+    if (ota_service::reboot_due(time)) {
+      ESP_LOGW("LOCAL_OTA", "reboot=EXECUTING verified_slot=1 preserve_nvs=1");
       if(usb_serial_jtag_is_driver_installed()) (void)usb_serial_jtag_wait_tx_done(pdMS_TO_TICKS(20));
       esp_restart();
     }

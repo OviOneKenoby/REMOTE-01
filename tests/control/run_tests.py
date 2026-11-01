@@ -130,6 +130,14 @@ with tempfile.TemporaryDirectory(prefix="remote01-core-") as work:
     subprocess.run(diagnostic_cmd, cwd=root, env=env, check=True)
     subprocess.run([str(diagnostic_binary)] + (["--soak"] if a.soak else []), cwd=root, env=env, check=True)
 
+    ota_binary = Path(work) / ("ota_service_tests.exe" if os.name == "nt" else "ota_service_tests")
+    ota_cmd = [str(compiler), "-std=c++23", "-O1", "-g", "-Wall", "-Wextra", "-Werror",
+        "-fno-exceptions", "-fno-rtti", "-I", str(root / "components/ota_service/include"),
+        str(root / "components/ota_service/model.cpp"),
+        str(root / "tests/control/ota_service_tests.cpp"), "-o", str(ota_binary)]
+    subprocess.run(ota_cmd, cwd=root, env=env, check=True)
+    subprocess.run([str(ota_binary)], cwd=root, env=env, check=True)
+
     physical_binary = Path(work) / ("physical_input_tests.exe" if os.name == "nt" else "physical_input_tests")
     physical_cmd = [str(compiler), "-std=c++23", "-O1", "-g", "-Wall", "-Wextra", "-Werror",
         "-fno-exceptions", "-fno-rtti", "-I", str(root / "include"),
@@ -192,6 +200,8 @@ with tempfile.TemporaryDirectory(prefix="remote01-core-") as work:
 # Offline bounded artifact checker; never touches a serial port or flash.
 import sys
 subprocess.run([sys.executable, str(root / "tests/control/ota_preflight_tests.py")],
+               cwd=root, check=True)
+subprocess.run([sys.executable, str(root / "tests/control/ota_service_policy_tests.py")],
                cwd=root, check=True)
 
 # Actual synchronous POWER publication helper against bounded host seams.

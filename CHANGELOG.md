@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-11-01 - Authenticated local Wi-Fi OTA candidate
+
+- Add a responsive, self-contained `/ota` page to the existing station-mode
+  HTTP server for Windows and Android browsers. A two-minute on-device PIN,
+  bounded failure lockout and single-use session authorize one upload without
+  putting credentials in URLs or logs.
+- Stream the application through a 4096-byte PSRAM buffer to ESP-IDF's inactive
+  OTA slot. Reject wrong-chip/wrong-project images, invalid headers, oversized
+  or interrupted transfers, digest mismatches and concurrent uploads before
+  selecting a new boot partition.
+- Preserve the accepted partition table, NVS, Wi-Fi, RTCP pairing,
+  `remote_ctl`, Favorites/Recent data and USB recovery path. Sleep is inhibited
+  during a bounded update and successful verification schedules a controlled
+  reboot.
+- Record that SHA-256 is integrity checking rather than publisher signing, the
+  local page uses plain HTTP on a trusted WPA LAN, and the installed bootloader
+  does not provide automatic application rollback.
+- Add portable policy/state tests and browser SHA-256 known-answer coverage.
+  Initial USB installation and one real Wi-Fi OTA remain hardware gates before
+  this feature can be accepted or merged.
+
 ## 2026-11-01 - Catalog playback transient disconnect presentation
 
 - Retain RTCP socket close, authentication, session invalidation and fresh-query

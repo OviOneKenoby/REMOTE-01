@@ -1,5 +1,12 @@
 # Current canonical OTA product decisions - 2026-10-05
 
+> **2026-11-01 superseding authorization:** the owner subsequently required an
+> authenticated local-browser updater. The implemented candidate uses a
+> short-lived PIN challenge and single-use session as documented in
+> [REMOTE local Wi-Fi OTA](REMOTE_LOCAL_WIFI_OTA.md). The historical
+> unauthenticated-LAN decision below is preserved as design history, not the
+> current implementation policy.
+
 [Owner register](REMOTE01_PRODUCT_DECISIONS.md), items24/35-38: OTA required; accepted16MiB factory/otadata/ota_0/ota_1 unchanged. Same-local-network OTA access without password authentication DECIDED, superseding older authentication-required/LAN-insufficient access language. This affects future OTA access only, not current read-only diagnostics, Wi-Fi provisioning credentials/security, or TUNER control authorization.
 
 Before flashing/updating, firmware backup written to SD is a DECIDED requirement. Current SD backup/writer/transfer/trial/rollback implementation and acceptance are not claimed. No prior owner upload is retroactively represented as backed up. Image identity/compatibility/downgrade/interruption/trial-health/rollback/factory-slots-SD relationship DESIGN REQUIRED; no signature/trust mechanism selected from access policy alone. Current roadmap M4/M8/M5/M6/M7 reflects backup dependency, not optional update-source staging.
