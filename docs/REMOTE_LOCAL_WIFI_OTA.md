@@ -102,3 +102,17 @@ Physical completion additionally requires one application-only USB installation
 of the first OTA-capable image, exact-span readback, then one real browser OTA
 to a separately identified compatible build. Destructive rollback testing is
 not part of acceptance.
+
+## Offline candidate checkpoint
+
+Implementation commit `37cabec4a314630df9590f783f5c786def699094` passed the
+focused OTA model, source/partition policy, diagnostics HTTP policy and network
+sleep-boundary checks. The `remote01` production build completed without a new
+warning and reports 61,356 bytes static RAM and 2,633,257 bytes linked flash.
+
+The initial USB candidate is 2,633,760 bytes, SHA-256
+`6efd529c1f3a20009aa6c2082cf6c987c371398c722c45f931d2fa55b1935f3e`;
+its ELF SHA-256 is
+`2189fc6b12ba46921cf9a6600898dbeeb0d9084e3e7f08e0c5f5bef5c2c91c56`.
+The embedded descriptor identifies project `REMOTE01`, ESP32-S3 and version
+`37cabec`. Exact image headroom in either 3 MiB OTA slot is 511,968 bytes.

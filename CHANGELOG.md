@@ -18,8 +18,13 @@
   local page uses plain HTTP on a trusted WPA LAN, and the installed bootloader
   does not provide automatic application rollback.
 - Add portable policy/state tests and browser SHA-256 known-answer coverage.
-  Initial USB installation and one real Wi-Fi OTA remain hardware gates before
-  this feature can be accepted or merged.
+  Focused OTA, HTTP-policy and sleep-boundary checks pass. Production
+  `remote01` build at implementation `37cabec` succeeds with 61,356 bytes
+  static RAM, 2,633,257 bytes linked flash, and a 2,633,760-byte BIN
+  (`6efd529c1f3a20009aa6c2082cf6c987c371398c722c45f931d2fa55b1935f3e`).
+  Each 3 MiB OTA slot retains 511,968 bytes exact-image headroom. Initial USB
+  installation and one real Wi-Fi OTA remain hardware gates before this
+  feature can be accepted or merged.
 
 ## 2026-11-01 - Catalog playback transient disconnect presentation
 
