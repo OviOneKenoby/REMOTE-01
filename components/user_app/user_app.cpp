@@ -700,10 +700,15 @@ static void tuner_control_refresh(lv_timer_t *)
 	                              LV_PART_MAIN);
 	if (!tuner_control.visible) return;
 	if (!tuner_control.state.connected) {
-		tuner_control.playback_confirmation.disconnected();
-		if (tuner_control.playback_confirmation.active) {
+		if (tuner_control.playback_confirmation.defer_disconnect_popup(
+				lv_tick_get())) {
 			tuner_control.awaiting_action = false;
 			tuner_control.awaiting_playback = true;
+			// The authenticated session is still invalidated by the RTCP
+			// adapter.  Keep the existing tuning UI while the bounded
+			// confirmation lifecycle reconnects; do not misreport this
+			// recoverable station-start transition as a terminal disconnect.
+			return;
 		}
 		if (!tuner_control.disconnect_popup) {
 			tuner_control.browser_disconnect.disconnected(tuner_control.navigation.page);

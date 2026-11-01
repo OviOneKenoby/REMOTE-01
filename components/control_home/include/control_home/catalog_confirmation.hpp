@@ -60,6 +60,19 @@ struct CatalogPlaybackConfirmation {
     query_pending = false;
   }
 
+  // A catalog PLAY is acknowledged before the TUNER finishes its deferred
+  // stream open.  A transport reset during this bounded confirmation window
+  // must retain the normal RTCP close/session fencing, but it is not yet a
+  // user-visible terminal failure: reconnect and confirm using a fresh query.
+  // Once the existing confirmation deadline expires, the ordinary
+  // disconnected UI is allowed to surface.
+  bool defer_disconnect_popup(std::uint32_t now) {
+    if (!active) return false;
+    disconnected();
+    if (tick(now) == CatalogConfirmationDecision::EXPIRED) return false;
+    return true;
+  }
+
   CatalogConfirmationDecision connected() {
     if (!active || !reconnect_pending || query_pending)
       return CatalogConfirmationDecision::NONE;

@@ -39,6 +39,22 @@ int main() {
   assert(confirmation.observe(true, page(CatalogCollection::FAVORITES, 2, true), 1001) ==
          CatalogConfirmationDecision::CONFIRMED);
 
+  // A short transport reset during deferred playback confirmation is hidden
+  // from the UI, but the normal session fence and fresh-query recovery remain.
+  confirmation.begin(CatalogCollection::FAVORITES, 2, 7, 0, 1200);
+  confirmation.accepted();
+  assert(confirmation.defer_disconnect_popup(1300));
+  assert(confirmation.active && confirmation.reconnect_pending &&
+         !confirmation.query_pending);
+  assert(confirmation.connected() == CatalogConfirmationDecision::QUERY);
+
+  // A sustained disconnect is not hidden beyond the existing bounded window.
+  confirmation.begin(CatalogCollection::FAVORITES, 2, 7, 0, 1400);
+  confirmation.accepted();
+  assert(!confirmation.defer_disconnect_popup(
+      1400 + CatalogPlaybackConfirmation::deadline_ms));
+  assert(!confirmation.active);
+
   // Admission precedes a deferred stream open. Inactive/not-yet-playing
   // observations remain pending and trigger bounded read-only polling.
   confirmation.begin(CatalogCollection::FAVORITES, 2, 7, 0, 2000);

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-01 - Catalog playback transient disconnect presentation
+
+- Retain RTCP socket close, authentication, session invalidation and fresh-query
+  recovery when a catalog PLAY confirmation loses its transport.
+- Suppress the misleading `TUNER disconnected` card only while the existing
+  bounded 15-second deferred-playback confirmation remains active. A sustained
+  or unrelated disconnect still follows the normal disconnected UI path.
+- Add deterministic coverage for transient recovery and deadline expiry.
+
 ## 2026-11-01 - Bound the post-deadline RTCP response drain
 
 Hardware validation of the receive-before-timeout correction reproduced one
