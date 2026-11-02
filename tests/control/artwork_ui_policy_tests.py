@@ -27,6 +27,8 @@ checks = {
     "no_network_dependency": "esp_http_client" not in surface,
     "single_worker": online.count("xTaskCreatePinnedToCoreWithCaps(") == 1,
     "bounded_encoded_buffer": "encoded_limit = 128 * 1024" in (root / "components/artwork/include/artwork/online.hpp").read_text(encoding="utf-8"),
+    "verified_musicbrainz_bound": "search_limit = 64 * 1024" in
+        (root / "components/artwork/include/artwork/online.hpp").read_text(encoding="utf-8"),
     "psram_worker_buffers": online.count("heap_caps_malloc(") == 3 and
                             online.count("MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT") >= 3,
     "psram_worker_state": "heap_caps_calloc(" in online and

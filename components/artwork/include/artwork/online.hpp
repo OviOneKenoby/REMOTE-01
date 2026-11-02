@@ -14,7 +14,7 @@ constexpr std::size_t artist_capacity = 97;
 constexpr std::size_t title_capacity = 160;
 constexpr std::size_t mbid_capacity = 37;
 constexpr std::size_t encoded_limit = 128 * 1024;
-constexpr std::size_t search_limit = 32 * 1024;
+constexpr std::size_t search_limit = 64 * 1024;
 constexpr std::uint64_t negative_ttl_ms = 15 * 60 * 1000ULL;
 
 struct Identity {

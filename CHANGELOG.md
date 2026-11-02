@@ -2,6 +2,10 @@
 
 ## 2026-11-02 - Correct Stage 2 internal-memory regression
 
+- Admit the hardware-observed 47,216-byte MusicBrainz response by raising only
+  the bounded search-response allowance from 32 KiB to 64 KiB. The existing
+  fixed 128 KiB PSRAM download buffer is unchanged, so this adds no static or
+  dynamic allocation and does not relax exact-match or ambiguity rejection.
 - Correct the next independently demonstrated Artwork Stage 2 blocker. The
   16 KiB worker stack fix passed hardware reproduction with 8,880 bytes minimum
   margin and no reset, but the first HTTPS lookup failed in

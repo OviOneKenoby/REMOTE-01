@@ -183,6 +183,16 @@ check verifies the allocator pointer reaches the wrapper while the original
 allocator remains linked. Actual MusicBrainz and Cover Art Archive retrieval
 still requires hardware validation.
 
+The first post-TLS functional check then identified an independent response
+bound: MusicBrainz returned HTTP 200 with 47,216 bytes for the exact
+`Daft Punk - Within` query, exceeding the original 32 KiB search allowance.
+The worker therefore rejected the response before parsing despite successful
+certificate validation. The existing encoded download storage is already a
+fixed 128 KiB PSRAM allocation. Raising only `search_limit` to 64 KiB admits
+the measured response without allocating another byte and retains a finite
+bound, the exact artist/title/score policy and multi-release ambiguity
+rejection. Hardware retrieval and JPEG decode require retest.
+
 The clean `remote01` production build embeds implementation `7837137`, uses
 63,748 bytes static RAM and 2,816,913 bytes linked flash, and produces a
 2,817,408-byte BIN with 328,320 bytes headroom in either 3 MiB OTA slot. BIN
