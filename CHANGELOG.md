@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-11-02 - Correct Stage 2 internal-memory regression
+
+- Record that the first Artwork Stage 2 hardware candidate failed: HTTP 200
+  headers were returned without body progress, RTCP metadata/volume was lost,
+  and Stage 1 recovery restored operation. A successful OTA transaction was
+  therefore not counted as hardware acceptance.
+- Correct the demonstrated resource defect by moving the artwork worker's
+  three identities, negative cache, UI state and 7,168-byte task stack to
+  PSRAM. The enabled ESP-IDF external-stack API is used; the TCB and small
+  synchronization state remain internal, and worker priority is below RTCP.
+- Reduce static RAM from the failed candidate's 69,620 bytes to 63,764 bytes
+  and eliminate its 7,168-byte internal runtime stack allocation. Preserve all
+  MusicBrainz/CAA matching, HTTPS, JPEG, cache and stale-result behavior.
+- Add focused placement-policy assertions. Artwork (64 behavioral / 25 policy),
+  diagnostics HTTP, HOME, BTX, RTCP lifecycle/discovery and OTA tests pass.
+  Before redeployment, recovered build `8b0b406` returned complete 3,071-byte
+  `/api/status` and 5,196-byte `/ota` bodies. Corrected hardware validation is
+  still pending.
+
 ## 2026-11-01 - Artwork Stage 2 bounded online album covers
 
 - Add a single low-priority, fixed-state artwork worker for MusicBrainz exact

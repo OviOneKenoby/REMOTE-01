@@ -13,6 +13,7 @@
 #include "esp_timer.h"
 #include "esp32s3/rom/tjpgd.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/idf_additions.h"
 #include "freertos/task.h"
 
 #include <algorithm>
@@ -20,6 +21,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstring>
+#include <new>
 #include <strings.h>
 #include <string_view>
 
@@ -32,12 +34,15 @@ constexpr unsigned http_timeout_ms = 8000;
 
 portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 TaskHandle_t worker_handle = nullptr;
-Identity requested{}, completed{}, positive_identity{};
+struct RuntimeState {
+  Identity requested{}, completed{}, positive_identity{};
+  NegativeCache negatives{};
+};
+RuntimeState *runtime = nullptr;
 bool request_ready = false;
 std::atomic_bool completion_ready{false};
 std::uint8_t *encoded = nullptr, *jpeg_pool = nullptr;
 std::uint16_t *decoded = nullptr;
-NegativeCache negatives{};
 Diagnostics stats{};
 std::int64_t last_musicbrainz_us = 0;
 
@@ -199,17 +204,17 @@ bool decode_jpeg(std::size_t size) {
 
 bool still_current(const Identity &identity) {
   portENTER_CRITICAL(&mux);
-  const bool current = request_ready && requested == identity;
+  const bool current = request_ready && runtime && runtime->requested == identity;
   portEXIT_CRITICAL(&mux);
   return current && allowed();
 }
 
 bool lookup(const Identity &identity) {
   const auto now = now_ms();
-  if (same_media(positive_identity, identity)) {
+  if (runtime && same_media(runtime->positive_identity, identity)) {
     record(stats.cache_hits); return true;
   }
-  if (negatives.contains(identity, now)) {
+  if (runtime && runtime->negatives.contains(identity, now)) {
     record(stats.negative_hits); return false;
   }
   const auto elapsed = esp_timer_get_time() - last_musicbrainz_us;
@@ -220,28 +225,28 @@ bool lookup(const Identity &identity) {
   HttpResult response{}; last_musicbrainz_us = esp_timer_get_time();
   if (!https_get(url, search_limit, response) || response.status != 200 ||
       std::strncmp(response.type, "application/json", 16) != 0) {
-    record(stats.network_errors); negatives.remember(identity, now_ms()); return false;
+    record(stats.network_errors); runtime->negatives.remember(identity, now_ms()); return false;
   }
   Candidate candidates[5]{};
   const auto count = parse_musicbrainz(
       {reinterpret_cast<const char *>(encoded), response.size}, candidates, 5);
   std::array<char, mbid_capacity> release_group{};
   if (!select_release_group(identity, {candidates, count}, release_group)) {
-    record(stats.lookup_rejected); negatives.remember(identity, now_ms()); return false;
+    record(stats.lookup_rejected); runtime->negatives.remember(identity, now_ms()); return false;
   }
   if (!still_current(identity)) return false;
   std::snprintf(url, sizeof url,
                 "https://coverartarchive.org/release-group/%s/front-250",
                 release_group.data());
   response = {};
-  positive_identity = {};
+  runtime->positive_identity = {};
   if (!https_get(url, encoded_limit, response) || response.status != 200 ||
       std::strncmp(response.type, "image/jpeg", 10) != 0 ||
       !decode_jpeg(response.size)) {
-    record(stats.image_rejected); negatives.remember(identity, now_ms()); return false;
+    record(stats.image_rejected); runtime->negatives.remember(identity, now_ms()); return false;
   }
   if (!still_current(identity)) return false;
-  positive_identity = identity;
+  runtime->positive_identity = identity;
   return true;
 }
 
@@ -249,14 +254,16 @@ void worker(void *) {
   for (;;) {
     Identity identity{}; bool present = false;
     portENTER_CRITICAL(&mux);
-    if (request_ready && !completion_ready.load()) { identity = requested; present = true; }
+    if (request_ready && runtime && !completion_ready.load()) {
+      identity = runtime->requested; present = true;
+    }
     portEXIT_CRITICAL(&mux);
     if (!present || !allowed()) { vTaskDelay(pdMS_TO_TICKS(100)); continue; }
     const bool success = lookup(identity);
     portENTER_CRITICAL(&mux);
-    if (request_ready && requested == identity) {
+    if (request_ready && runtime->requested == identity) {
       request_ready = false;
-      if (success) { completed = identity; completion_ready.store(true); increment(stats.completed); }
+      if (success) { runtime->completed = identity; completion_ready.store(true); increment(stats.completed); }
     } else increment(stats.stale);
     portEXIT_CRITICAL(&mux);
     ESP_LOGI(tag,
@@ -272,40 +279,50 @@ void worker(void *) {
 
 bool start() {
   if (worker_handle) return true;
+  runtime = static_cast<RuntimeState *>(heap_caps_calloc(
+      1, sizeof(RuntimeState), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+  if (runtime) runtime = new (runtime) RuntimeState{};
   encoded = static_cast<std::uint8_t *>(heap_caps_malloc(encoded_limit, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
   decoded = static_cast<std::uint16_t *>(heap_caps_malloc(pixels * 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
   jpeg_pool = static_cast<std::uint8_t *>(heap_caps_malloc(jpeg_pool_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-  if (!encoded || !decoded || !jpeg_pool) {
+  if (!runtime || !encoded || !decoded || !jpeg_pool) {
+    heap_caps_free(runtime);
     heap_caps_free(encoded); heap_caps_free(decoded); heap_caps_free(jpeg_pool);
-    encoded = nullptr; decoded = nullptr; jpeg_pool = nullptr;
+    runtime = nullptr; encoded = nullptr; decoded = nullptr; jpeg_pool = nullptr;
     increment(stats.allocation_failures); return false;
   }
-  if (xTaskCreatePinnedToCore(worker, "artwork", 7168, nullptr, 2,
-                              &worker_handle, 0) != pdPASS) {
+  if (xTaskCreatePinnedToCoreWithCaps(
+          worker, "artwork", 7168, nullptr, 1, &worker_handle, 0,
+          MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS) {
     worker_handle = nullptr;
+    heap_caps_free(runtime);
     heap_caps_free(encoded); heap_caps_free(decoded); heap_caps_free(jpeg_pool);
-    encoded = nullptr; decoded = nullptr; jpeg_pool = nullptr;
+    runtime = nullptr; encoded = nullptr; decoded = nullptr; jpeg_pool = nullptr;
     increment(stats.allocation_failures); return false;
   }
   ESP_LOGI(tag, "online_worker=READY encoded_limit=%u decoded=%u negative_cache=%u",
-           unsigned(encoded_limit), unsigned(pixels * 2), unsigned(negatives.entries.size()));
+           unsigned(encoded_limit), unsigned(pixels * 2),
+           unsigned(runtime->negatives.entries.size()));
   return true;
 }
 
 bool submit(const Identity &identity) {
-  if (!identity.usable() || !worker_handle) return false;
+  if (!identity.usable() || !worker_handle || !runtime) return false;
   portENTER_CRITICAL(&mux);
-  if (completion_ready.load() && !(completed == identity))
+  if (completion_ready.load() && !(runtime->completed == identity))
     completion_ready.store(false);
-  const bool duplicate = (request_ready && requested == identity) ||
-                         (completion_ready.load() && completed == identity);
-  if (!duplicate) { requested = identity; request_ready = true; increment(stats.submitted); }
+  const bool duplicate = (request_ready && runtime->requested == identity) ||
+                         (completion_ready.load() && runtime->completed == identity);
+  if (!duplicate) {
+    runtime->requested = identity; request_ready = true; increment(stats.submitted);
+  }
   portEXIT_CRITICAL(&mux);
   return !duplicate;
 }
 
 bool copy_completion(const Identity &identity, std::span<std::uint16_t> destination) {
-  if (destination.size() < pixels || !completion_ready.load() || !(completed == identity))
+  if (!runtime || destination.size() < pixels || !completion_ready.load() ||
+      !(runtime->completed == identity))
     return false;
   std::memcpy(destination.data(), decoded, pixels * sizeof(std::uint16_t));
   completion_ready.store(false);

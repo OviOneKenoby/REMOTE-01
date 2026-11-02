@@ -18,11 +18,13 @@
 #include "diagnostics/api.hpp"
 #include "ota_service/api.hpp"
 #include "driver/gpio.h"
+#include "esp_heap_caps.h"
 #include "esp_timer.h"
 #include <atomic>
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <new>
 
 static lv_ui src_ui;
 
@@ -43,10 +45,14 @@ struct HomeWidgets {
 // widgets may be destroyed and recreated without invalidating the descriptor.
 static artwork::Surface artwork_surface;
 static artwork::Model artwork_model;
-static control_home::ArtworkMetadataSnapshot artwork_metadata{};
-static std::uint64_t artwork_metadata_generation = 0;
-static std::uint64_t artwork_request_generation = 0;
-static artwork::online::Identity artwork_identity{};
+struct ArtworkUiState {
+  control_home::ArtworkMetadataSnapshot metadata{};
+  std::uint64_t metadata_generation = 0;
+  std::uint64_t request_generation = 0;
+  artwork::online::Identity identity{};
+};
+static ArtworkUiState *artwork_ui = nullptr;
+static bool artwork_ui_attempted = false;
 
 struct OtaWidgets {
 	lv_obj_t *panel = nullptr;
@@ -678,8 +684,9 @@ static void home_artwork_refresh()
 	const auto authoritative = static_cast<std::uint8_t>(tuner_control.state.source);
 	(void)artwork_model.observe(tuner_control.state.connected, authoritative);
 	(void)artwork_surface.render(artwork_model.source);
-	if (control_home::artwork_metadata_read(artwork_metadata,
-	                                       artwork_metadata_generation)) {
+	if (artwork_ui && control_home::artwork_metadata_read(
+			artwork_ui->metadata, artwork_ui->metadata_generation)) {
+		const auto &artwork_metadata = artwork_ui->metadata;
 		artwork::online::Metadata metadata{};
 		metadata.connected = artwork_metadata.connected;
 		metadata.source = artwork::authoritative_source(
@@ -694,25 +701,25 @@ static void home_artwork_refresh()
 		metadata.title = artwork_metadata.title.data();
 		metadata.combined = artwork_metadata.combined.data();
 		artwork::online::Identity next{};
-		if (++artwork_request_generation == 0) ++artwork_request_generation;
-		if (artwork::online::make_identity(metadata, artwork_request_generation,
+		if (++artwork_ui->request_generation == 0) ++artwork_ui->request_generation;
+		if (artwork::online::make_identity(metadata, artwork_ui->request_generation,
 		                                  next)) {
-			if (!artwork::online::same_media(next, artwork_identity)) {
-				artwork_identity = next;
+			if (!artwork::online::same_media(next, artwork_ui->identity)) {
+				artwork_ui->identity = next;
 				(void)artwork_surface.render(artwork_model.source, true);
-				(void)artwork::online::submit(artwork_identity);
+				(void)artwork::online::submit(artwork_ui->identity);
 			}
 		} else {
-			artwork_identity = {};
+			artwork_ui->identity = {};
 			artwork::online::cancel();
 			(void)artwork_surface.render(artwork_model.source, true);
 		}
 	}
-	if (artwork_identity.usable() && artwork_surface.ready()) {
+	if (artwork_ui && artwork_ui->identity.usable() && artwork_surface.ready()) {
 		auto *pixels = reinterpret_cast<std::uint16_t *>(
 			artwork_surface.ui_write_buffer());
 		if (artwork::online::copy_completion(
-				artwork_identity,
+				artwork_ui->identity,
 				std::span<std::uint16_t>(pixels, artwork::Surface::pixel_count)))
 			artwork_surface.commit_ui_buffer();
 	}
@@ -1274,6 +1281,12 @@ static void remote01_mockup_create(void)
 	lv_obj_align(home.artwork_fallback, LV_ALIGN_CENTER, 0, -10);
 	home.artwork_caption = remote01_label(artwork, "ARTWORK", &lv_font_montserrat_12, muted, 0, 0);
 	lv_obj_align(home.artwork_caption, LV_ALIGN_CENTER, 0, 18);
+	if (!artwork_ui && !artwork_ui_attempted) {
+		artwork_ui_attempted = true;
+		auto *memory = heap_caps_calloc(
+			1, sizeof(ArtworkUiState), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+		if (memory) artwork_ui = new (memory) ArtworkUiState{};
+	}
 	if (artwork_surface.initialize()) {
 		home.artwork_image = lv_img_create(artwork);
 		lv_img_set_src(home.artwork_image, artwork_surface.descriptor());

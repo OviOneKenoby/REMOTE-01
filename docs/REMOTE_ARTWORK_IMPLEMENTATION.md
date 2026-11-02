@@ -76,6 +76,43 @@ Hardware validation remains **NOT TESTED** until the final candidate passes
 the existing local OTA safety gates. Stage 3 artist photographs remain
 deferred; album lookup failure therefore falls directly to Stage 1 artwork.
 
+## Stage 2 hardware regression and memory-placement correction
+
+The first committed Stage 2 candidate (`2efe4a0`, 2,816,992-byte BIN,
+SHA-256 `7bbd55c902d98f1dd1bbbaca7793b098e7a9b35db5316f3a79abbe74f8af3533`)
+**failed hardware validation**. HOME and touch remained responsive and Wi-Fi
+kept its address, but RTCP did not restore metadata/volume. Both `/api/status`
+and `/ota` accepted TCP, returned HTTP 200 headers, then delivered zero body
+bytes before the client timeout. The owner restored Stage 1 build `8b0b406`,
+which restored HOME metadata and volume.
+
+The source-level defect is internal-memory placement. Against the established
+61,180-byte baseline, the failed image used 69,620 bytes of static RAM
+(+8,440). Linker symbols identify three 632-byte identities, a 2,600-byte
+negative cache, a 632-byte UI identity and two approximately 720-byte metadata
+copies in internal `.bss`. Startup also created the 7,168-byte artwork worker
+stack from internal heap. The last Stage 1 hardware snapshot had only a
+9,728-byte largest internal block, so the new stack consumed most of that
+contiguous reserve before any online lookup. This explains the shared network
+resource failure: small HTTP headers could be queued while response-body and
+RTCP/lwIP progress lacked internal allocation headroom. It was not caused by a
+MusicBrainz TLS request: no usable RTCP metadata existed to submit such a
+request while RTCP was failing.
+
+The correction keeps the same bounded worker and matching behavior but places
+its large fixed state, 7,168-byte stack and UI artwork state explicitly in
+PSRAM. ESP-IDF's enabled `CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY` support is
+used through `xTaskCreatePinnedToCoreWithCaps`; the task control block and
+small synchronization/diagnostic state remain internal. Worker priority is 1,
+below the RTCP owner. Allocation failure still leaves generic local artwork.
+
+The corrected offline build uses 63,764 bytes static RAM, recovering 5,856
+bytes from the failed candidate before accounting for the 7,168-byte runtime
+stack recovery. On recovered Stage 1 firmware, independent predeployment
+checks received the complete 3,071-byte `/api/status` JSON body and complete
+5,196-byte `/ota` HTML body with HTTP 200. Corrected-candidate hardware
+validation remains pending and must start with RTCP plus complete-body checks.
+
 ## Stage 1 scope
 
 Artwork Stage 1 supplies a local, hardware-testable image path for the HOME
