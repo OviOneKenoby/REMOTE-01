@@ -110,8 +110,28 @@ The corrected offline build uses 63,764 bytes static RAM, recovering 5,856
 bytes from the failed candidate before accounting for the 7,168-byte runtime
 stack recovery. On recovered Stage 1 firmware, independent predeployment
 checks received the complete 3,071-byte `/api/status` JSON body and complete
-5,196-byte `/ota` HTML body with HTTP 200. Corrected-candidate hardware
-validation remains pending and must start with RTCP plus complete-body checks.
+5,196-byte `/ota` HTML body with HTTP 200.
+
+Corrected build `070321a` (2,817,600-byte BIN, SHA-256
+`5f4367c14994cb22f631ac812eb26ffa954ce7b70769636ad9601ff06a5f7820`)
+was then installed through the authenticated local OTA path. The device
+reported verified installation. After wake, build identity and ELF hash
+matched; Wi-Fi was connected at -52 dBm, RTCP reached stage 13 after a
+35-45-second delay, authoritative volume was connected/known/set, and both
+HTTP endpoints returned complete bodies. The snapshot reported 20,175 bytes
+free internal heap, a 9,728-byte largest internal block, 7,343,960 bytes free
+PSRAM and zero allocation failures. HOME/touch and generic Radio and Bluetooth
+artwork all passed initially.
+
+Hardware validation nevertheless remains **FAIL**. Before a phone connected,
+touching Bluetooth HOME caused an unexpected REMOTE restart. The owner then
+observed the restart whenever using Bluetooth HOME, followed by loss of Wi-Fi.
+The single permitted post-failure check received no ping replies and no HTTP
+connection. Actual MusicBrainz/CAA lookup, stale-image handling, HOME
+recreation and sleep/wake were therefore not tested. No further Browser/HTTP
+request, automatic rollback or TUNER operation was performed. This failure is
+not yet attributed to the earlier memory defect; the exact reset reason and
+Bluetooth HOME trigger require a separate evidence-preserving diagnosis.
 
 ## Stage 1 scope
 

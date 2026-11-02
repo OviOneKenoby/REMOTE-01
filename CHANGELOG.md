@@ -2,6 +2,15 @@
 
 ## 2026-11-02 - Correct Stage 2 internal-memory regression
 
+- Hardware validation of corrected build `070321a` is **FAIL**. The verified
+  OTA installation initially restored complete `/api/status` and `/ota`
+  bodies, Wi-Fi, RTCP, metadata/volume, responsive HOME and both generic
+  Radio/Bluetooth placeholders. When Bluetooth HOME was touched before phone
+  connection, REMOTE restarted; the owner then observed the restart whenever
+  Bluetooth HOME was used, followed by loss of Wi-Fi. One bounded post-failure
+  check found 100% ping loss and no HTTP connection. Testing stopped without
+  another request, rollback or TUNER change. Online cover lookup was not
+  reached, so the PSRAM correction is not hardware accepted.
 - Record that the first Artwork Stage 2 hardware candidate failed: HTTP 200
   headers were returned without body progress, RTCP metadata/volume was lost,
   and Stage 1 recovery restored operation. A successful OTA transaction was
@@ -16,8 +25,9 @@
 - Add focused placement-policy assertions. Artwork (64 behavioral / 25 policy),
   diagnostics HTTP, HOME, BTX, RTCP lifecycle/discovery and OTA tests pass.
   Before redeployment, recovered build `8b0b406` returned complete 3,071-byte
-  `/api/status` and 5,196-byte `/ota` bodies. Corrected hardware validation is
-  still pending.
+  `/api/status` and 5,196-byte `/ota` bodies. The corrected candidate later
+  passed those gates after installation but failed the Bluetooth HOME lifecycle
+  check described above.
 
 ## 2026-11-01 - Artwork Stage 2 bounded online album covers
 
