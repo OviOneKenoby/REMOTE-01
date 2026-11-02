@@ -147,6 +147,20 @@ no static or internal stack allocation. Actual MusicBrainz/CAA lookup,
 source/stale-image handling, HOME recreation and sleep/wake require retest on
 the corrected candidate. No TUNER or RTCP protocol change is included.
 
+Focused verification passes: Artwork 64 behavioral / 26 placement-policy
+assertions, HOME metadata 15/15, BTX integration 15/15, RTCP lifecycle 17/17,
+RTCP discovery 10/10, diagnostics HTTP, OTA source/partition policy and OTA
+preflight 8 tests / 685 assertions. The single production `remote01` build at
+implementation `d00af9c` passes with 63,748 bytes static RAM and 2,816,845
+bytes linked flash. Its 2,817,344-byte BIN has SHA-256
+`ac5476470747ef597d407200ca6ee2bf78003c0d8e1314df9c42bfeb065d1596`
+and retains 328,384 bytes exact headroom in a 3 MiB OTA slot. The matching ELF
+SHA-256 is
+`eae112ac6a367a3dcd4cfee643ef6a1193a2211ef9904d73b753cc36e3c0d10e`.
+This candidate is not hardware-validated until the previously failing
+Bluetooth metadata lookup completes without reset and reports a safe stack
+margin.
+
 ## Stage 1 scope
 
 Artwork Stage 1 supplies a local, hardware-testable image path for the HOME

@@ -8,7 +8,11 @@
   bytes beyond the worker/lookup/HTTPS wrapper's 4,928 bytes of compiled local
   frames, which was insufficient for `esp_http_client` and TLS. Increase only
   this external-PSRAM stack to 16 KiB and report its post-lookup minimum stack
-  margin in the existing bounded result log. Hardware retest remains pending.
+  margin in the existing bounded result log. Focused Artwork (64 behavioral / 26
+  policy), HOME, BTX, RTCP lifecycle/discovery, diagnostics and OTA tests pass.
+  Production `remote01` build `d00af9c` succeeds with 63,748 bytes static RAM,
+  a 2,817,344-byte BIN and 328,384 bytes exact OTA-slot headroom. Hardware
+  retest remains pending.
 - Hardware validation of corrected build `070321a` is **FAIL**. The verified
   OTA installation initially restored complete `/api/status` and `/ota`
   bodies, Wi-Fi, RTCP, metadata/volume, responsive HOME and both generic
