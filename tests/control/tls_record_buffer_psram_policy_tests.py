@@ -33,5 +33,10 @@ check("setInsecure" not in source and "setCACert" not in source,
       "TLS verification policy unchanged")
 check("std::numeric_limits<std::size_t>::max() / count" in header,
       "calloc product overflow guarded")
+check("failure_snapshot" in source and "failure_bytes" in source,
+      "bounded failed-allocation snapshot retained")
+check("mbedtls_alloc_failure" in
+      (root / "components/artwork/online_runtime.cpp").read_text(encoding="utf-8"),
+      "failed allocation reported after request returns")
 
 print(f"PASS {checks}/{checks} TLS record-buffer source-policy checks")

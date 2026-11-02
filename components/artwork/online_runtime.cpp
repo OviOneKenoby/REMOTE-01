@@ -1,4 +1,5 @@
 #include "artwork/online.hpp"
+#include "artwork/tls_record_buffer_psram.hpp"
 
 #include "network_manager/api.hpp"
 #include "ota_service/api.hpp"
@@ -117,9 +118,18 @@ bool https_get(const char *initial_url, std::size_t limit, HttpResult &result) {
     config.buffer_size_tx = 1024;
     auto client = esp_http_client_init(&config);
     if (!client) return false;
+    const auto failures_before = tls_record_buffer::failure_snapshot();
     const auto error = esp_http_client_perform(client);
+    const auto failures_after = tls_record_buffer::failure_snapshot();
     const int status = error == ESP_OK ? esp_http_client_get_status_code(client) : 0;
     esp_http_client_cleanup(client);
+    if (failures_after.count != failures_before.count) {
+      ESP_LOGW(tag,
+               "mbedtls_alloc_failure count=%u bytes=%u INT_free=%u INT_largest=%u",
+               unsigned(failures_after.count), unsigned(failures_after.bytes),
+               unsigned(failures_after.internal_free),
+               unsigned(failures_after.internal_largest));
+    }
     if (error != ESP_OK || sink.overflow) return false;
     if (status == 301 || status == 302 || status == 303 || status == 307 ||
         status == 308) {
