@@ -11,7 +11,11 @@
   the original internal allocator retained for every other object and as the
   fallback. TLS verification, RTCP cryptography and all non-record allocations
   are unchanged. Exact-size/overflow and source-policy tests pass; final ELF
-  binding is verified. Hardware cover retrieval remains pending.
+  binding is verified. Production build `7837137` uses 63,748 bytes static
+  RAM; its 2,817,408-byte BIN has SHA-256
+  `d67f03325fa8761ae968be271274c8f1f1930cac877cc5a8aa081a6556259e70`
+  and 328,320 bytes OTA-slot headroom. Hardware cover retrieval remains
+  pending.
 - Capture and correct the subsequent Bluetooth panic: a passive COM3 trace
   proves FreeRTOS detected stack overflow in task `artwork` as soon as phone
   metadata started online lookup. The 7,168-byte PSRAM stack had only 2,240

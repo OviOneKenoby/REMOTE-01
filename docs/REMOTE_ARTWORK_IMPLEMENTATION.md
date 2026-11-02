@@ -183,6 +183,17 @@ check verifies the allocator pointer reaches the wrapper while the original
 allocator remains linked. Actual MusicBrainz and Cover Art Archive retrieval
 still requires hardware validation.
 
+The clean `remote01` production build embeds implementation `7837137`, uses
+63,748 bytes static RAM and 2,816,913 bytes linked flash, and produces a
+2,817,408-byte BIN with 328,320 bytes headroom in either 3 MiB OTA slot. BIN
+SHA-256 is
+`d67f03325fa8761ae968be271274c8f1f1930cac877cc5a8aa081a6556259e70`;
+the 21,653,176-byte ELF SHA-256 is
+`e0a2c0be19338869a47e9193d8dca9c6a83d53ccf7ee804500c109509c0d99de`.
+The final ELF binds `mbedtls_calloc_func` to the wrapper and retains the
+original allocator symbol for the internal-memory fallback. Hardware status is
+still pending.
+
 ## Stage 1 scope
 
 Artwork Stage 1 supplies a local, hardware-testable image path for the HOME
