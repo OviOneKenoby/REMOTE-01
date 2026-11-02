@@ -2,6 +2,13 @@
 
 ## 2026-11-02 - Correct Stage 2 internal-memory regression
 
+- Capture and correct the subsequent Bluetooth panic: a passive COM3 trace
+  proves FreeRTOS detected stack overflow in task `artwork` as soon as phone
+  metadata started online lookup. The 7,168-byte PSRAM stack had only 2,240
+  bytes beyond the worker/lookup/HTTPS wrapper's 4,928 bytes of compiled local
+  frames, which was insufficient for `esp_http_client` and TLS. Increase only
+  this external-PSRAM stack to 16 KiB and report its post-lookup minimum stack
+  margin in the existing bounded result log. Hardware retest remains pending.
 - Hardware validation of corrected build `070321a` is **FAIL**. The verified
   OTA installation initially restored complete `/api/status` and `/ota`
   bodies, Wi-Fi, RTCP, metadata/volume, responsive HOME and both generic

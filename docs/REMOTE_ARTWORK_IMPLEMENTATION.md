@@ -123,15 +123,29 @@ free internal heap, a 9,728-byte largest internal block, 7,343,960 bytes free
 PSRAM and zero allocation failures. HOME/touch and generic Radio and Bluetooth
 artwork all passed initially.
 
-Hardware validation nevertheless remains **FAIL**. Before a phone connected,
-touching Bluetooth HOME caused an unexpected REMOTE restart. The owner then
-observed the restart whenever using Bluetooth HOME, followed by loss of Wi-Fi.
-The single permitted post-failure check received no ping replies and no HTTP
-connection. Actual MusicBrainz/CAA lookup, stale-image handling, HOME
-recreation and sleep/wake were therefore not tested. No further Browser/HTTP
-request, automatic rollback or TUNER operation was performed. This failure is
-not yet attributed to the earlier memory defect; the exact reset reason and
-Bluetooth HOME trigger require a separate evidence-preserving diagnosis.
+Hardware validation nevertheless remained **FAIL**. Initial observations
+associated the restart with touching Bluetooth HOME, followed by loss of
+Wi-Fi. A controlled passive COM3 reproduction later separated the conditions:
+Bluetooth mode and HOME touch without a phone were stable, while connecting a
+phone and starting a metadata-bearing track reproduced the reset without a
+REMOTE touch.
+
+The captured panic is exact: FreeRTOS reported `A stack overflow in task
+artwork has been detected`, followed by reset reason 4/PANIC. Matching-ELF
+disassembly shows compiled local frames of 704 bytes in `worker`, 2,928 bytes
+in `lookup` and 1,296 bytes in `https_get`, totaling 4,928 nested bytes before
+the ESP HTTP client/TLS call chain. The 7,168-byte PSRAM task stack therefore
+left only 2,240 bytes for those library calls. The backtrace enters the
+FreeRTOS stack-overflow hook and is otherwise corrupted, as expected after
+overflow.
+
+The focused correction keeps every artwork buffer and the worker stack in
+PSRAM, changes only that worker's stack capacity to 16 KiB and appends the
+post-lookup high-water margin to its existing bounded result log. This leaves
+11,456 bytes beyond the measured application frames for HTTP/TLS while adding
+no static or internal stack allocation. Actual MusicBrainz/CAA lookup,
+source/stale-image handling, HOME recreation and sleep/wake require retest on
+the corrected candidate. No TUNER or RTCP protocol change is included.
 
 ## Stage 1 scope
 

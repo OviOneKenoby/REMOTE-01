@@ -33,6 +33,9 @@ checks = {
                           "RuntimeState *runtime" in online,
     "psram_worker_stack": "xTaskCreatePinnedToCoreWithCaps(" in online and
                           "MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT" in online,
+    "tls_worker_stack_budget": "worker_stack_bytes = 16 * 1024" in online and
+                               "stack_min_bytes=%u" in online and
+                               "uxTaskGetStackHighWaterMark(nullptr)" in online,
     "psram_ui_state": "ArtworkUiState *artwork_ui" in ui and
                       "sizeof(ArtworkUiState), MALLOC_CAP_SPIRAM" in ui,
     "allocation_failure_cleanup": all(token in online for token in (

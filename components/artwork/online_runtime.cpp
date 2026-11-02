@@ -31,6 +31,7 @@ constexpr char tag[] = "ARTWORK";
 constexpr std::size_t pixels = 144 * 144;
 constexpr std::size_t jpeg_pool_size = 8192;
 constexpr unsigned http_timeout_ms = 8000;
+constexpr unsigned worker_stack_bytes = 16 * 1024;
 
 portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 TaskHandle_t worker_handle = nullptr;
@@ -267,11 +268,12 @@ void worker(void *) {
     } else increment(stats.stale);
     portEXIT_CRITICAL(&mux);
     ESP_LOGI(tag,
-             "result=%s source=%u session=%llu media_generation=%llu metadata_revision=%llu",
+             "result=%s source=%u session=%llu media_generation=%llu metadata_revision=%llu stack_min_bytes=%u",
              success ? "cover_ready" : "generic_fallback", unsigned(identity.source),
              static_cast<unsigned long long>(identity.session),
              static_cast<unsigned long long>(identity.media_generation),
-             static_cast<unsigned long long>(identity.metadata_revision));
+             static_cast<unsigned long long>(identity.metadata_revision),
+             unsigned(uxTaskGetStackHighWaterMark(nullptr)));
     vTaskDelay(pdMS_TO_TICKS(20));
   }
 }
@@ -292,7 +294,7 @@ bool start() {
     increment(stats.allocation_failures); return false;
   }
   if (xTaskCreatePinnedToCoreWithCaps(
-          worker, "artwork", 7168, nullptr, 1, &worker_handle, 0,
+          worker, "artwork", worker_stack_bytes, nullptr, 1, &worker_handle, 0,
           MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS) {
     worker_handle = nullptr;
     heap_caps_free(runtime);
