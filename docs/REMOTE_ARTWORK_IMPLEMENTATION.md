@@ -161,6 +161,28 @@ This candidate is not hardware-validated until the previously failing
 Bluetooth metadata lookup completes without reset and reports a safe stack
 margin.
 
+Hardware reproduction on the corrected stack build subsequently passed the
+original reset boundary: repeated Spotify metadata lookups completed without
+panic and reported 8,880 bytes minimum artwork-task stack margin. Spotify also
+confirmed that the earlier `Unavailable - Not provided` observation belonged
+to a phone application that did not publish AVRCP metadata, not to REMOTE or
+TUNER metadata handling.
+
+The first real cover lookup then exposed a separate, precisely bounded TLS
+allocation failure. `mbedtls_ssl_setup` returned `-0x7F00`
+(`MBEDTLS_ERR_SSL_ALLOC_FAILED`) while internal heap had a 9,728-byte largest
+block. The pinned configuration allocates a 16,717-byte inbound TLS record
+buffer during setup, so the request cannot succeed regardless of total free
+bytes. The correction uses a link-time wrapper already validated in the TUNER
+project: only the exact 16,717-byte input-record request is PSRAM-first. The
+original ESP-IDF internal allocator remains the fallback and handles every
+other mbedTLS allocation, preserving certificate/session/key placement and
+RTCP security behavior. A compile-time guard pins the 16,384-byte configured
+input content length, host tests cover exact selection and overflow, and an ELF
+check verifies the allocator pointer reaches the wrapper while the original
+allocator remains linked. Actual MusicBrainz and Cover Art Archive retrieval
+still requires hardware validation.
+
 ## Stage 1 scope
 
 Artwork Stage 1 supplies a local, hardware-testable image path for the HOME

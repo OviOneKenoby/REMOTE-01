@@ -2,6 +2,16 @@
 
 ## 2026-11-02 - Correct Stage 2 internal-memory regression
 
+- Correct the next independently demonstrated Artwork Stage 2 blocker. The
+  16 KiB worker stack fix passed hardware reproduction with 8,880 bytes minimum
+  margin and no reset, but the first HTTPS lookup failed in
+  `mbedtls_ssl_setup` with `MBEDTLS_ERR_SSL_ALLOC_FAILED`: the 16,717-byte
+  inbound TLS record buffer could not fit in the observed 9,728-byte largest
+  internal block. Redirect only that exact mbedTLS allocation to PSRAM with
+  the original internal allocator retained for every other object and as the
+  fallback. TLS verification, RTCP cryptography and all non-record allocations
+  are unchanged. Exact-size/overflow and source-policy tests pass; final ELF
+  binding is verified. Hardware cover retrieval remains pending.
 - Capture and correct the subsequent Bluetooth panic: a passive COM3 trace
   proves FreeRTOS detected stack overflow in task `artwork` as soon as phone
   metadata started online lookup. The 7,168-byte PSRAM stack had only 2,240
