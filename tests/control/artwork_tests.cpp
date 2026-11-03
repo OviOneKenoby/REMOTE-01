@@ -86,22 +86,19 @@ int main() {
   assert(!select_release_group(identity, std::span(&live, 1), selected));
   auto weak = exact; weak.score = 89;
   assert(!select_release_group(identity, std::span(&weak, 1), selected));
-  constexpr std::string_view mb_json = R"JSON({"recordings":[
-    {"id":"rec","score":100,"title":"Get Lucky","artist-credit":[{"name":"Daft Punk"}],
-     "releases":[{"release-group":{"id":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"}}]},
-    {"id":"other","score":88,"title":"Get Lucky (Live)","artist-credit":[{"name":"Daft Punk"}],
-     "releases":[{"release-group":{"id":"11111111-2222-3333-4444-555555555555"}}]}
+  constexpr std::string_view mb_json = R"JSON({"release-groups":[
+    {"id":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","score":100,"title":"Get Lucky",
+     "artist-credit":[{"name":"Daft Punk"}]},
+    {"id":"11111111-2222-3333-4444-555555555555","score":88,"title":"Get Lucky (Live)",
+     "artist-credit":[{"name":"Daft Punk"}]}
   ]})JSON";
   Candidate parsed[5]{};
   assert(parse_musicbrainz(mb_json, parsed, 5) == 2);
   assert(parsed[0].score == 100);
   assert(std::string_view(parsed[0].artist.data()) == "Daft Punk");
   assert(select_release_group(identity, parsed, selected));
-  constexpr std::string_view mb_ambiguous = R"JSON({"recordings":[{
-    "score":100,"title":"Get Lucky","artist-credit":[{"name":"Daft Punk"}],
-    "releases":[{"release-group":{"id":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"}},
-                {"release-group":{"id":"11111111-2222-3333-4444-555555555555"}}]}]})JSON";
-  assert(parse_musicbrainz(mb_ambiguous, parsed, 5) == 0);
+  assert(std::string_view(parsed[0].release_group.data()) ==
+         "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
 
   NegativeCache cache;
   cache.remember(identity, 100);
@@ -151,6 +148,11 @@ int main() {
   assert(!payload_allowed(200, "image/png", 100, encoded_limit, true));
   assert(!payload_allowed(200, "image/jpeg", encoded_limit + 1, encoded_limit, true));
   assert(!payload_allowed(200, "image/jpeg", 100, encoded_limit, false));
+  assert(transient_search_failure(0));
+  assert(transient_search_failure(429));
+  assert(transient_search_failure(503));
+  assert(!transient_search_failure(404));
+  assert(!transient_search_failure(200));
 
-  std::cout << "ARTWORK_MODEL: PASS assertions=64\n";
+  std::cout << "ARTWORK_MODEL: PASS assertions=69\n";
 }

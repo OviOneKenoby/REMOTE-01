@@ -5,8 +5,8 @@
 
 namespace artwork::online {
 namespace {
-std::string_view recording_array(std::string_view json) {
-  const auto key = json.find("\"recordings\"");
+std::string_view release_group_array(std::string_view json) {
+  const auto key = json.find("\"release-groups\"");
   if (key == json.npos) return {};
   const auto begin = json.find('[', key + 12);
   return begin == json.npos ? std::string_view{} : json.substr(begin);
@@ -40,21 +40,16 @@ int integer_after(std::string_view value,std::string_view key){auto at=value.fin
 
 std::size_t parse_musicbrainz(std::string_view json,Candidate*out,std::size_t capacity){
   if(!out||!capacity)return 0;
-  auto array=recording_array(json);std::size_t count=0,at=1;
+  auto array=release_group_array(json);std::size_t count=0,at=1;
   while(count<capacity){at=array.find('{',at);if(at==array.npos)break;std::size_t end=0;
     if(!object_extent(array,at,end))break;
     auto object=array.substr(at,end-at);Candidate candidate{};
     candidate.score=integer_after(object,"\"score\"");const auto credits=object.find("\"artist-credit\"");
-    const auto releases=object.find("\"releases\"");bool good=string_after(object,"\"title\"",0,candidate.title.data(),candidate.title.size());
+    bool good=string_after(object,"\"id\"",0,candidate.release_group.data(),candidate.release_group.size())&&
+      string_after(object,"\"title\"",0,candidate.title.data(),candidate.title.size());
     if(good&&credits!=object.npos)good=string_after(object,"\"name\"",credits,candidate.artist.data(),candidate.artist.size());
-    std::array<char,mbid_capacity>group{};bool group_found=false,ambiguous=false;std::size_t scan=releases;
-    while(good&&scan!=object.npos&&(scan=object.find("\"release-group\"",scan))!=object.npos){
-      std::array<char,mbid_capacity>id{};const std::size_t next=scan+15;
-      if(!string_after(object,"\"id\"",next,id.data(),id.size(),&scan))break;
-      if(group_found&&std::strcmp(group.data(),id.data())!=0)ambiguous=true;
-      group=id;group_found=true;
-    }
-    if(good&&group_found&&!ambiguous){candidate.release_group=group;out[count++]=candidate;}at=end;}
+    if(good)out[count++]=candidate;
+    at=end;}
   return count;
 }
 } // namespace artwork::online

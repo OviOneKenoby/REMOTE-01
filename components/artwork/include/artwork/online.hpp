@@ -16,6 +16,11 @@ constexpr std::size_t mbid_capacity = 37;
 constexpr std::size_t encoded_limit = 128 * 1024;
 constexpr std::size_t search_limit = 64 * 1024;
 constexpr std::uint64_t negative_ttl_ms = 15 * 60 * 1000ULL;
+constexpr unsigned search_attempts = 3;
+
+constexpr bool transient_search_failure(int status) {
+  return status == 0 || status == 429 || (status >= 500 && status <= 599);
+}
 
 struct Identity {
   Source source = Source::neutral;
@@ -52,7 +57,7 @@ struct Candidate {
   std::array<char, mbid_capacity> release_group{};
 };
 
-// Returns true only for one unambiguous exact artist/title release group.
+// Returns true only for one exact artist/title release group.
 bool select_release_group(const Identity &, std::span<const Candidate>,
                           std::array<char, mbid_capacity> &);
 std::size_t rank_release_groups(

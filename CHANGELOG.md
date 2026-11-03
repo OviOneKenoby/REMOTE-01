@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-11-03 - Make online artwork lookup retryable and release-specific
+
+- Record the verified `b534eca` hardware checkpoint: the scoped PSRAM TLS
+  allocator validated certificates without allocation failure or reset, and
+  preserved RTCP/Wi-Fi/volume operation. The observed Billie Jean lookup
+  retained the generic placeholder because MusicBrainz returned HTTP 503;
+  the following advertisement correctly produced no exact candidate.
+- Treat transport failures, HTTP 429 and HTTP 5xx as transient. Retry the
+  unchanged current-media request at most twice, after bounded 5- and
+  10-second delays, while rechecking every lifecycle/identity fence. Do not
+  place an exhausted transient failure in the 15-minute negative cache.
+  Deterministic malformed, missing and unsupported results retain the
+  existing negative-cache behavior.
+- Search MusicBrainz release groups directly rather than selecting a release
+  group indirectly from a recording result. Exact normalized artist/title
+  and score thresholds remain mandatory. This avoids a verified ambiguity in
+  which an exact recording could rank a compilation cover ahead of the
+  canonical artist/title single. No album name is available over the current
+  RTCP metadata, so matching remains artist/title-based and cannot promise a
+  streaming-service-specific edition.
+
 ## 2026-11-02 - Correct Stage 2 internal-memory regression
 
 - Admit the hardware-observed 47,216-byte MusicBrainz response by raising only

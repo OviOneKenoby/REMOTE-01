@@ -24,23 +24,25 @@ identity fence still matches; track/source/session changes discard stale work.
 
 ### Lookup and transport policy
 
-- MusicBrainz recording search uses HTTPS, `fmt=json`, a maximum of five
+- MusicBrainz release-group search uses HTTPS, `fmt=json`, a maximum of five
   results and the descriptive User-Agent
   `REMOTE01/<build> (https://github.com/OviOneKenoby/REMOTE-01)`.
 - Global MusicBrainz starts are paced to at most one per second, following the
-  published API limit. The JSON body is capped at 32 KiB and parsed without
+  published API limit. The JSON body is capped at 64 KiB and parsed without
   dynamic allocation.
 - Selection requires score 90 or above plus exact normalized artist and title.
-  Conflicting titles (including live/remix variants) and multiple materially
-  different release-group IDs are rejected rather than guessed.
+  Conflicting titles (including live/remix variants) are rejected rather than
+  guessed. Ranked unique exact release groups are tried in bounded order.
 - Cover Art Archive uses the accepted release-group `front-250` endpoint.
   Certificate-bundle verification remains enabled; at most three HTTPS-only
   redirects are accepted. Each request has an 8-second timeout.
 - Only successful JSON or JPEG responses are accepted. The encoded image is
   capped at 128 KiB. Missing, ambiguous, oversized, malformed, truncated,
   progressive, non-JPEG or decode-failed results retain the generic artwork.
-  There is no automatic network retry; later identical observations use the
-  bounded negative cache instead of generating traffic.
+  Transport failures, HTTP 429 and HTTP 5xx receive two bounded retries after
+  5 and 10 seconds while all media/lifecycle fences remain current. Transient
+  exhaustion is not negative-cached; deterministic negative results use the
+  bounded cache instead of generating repeated traffic.
 
 ### Decode, cache and memory bounds
 
@@ -59,8 +61,8 @@ fallback artwork available. No image is written to filesystem or NVS.
 ### Offline verification
 
 - Artwork identity/matching/parser/cache/transport/JPEG policy: **PASS**
-  (64 assertions).
-- Artwork UI/ownership/memory/TLS/worker policy: **PASS** (22 assertions).
+  (69 assertions).
+- Artwork UI/ownership/memory/TLS/worker policy: **PASS** (27 assertions).
 - HOME metadata UI: **PASS** (15 assertions).
 - UI navigation: **PASS** (12 assertions).
 - BTX integration policy: **PASS** (15 assertions).

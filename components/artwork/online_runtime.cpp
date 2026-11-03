@@ -206,7 +206,9 @@ bool append_encoded(char *out, std::size_t capacity, std::size_t &used,
 }
 
 bool search_url(const Identity &identity, char *out, std::size_t capacity) {
-  const char prefix[] = "https://musicbrainz.org/ws/2/recording/?fmt=json&limit=5&query=recording%3A%22";
+  // Search release groups directly.  A recording search can rank a compilation
+  // release ahead of the canonical single even when artist/title are exact.
+  const char prefix[] = "https://musicbrainz.org/ws/2/release-group/?fmt=json&limit=5&query=releasegroup%3A%22";
   std::size_t used = sizeof prefix - 1;
   if (used >= capacity) return false;
   std::memcpy(out, prefix, used + 1);
@@ -273,17 +275,38 @@ bool lookup(const Identity &identity) {
   if (runtime && runtime->negatives.contains(identity, now)) {
     record(stats.negative_hits); return false;
   }
-  const auto elapsed = esp_timer_get_time() - last_musicbrainz_us;
-  if (elapsed < 1000000) vTaskDelay(pdMS_TO_TICKS((1000000 - elapsed + 999) / 1000));
-  if (!still_current(identity)) return false;
   char url[640]{};
   if (!search_url(identity, url, sizeof url)) return false;
-  HttpResult response{}; last_musicbrainz_us = esp_timer_get_time();
-  if (!https_get(url, search_limit, response) || response.status != 200 ||
-      std::strncmp(response.type, "application/json", 16) != 0) {
-    ESP_LOGW(tag, "lookup_rejected stage=search status=%d bytes=%u type=%s",
-             response.status, unsigned(response.size), response.type);
-    record(stats.network_errors); runtime->negatives.remember(identity, now_ms()); return false;
+  HttpResult response{};
+  bool search_ok = false;
+  for (unsigned attempt = 0; attempt < search_attempts; ++attempt) {
+    const auto elapsed = esp_timer_get_time() - last_musicbrainz_us;
+    if (elapsed < 1000000)
+      vTaskDelay(pdMS_TO_TICKS((1000000 - elapsed + 999) / 1000));
+    if (!still_current(identity)) return false;
+    response = {};
+    last_musicbrainz_us = esp_timer_get_time();
+    const bool transported = https_get(url, search_limit, response);
+    search_ok = transported && response.status == 200 &&
+                std::strncmp(response.type, "application/json", 16) == 0;
+    if (search_ok) break;
+    const bool retryable = transient_search_failure(response.status);
+    ESP_LOGW(tag,
+             "lookup_rejected stage=search attempt=%u/%u retryable=%u status=%d bytes=%u type=%s",
+             attempt + 1, search_attempts, unsigned(retryable), response.status,
+             unsigned(response.size), response.type);
+    record(stats.network_errors);
+    if (!retryable || attempt + 1 == search_attempts) {
+      // Deterministic rejection may be cached.  A transient outage must not
+      // suppress the same track for the full negative-cache lifetime.
+      if (!retryable) runtime->negatives.remember(identity, now_ms());
+      return false;
+    }
+    const unsigned delay_ms = 5000U << attempt;
+    for (unsigned waited = 0; waited < delay_ms; waited += 100) {
+      vTaskDelay(pdMS_TO_TICKS(100));
+      if (!still_current(identity)) return false;
+    }
   }
   Candidate candidates[5]{};
   const auto count = parse_musicbrainz(
