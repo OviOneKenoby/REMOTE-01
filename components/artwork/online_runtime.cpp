@@ -32,6 +32,10 @@ constexpr char tag[] = "ARTWORK";
 constexpr std::size_t pixels = 144 * 144;
 constexpr std::size_t jpeg_pool_size = 8192;
 constexpr unsigned http_timeout_ms = 8000;
+// ESP HTTP buffers are allocated from internal RAM by the pinned framework.
+// Artwork responses are streamed into the bounded PSRAM sink, so 1 KiB is
+// sufficient here and preserves a contiguous block for TLS certificate MPI.
+constexpr int http_receive_buffer_bytes = 1024;
 constexpr unsigned worker_stack_bytes = 16 * 1024;
 
 portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
@@ -114,7 +118,7 @@ bool https_get(const char *initial_url, std::size_t limit, HttpResult &result) {
     config.user_data = &sink;
     config.crt_bundle_attach = esp_crt_bundle_attach;
     config.disable_auto_redirect = true;
-    config.buffer_size = 2048;
+    config.buffer_size = http_receive_buffer_bytes;
     config.buffer_size_tx = 1024;
     auto client = esp_http_client_init(&config);
     if (!client) return false;

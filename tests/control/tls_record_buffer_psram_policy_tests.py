@@ -4,6 +4,7 @@ root = Path(__file__).resolve().parents[2]
 platformio = (root / "platformio.ini").read_text(encoding="utf-8")
 source = (root / "components/artwork/tls_record_buffer_psram.cpp").read_text(encoding="utf-8")
 header = (root / "components/artwork/include/artwork/tls_record_buffer_psram.hpp").read_text(encoding="utf-8")
+runtime = (root / "components/artwork/online_runtime.cpp").read_text(encoding="utf-8")
 
 checks = 0
 
@@ -35,8 +36,10 @@ check("std::numeric_limits<std::size_t>::max() / count" in header,
       "calloc product overflow guarded")
 check("failure_snapshot" in source and "failure_bytes" in source,
       "bounded failed-allocation snapshot retained")
-check("mbedtls_alloc_failure" in
-      (root / "components/artwork/online_runtime.cpp").read_text(encoding="utf-8"),
+check("mbedtls_alloc_failure" in runtime,
       "failed allocation reported after request returns")
+check("http_receive_buffer_bytes = 1024" in runtime and
+      "config.buffer_size = http_receive_buffer_bytes" in runtime,
+      "artwork HTTP receive buffer preserves bounded TLS internal headroom")
 
 print(f"PASS {checks}/{checks} TLS record-buffer source-policy checks")
