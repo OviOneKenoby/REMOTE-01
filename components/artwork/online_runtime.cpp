@@ -50,6 +50,7 @@ std::atomic_bool completion_ready{false};
 std::uint8_t *encoded = nullptr, *jpeg_pool = nullptr;
 std::uint16_t *decoded = nullptr;
 Diagnostics stats{};
+NetworkEligibilityGate network_gate{};
 std::int64_t last_musicbrainz_us = 0;
 
 std::uint64_t now_ms() { return std::uint64_t(esp_timer_get_time() / 1000); }
@@ -61,10 +62,10 @@ void record(std::uint32_t &value) {
 bool allowed() {
   network_manager::Status network{};
   const bool available = network_manager::read_status(network);
-  return eligible({available, network.connected, network.portal,
-                   network.scanning, ota_service::busy(),
-                   power_management::commands_allowed(),
-                   power_management::ui_pause_requested()});
+  return eligible(network_gate.observe(
+      available, network.connected, network.portal, network.scanning,
+      ota_service::busy(), power_management::commands_allowed(),
+      power_management::ui_pause_requested()));
 }
 
 struct HttpSink {
@@ -103,7 +104,14 @@ bool https_get(const char *initial_url, std::size_t limit, HttpResult &result) {
   if (!initial_url || std::strlen(initial_url) >= sizeof url) return false;
   std::strcpy(url, initial_url);
   for (unsigned redirect = 0; redirect <= 3; ++redirect) {
-    if (std::strncmp(url, "https://", 8) != 0 || !allowed()) return false;
+    if (std::strncmp(url, "https://", 8) != 0) {
+      ESP_LOGW(tag, "https_rejected reason=scheme redirect=%u", redirect);
+      return false;
+    }
+    if (!allowed()) {
+      ESP_LOGW(tag, "https_rejected reason=lifecycle redirect=%u", redirect);
+      return false;
+    }
     HttpSink sink{encoded, limit};
     char user_agent[128]{};
     const auto *description = esp_app_get_description();
@@ -121,7 +129,10 @@ bool https_get(const char *initial_url, std::size_t limit, HttpResult &result) {
     config.buffer_size = http_receive_buffer_bytes;
     config.buffer_size_tx = 1024;
     auto client = esp_http_client_init(&config);
-    if (!client) return false;
+    if (!client) {
+      ESP_LOGW(tag, "https_rejected reason=client_init redirect=%u", redirect);
+      return false;
+    }
     const auto failures_before = tls_record_buffer::failure_snapshot();
     const auto fallbacks_before = tls_record_buffer::fallback_snapshot();
     esp_err_t error = ESP_FAIL;
@@ -147,18 +158,35 @@ bool https_get(const char *initial_url, std::size_t limit, HttpResult &result) {
                unsigned(fallbacks_after.internal_free),
                unsigned(fallbacks_after.internal_largest));
     }
-    if (error != ESP_OK || sink.overflow) return false;
+    if (error != ESP_OK || sink.overflow) {
+      ESP_LOGW(tag,
+               "https_rejected reason=%s redirect=%u error=%d status=%d bytes=%u",
+               sink.overflow ? "overflow" : "transport", redirect, int(error),
+               status, unsigned(sink.size));
+      return false;
+    }
     if (status == 301 || status == 302 || status == 303 || status == 307 ||
         status == 308) {
       if (!redirect_allowed(status, sink.location, redirect) ||
-          std::strlen(sink.location) >= sizeof url) return false;
+          std::strlen(sink.location) >= sizeof url) {
+        ESP_LOGW(tag,
+                 "https_rejected reason=redirect status=%d redirect=%u location_bytes=%u",
+                 status, redirect, unsigned(std::strlen(sink.location)));
+        return false;
+      }
       std::strcpy(url, sink.location);
       continue;
     }
     result.status = status;
     result.size = sink.size;
     std::snprintf(result.type, sizeof result.type, "%s", sink.content_type);
-    return payload_allowed(status, sink.content_type, sink.size, limit, true);
+    const bool accepted =
+        payload_allowed(status, sink.content_type, sink.size, limit, true);
+    if (!accepted)
+      ESP_LOGW(tag,
+               "https_rejected reason=payload redirect=%u status=%d bytes=%u type=%s",
+               redirect, status, unsigned(sink.size), sink.content_type);
+    return accepted;
   }
   return false;
 }
@@ -253,6 +281,8 @@ bool lookup(const Identity &identity) {
   HttpResult response{}; last_musicbrainz_us = esp_timer_get_time();
   if (!https_get(url, search_limit, response) || response.status != 200 ||
       std::strncmp(response.type, "application/json", 16) != 0) {
+    ESP_LOGW(tag, "lookup_rejected stage=search status=%d bytes=%u type=%s",
+             response.status, unsigned(response.size), response.type);
     record(stats.network_errors); runtime->negatives.remember(identity, now_ms()); return false;
   }
   Candidate candidates[5]{};
@@ -260,6 +290,7 @@ bool lookup(const Identity &identity) {
       {reinterpret_cast<const char *>(encoded), response.size}, candidates, 5);
   std::array<char, mbid_capacity> release_group{};
   if (!select_release_group(identity, {candidates, count}, release_group)) {
+    ESP_LOGW(tag, "lookup_rejected stage=selection candidates=%u", unsigned(count));
     record(stats.lookup_rejected); runtime->negatives.remember(identity, now_ms()); return false;
   }
   if (!still_current(identity)) return false;
@@ -268,9 +299,16 @@ bool lookup(const Identity &identity) {
                 release_group.data());
   response = {};
   runtime->positive_identity = {};
-  if (!https_get(url, encoded_limit, response) || response.status != 200 ||
-      std::strncmp(response.type, "image/jpeg", 10) != 0 ||
-      !decode_jpeg(response.size)) {
+  const bool image_transport = https_get(url, encoded_limit, response);
+  const bool image_payload = image_transport && response.status == 200 &&
+      std::strncmp(response.type, "image/jpeg", 10) == 0;
+  const bool image_decoded = image_payload && decode_jpeg(response.size);
+  if (!image_decoded) {
+    ESP_LOGW(tag,
+             "lookup_rejected stage=%s status=%d bytes=%u type=%s",
+             !image_transport ? "image_transport" :
+             (!image_payload ? "image_payload" : "image_decode"),
+             response.status, unsigned(response.size), response.type);
     record(stats.image_rejected); runtime->negatives.remember(identity, now_ms()); return false;
   }
   if (!still_current(identity)) return false;

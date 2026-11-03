@@ -71,6 +71,28 @@ constexpr bool eligible(const Lifecycle &value) {
          !value.scanning && !value.ota_busy && value.commands_allowed &&
          !value.ui_paused;
 }
+
+// network_manager::read_status() deliberately uses a zero-wait mutex.  A
+// transient unavailable sample is not an authoritative network transition.
+// Keep the last authoritative network fields while still requiring one real
+// sample before artwork traffic is allowed.
+struct NetworkEligibilityGate {
+  bool known = false, connected = false, provisioning = false,
+       scanning = false;
+
+  Lifecycle observe(bool available, bool current_connected,
+                    bool current_provisioning, bool current_scanning,
+                    bool ota_busy, bool commands_allowed, bool ui_paused) {
+    if (available) {
+      known = true;
+      connected = current_connected;
+      provisioning = current_provisioning;
+      scanning = current_scanning;
+    }
+    return {known, connected, provisioning, scanning, ota_busy,
+            commands_allowed, ui_paused};
+  }
+};
 bool redirect_allowed(int status, std::string_view location,
                       unsigned redirects);
 bool payload_allowed(int status, std::string_view mime, std::size_t received,
