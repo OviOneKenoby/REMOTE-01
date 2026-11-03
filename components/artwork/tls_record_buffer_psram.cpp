@@ -9,6 +9,8 @@
 
 static_assert(CONFIG_MBEDTLS_SSL_IN_CONTENT_LEN == 16384,
               "pinned mbedTLS input content length changed");
+static_assert(CONFIG_MBEDTLS_SSL_OUT_CONTENT_LEN == 4096,
+              "pinned mbedTLS output content length changed");
 
 extern "C" void *__real_esp_mbedtls_mem_calloc(std::size_t count,
                                                 std::size_t size);
@@ -30,6 +32,17 @@ void increment_saturating(std::atomic<std::uint32_t> &counter) {
          !counter.compare_exchange_weak(value, value + 1,
                                         std::memory_order_relaxed)) {}
 }
+
+void record_scoped_psram(std::size_t bytes) {
+  fallback_bytes.store(bytes, std::memory_order_relaxed);
+  fallback_internal_free.store(
+      heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+      std::memory_order_relaxed);
+  fallback_internal_largest.store(
+      heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+      std::memory_order_relaxed);
+  increment_saturating(fallback_count);
+}
 }  // namespace
 
 extern "C" void *__wrap_esp_mbedtls_mem_calloc(std::size_t count,
@@ -41,28 +54,32 @@ extern "C" void *__wrap_esp_mbedtls_mem_calloc(std::size_t count,
     }
   }
 
-  // Keep all non-record mbedTLS objects on the pinned internal allocator first.
+  std::size_t bytes = 0;
+  const bool sized =
+      artwork::tls_record_buffer::request_size(count, size, bytes);
+  const bool artwork_scope =
+      artwork_https_task.load(std::memory_order_relaxed) ==
+      xTaskGetCurrentTaskHandle();
+
+  // Only the artwork HTTPS task prefers PSRAM for bounded, non-DMA TLS state.
+  // This preserves contiguous INTERNAL|DMA memory for the pinned hardware AES
+  // driver's 1600-byte bounce buffers. All other TLS callers retain the
+  // framework allocator unchanged.
+  if (artwork_scope && sized &&
+      artwork::tls_record_buffer::is_scoped_psram_request(bytes)) {
+    if (void *external = heap_caps_calloc(
+            count, size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)) {
+      record_scoped_psram(bytes);
+      return external;
+    }
+  }
+
   void *result = __real_esp_mbedtls_mem_calloc(count, size);
   if (!result) {
-    std::size_t bytes = 0;
-    artwork::tls_record_buffer::request_size(count, size, bytes);
     const auto internal_free =
         heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     const auto internal_largest =
         heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    if (artwork_https_task.load(std::memory_order_relaxed) ==
-            xTaskGetCurrentTaskHandle() &&
-        artwork::tls_record_buffer::is_scoped_fallback_request(bytes)) {
-      if (void *external = heap_caps_calloc(
-              count, size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)) {
-        fallback_bytes.store(bytes, std::memory_order_relaxed);
-        fallback_internal_free.store(internal_free, std::memory_order_relaxed);
-        fallback_internal_largest.store(internal_largest,
-                                        std::memory_order_relaxed);
-        increment_saturating(fallback_count);
-        return external;
-      }
-    }
     failure_bytes.store(bytes, std::memory_order_relaxed);
     failure_internal_free.store(internal_free, std::memory_order_relaxed);
     failure_internal_largest.store(internal_largest, std::memory_order_relaxed);

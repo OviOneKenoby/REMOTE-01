@@ -23,6 +23,7 @@ struct FallbackSnapshot {
 // Resolved from the pinned ESP-IDF 5.5.3 mbedTLS configuration. The target
 // translation unit verifies this against MBEDTLS_SSL_IN_BUFFER_LEN.
 constexpr std::size_t resolved_input_buffer_bytes = 16717;
+constexpr std::size_t resolved_output_buffer_bytes = 4429;
 constexpr std::size_t scoped_fallback_limit_bytes = 4096;
 
 inline bool request_size(std::size_t count, std::size_t size,
@@ -41,9 +42,10 @@ inline bool is_input_record_buffer_request(std::size_t count,
          bytes == resolved_input_buffer_bytes;
 }
 
-inline bool is_scoped_fallback_request(std::size_t bytes) {
-  return bytes != 0 && bytes <= scoped_fallback_limit_bytes &&
-         bytes != resolved_input_buffer_bytes;
+inline bool is_scoped_psram_request(std::size_t bytes) {
+  return bytes != 0 && bytes != resolved_input_buffer_bytes &&
+         (bytes <= scoped_fallback_limit_bytes ||
+          bytes == resolved_output_buffer_bytes);
 }
 
 void begin_artwork_https_scope();

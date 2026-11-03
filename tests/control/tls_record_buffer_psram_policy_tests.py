@@ -19,8 +19,12 @@ check(platformio.count("-Wl,--wrap=esp_mbedtls_mem_calloc") == 1,
       "single linker wrapper")
 check("CONFIG_MBEDTLS_SSL_IN_CONTENT_LEN == 16384" in source,
       "pinned input content size guarded")
+check("CONFIG_MBEDTLS_SSL_OUT_CONTENT_LEN == 4096" in source,
+      "pinned output content size guarded")
 check("resolved_input_buffer_bytes = 16717" in header,
       "observed input record-buffer size exact")
+check("resolved_output_buffer_bytes = 4429" in header,
+      "observed output record-buffer size exact")
 check("MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT" in source,
       "input record buffer requests byte-addressable PSRAM")
 check(source.index("heap_caps_calloc") <
@@ -43,13 +47,13 @@ check("http_receive_buffer_bytes = 1024" in runtime and
       "artwork HTTP receive buffer preserves bounded TLS internal headroom")
 check("ArtworkHttpsScope allocation_scope" in runtime,
       "PSRAM fallback scope is limited to artwork HTTPS perform")
-check("is_scoped_fallback_request(bytes)" in source and
+check("is_scoped_psram_request(bytes)" in source and
       "xTaskGetCurrentTaskHandle()" in source,
-      "fallback requires bounded size and current artwork worker task")
-check(source.index("__real_esp_mbedtls_mem_calloc(count, size)") <
-      source.index("is_scoped_fallback_request(bytes)"),
-      "normal internal mbedTLS allocator remains first choice")
-check("mbedtls_psram_fallback" in runtime,
-      "successful scoped fallback remains observable")
+      "PSRAM preference requires bounded size and current artwork worker task")
+check(source.index("is_scoped_psram_request(bytes)") <
+      source.index("__real_esp_mbedtls_mem_calloc(count, size)"),
+      "artwork-scoped non-DMA TLS state preserves DMA headroom")
+check("mbedtls_psram_scoped" in runtime,
+      "successful scoped PSRAM allocation remains observable")
 
 print(f"PASS {checks}/{checks} TLS record-buffer source-policy checks")

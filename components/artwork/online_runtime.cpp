@@ -153,7 +153,7 @@ bool https_get(const char *initial_url, std::size_t limit, HttpResult &result) {
     }
     if (fallbacks_after.count != fallbacks_before.count) {
       ESP_LOGI(tag,
-               "mbedtls_psram_fallback count=%u bytes=%u INT_free=%u INT_largest=%u",
+               "mbedtls_psram_scoped count=%u bytes=%u INT_free=%u INT_largest=%u",
                unsigned(fallbacks_after.count), unsigned(fallbacks_after.bytes),
                unsigned(fallbacks_after.internal_free),
                unsigned(fallbacks_after.internal_largest));
