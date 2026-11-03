@@ -20,15 +20,20 @@ eligible only while Wi-Fi is connected, provisioning/scanning are inactive,
 OTA is idle, commands are allowed and the UI is not parked for sleep. New
 metadata immediately restores the generic Radio/Bluetooth placeholder. A
 completed image is copied to the boot-lifetime Stage 1 surface only if every
-identity fence still matches; track/source/session changes discard stale work.
+semantic media fence still matches; track/source/session changes discard stale
+work. A metadata-revision-only update with identical source, session, media
+generation, station, artist and title is not a new artwork identity.
 
 ### Lookup and transport policy
 
 - MusicBrainz release-group search uses HTTPS, `fmt=json`, a maximum of five
   results and the descriptive User-Agent
   `REMOTE01/<build> (https://github.com/OviOneKenoby/REMOTE-01)`.
-- Global MusicBrainz starts are paced to at most one per second, following the
-  published API limit. The JSON body is capped at 64 KiB and parsed without
+- Split AVRCP metadata updates are coalesced for 1.5 seconds before a lookup.
+  Heavy artwork HTTPS starts are separated by at least five seconds, exceeding
+  MusicBrainz's published one-request-per-second limit and leaving bounded CPU0
+  idle time between Wi-Fi/TLS bursts. Both waits recheck current-media and
+  lifecycle fences. The JSON body is capped at 64 KiB and parsed without
   dynamic allocation.
 - Selection requires score 90 or above plus exact normalized artist and title.
   Conflicting titles (including live/remix variants) are rejected rather than
@@ -60,8 +65,8 @@ fallback artwork available. No image is written to filesystem or NVS.
 
 ### Offline verification
 
-- Artwork identity/matching/parser/cache/transport/JPEG policy: **PASS**
-  (69 assertions).
+- Artwork identity/matching/parser/cache/transport/JPEG/scheduling policy:
+  **PASS** (76 assertions).
 - Artwork UI/ownership/memory/TLS/worker policy: **PASS** (27 assertions).
 - HOME metadata UI: **PASS** (15 assertions).
 - UI navigation: **PASS** (12 assertions).
@@ -77,6 +82,31 @@ fallback artwork available. No image is written to filesystem or NVS.
 Hardware validation remains **NOT TESTED** until the final candidate passes
 the existing local OTA safety gates. Stage 3 artist photographs remain
 deferred; album lookup failure therefore falls directly to Stage 1 artwork.
+
+## Stage 2 metadata-burst watchdog correction
+
+Build `6c5bff9` was installed by one REMOTE-only application write and verified
+by an exact 2,819,680-byte readback with SHA-256
+`d6f43fc9638d556a2b162f9b44ff8017279dba883d6d6bac3fe503d6f28d6d9c`.
+Certificate validation and the scoped PSRAM TLS allocator continued to pass,
+with zero allocation failures and a 9,728-byte largest internal block.
+
+Rapid Bluetooth metadata revisions then caused several MusicBrainz/cover HTTPS
+operations in close succession. At uptime 331,916 ms ESP-IDF reported the task
+watchdog because `IDLE0` had not run. Matching-ELF decoding places the captured
+CPU0 stack in the ESP32-S3 Wi-Fi `ppTask` queue receive path. REMOTE did not
+reboot: later diagnostics showed continuous uptime, connected Wi-Fi,
+authenticated RTCP and zero allocation failures. The verified defect is
+unbounded artwork network-start density during split/transient metadata, not a
+new TLS allocation failure.
+
+The correction adds no task, buffer, protocol or timeout relaxation. It
+coalesces metadata for 1.5 seconds, suppresses revision-only artwork resubmits,
+and spaces heavy HTTPS starts by five seconds while retaining cancellation and
+exact stale-completion fencing. Hardware must confirm that rapid track and
+commercial transitions no longer produce an IDLE0 watchdog or reset. Correct
+cover selection remains dependent on MusicBrainz/CAA availability and the
+artist/title-only metadata available over RTCP.
 
 ## Stage 2 hardware regression and memory-placement correction
 

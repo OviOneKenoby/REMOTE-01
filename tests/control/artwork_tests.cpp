@@ -51,6 +51,10 @@ int main() {
   assert(std::string_view(radio_identity.title.data()) == "Get Lucky");
   auto same = identity; ++same.request_generation;
   assert(same_media(identity, same));
+  ++same.metadata_revision;
+  assert(same_media(identity, same)); // revision churn is not a new cover
+  std::strcpy(same.title.data(), "Around the World");
+  assert(!same_media(identity, same));
   radio.combined = "Station ident - Listen live";
   assert(!make_identity(radio, 3, radio_identity));
   radio.combined = "Artist - Title - Remix";
@@ -153,6 +157,11 @@ int main() {
   assert(transient_search_failure(503));
   assert(!transient_search_failure(404));
   assert(!transient_search_failure(200));
+  assert(!lookup_settled(1499, 0));
+  assert(lookup_settled(1500, 0));
+  assert(network_start_due(1, 0));
+  assert(!network_start_due(5999, 1000));
+  assert(network_start_due(6000, 1000));
 
-  std::cout << "ARTWORK_MODEL: PASS assertions=69\n";
+  std::cout << "ARTWORK_MODEL: PASS assertions=76\n";
 }

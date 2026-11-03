@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-11-03 - Bound artwork metadata bursts and HTTPS scheduling
+
+- Record the hardware-observed task-watchdog warning during a burst of
+  Bluetooth metadata revisions. The matching ELF decodes the running CPU0
+  stack to the ESP-IDF Wi-Fi `ppTask` receive path while `IDLE0` had not run.
+  REMOTE stayed up, Wi-Fi and authenticated RTCP remained healthy, and the
+  generic allocator failure counter stayed at zero. This is scheduling
+  pressure from repeated artwork TLS activity, not another heap failure.
+- Treat metadata-revision-only changes for an otherwise identical
+  source/session/media generation/artist/title as the same artwork identity.
+  Preserve exact request/completion equality for stale-result publication.
+- Coalesce split AVRCP metadata updates for 1.5 seconds before lookup and
+  enforce a five-second idle interval between heavy artwork HTTPS starts.
+  Replacement requests and all lifecycle fences remain cancelable during both
+  waits. TLS validation, HTTP limits, negative caching, RTCP and playback are
+  unchanged.
+
 ## 2026-11-03 - Make online artwork lookup retryable and release-specific
 
 - Record the verified `b534eca` hardware checkpoint: the scoped PSRAM TLS

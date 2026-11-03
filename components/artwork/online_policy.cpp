@@ -103,7 +103,6 @@ bool same_media(const Identity &left, const Identity &right) {
   return left.source == right.source && left.session == right.session &&
          left.source_generation == right.source_generation &&
          left.media_generation == right.media_generation &&
-         left.metadata_revision == right.metadata_revision &&
          left.station == right.station && left.artist == right.artist &&
          left.title == right.title &&
          left.normalized_artist == right.normalized_artist &&

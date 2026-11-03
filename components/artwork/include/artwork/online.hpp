@@ -17,6 +17,21 @@ constexpr std::size_t encoded_limit = 128 * 1024;
 constexpr std::size_t search_limit = 64 * 1024;
 constexpr std::uint64_t negative_ttl_ms = 15 * 60 * 1000ULL;
 constexpr unsigned search_attempts = 3;
+// AVRCP commonly publishes artist/title/play-status as separate revisions.
+// Settle that bounded burst before opening a TLS connection, then leave an
+// idle window between expensive artwork HTTPS starts so the Wi-Fi task cannot
+// continuously starve IDLE0.
+constexpr std::uint64_t metadata_settle_ms = 1500;
+constexpr std::uint64_t network_start_interval_ms = 5000;
+
+constexpr bool lookup_settled(std::uint64_t now, std::uint64_t changed_at) {
+  return now >= changed_at && now - changed_at >= metadata_settle_ms;
+}
+constexpr bool network_start_due(std::uint64_t now,
+                                 std::uint64_t last_started) {
+  return !last_started ||
+         (now >= last_started && now - last_started >= network_start_interval_ms);
+}
 
 constexpr bool transient_search_failure(int status) {
   return status == 0 || status == 429 || (status >= 500 && status <= 599);

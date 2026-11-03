@@ -43,6 +43,7 @@ TaskHandle_t worker_handle = nullptr;
 struct RuntimeState {
   Identity requested{}, completed{}, positive_identity{};
   NegativeCache negatives{};
+  std::uint64_t request_changed_ms = 0;
 };
 RuntimeState *runtime = nullptr;
 bool request_ready = false;
@@ -51,7 +52,7 @@ std::uint8_t *encoded = nullptr, *jpeg_pool = nullptr;
 std::uint16_t *decoded = nullptr;
 Diagnostics stats{};
 NetworkEligibilityGate network_gate{};
-std::int64_t last_musicbrainz_us = 0;
+std::uint64_t last_network_start_ms = 0;
 
 std::uint64_t now_ms() { return std::uint64_t(esp_timer_get_time() / 1000); }
 void increment(std::uint32_t &value) { if (value != UINT32_MAX) ++value; }
@@ -267,6 +268,18 @@ bool still_current(const Identity &identity) {
   return current && allowed();
 }
 
+bool wait_for_network_slot(const Identity &identity) {
+  while (still_current(identity)) {
+    const auto now = now_ms();
+    if (network_start_due(now, last_network_start_ms)) {
+      last_network_start_ms = now;
+      return true;
+    }
+    vTaskDelay(pdMS_TO_TICKS(100));
+  }
+  return false;
+}
+
 bool lookup(const Identity &identity) {
   const auto now = now_ms();
   if (runtime && same_media(runtime->positive_identity, identity)) {
@@ -280,12 +293,8 @@ bool lookup(const Identity &identity) {
   HttpResult response{};
   bool search_ok = false;
   for (unsigned attempt = 0; attempt < search_attempts; ++attempt) {
-    const auto elapsed = esp_timer_get_time() - last_musicbrainz_us;
-    if (elapsed < 1000000)
-      vTaskDelay(pdMS_TO_TICKS((1000000 - elapsed + 999) / 1000));
-    if (!still_current(identity)) return false;
+    if (!wait_for_network_slot(identity)) return false;
     response = {};
-    last_musicbrainz_us = esp_timer_get_time();
     const bool transported = https_get(url, search_limit, response);
     search_ok = transported && response.status == 200 &&
                 std::strncmp(response.type, "application/json", 16) == 0;
@@ -321,7 +330,7 @@ bool lookup(const Identity &identity) {
   runtime->positive_identity = {};
   bool image_decoded = false;
   for (std::size_t attempt = 0; attempt < release_group_count; ++attempt) {
-    if (!still_current(identity)) return false;
+    if (!wait_for_network_slot(identity)) return false;
     std::snprintf(url, sizeof url,
                   "https://coverartarchive.org/release-group/%s/front-250",
                   release_groups[attempt].data());
@@ -353,13 +362,19 @@ bool lookup(const Identity &identity) {
 
 void worker(void *) {
   for (;;) {
-    Identity identity{}; bool present = false;
+    Identity identity{}; bool present = false; std::uint64_t changed_at = 0;
     portENTER_CRITICAL(&mux);
     if (request_ready && runtime && !completion_ready.load()) {
-      identity = runtime->requested; present = true;
+      identity = runtime->requested;
+      changed_at = runtime->request_changed_ms;
+      present = true;
     }
     portEXIT_CRITICAL(&mux);
     if (!present || !allowed()) { vTaskDelay(pdMS_TO_TICKS(100)); continue; }
+    if (!lookup_settled(now_ms(), changed_at)) {
+      vTaskDelay(pdMS_TO_TICKS(100));
+      continue;
+    }
     const bool success = lookup(identity);
     portENTER_CRITICAL(&mux);
     if (request_ready && runtime->requested == identity) {
@@ -410,13 +425,17 @@ bool start() {
 
 bool submit(const Identity &identity) {
   if (!identity.usable() || !worker_handle || !runtime) return false;
+  const auto changed_at = now_ms();
   portENTER_CRITICAL(&mux);
   if (completion_ready.load() && !(runtime->completed == identity))
     completion_ready.store(false);
   const bool duplicate = (request_ready && runtime->requested == identity) ||
                          (completion_ready.load() && runtime->completed == identity);
   if (!duplicate) {
-    runtime->requested = identity; request_ready = true; increment(stats.submitted);
+    runtime->requested = identity;
+    runtime->request_changed_ms = changed_at;
+    request_ready = true;
+    increment(stats.submitted);
   }
   portEXIT_CRITICAL(&mux);
   return !duplicate;
