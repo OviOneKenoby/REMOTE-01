@@ -73,6 +73,14 @@ int main() {
   const Candidate ranked[]{exact, ambiguous};
   assert(select_release_group(identity, ranked, selected));
   assert(selected == ambiguous.release_group); // highest exact score wins
+  std::array<std::array<char, mbid_capacity>, 5> release_groups{};
+  assert(rank_release_groups(identity, ranked, release_groups) == 2);
+  assert(release_groups[0] == ambiguous.release_group);
+  assert(release_groups[1] == exact.release_group);
+  const Candidate duplicates[]{ambiguous, ambiguous, exact};
+  assert(rank_release_groups(identity, duplicates, release_groups) == 2);
+  assert(release_groups[0] == ambiguous.release_group);
+  assert(release_groups[1] == exact.release_group);
   auto live = exact;
   std::strcpy(live.title.data(), "Get Lucky (Live)");
   assert(!select_release_group(identity, std::span(&live, 1), selected));

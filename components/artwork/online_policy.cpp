@@ -110,24 +110,36 @@ bool same_media(const Identity &left, const Identity &right) {
          left.normalized_title == right.normalized_title;
 }
 
-bool select_release_group(const Identity &wanted,
-                          std::span<const Candidate> candidates,
-                          std::array<char, mbid_capacity> &out) {
-  out = {};
-  int best_score = 89;
-  for (const auto &candidate : candidates) {
-    if (candidate.score < 90 || !candidate.release_group[0]) continue;
+std::size_t rank_release_groups(
+    const Identity &wanted, std::span<const Candidate> candidates,
+    std::span<std::array<char, mbid_capacity>> out) {
+  for (auto &group : out) group = {};
+  std::size_t count = 0;
+  while (count < out.size()) {
+    const Candidate *best = nullptr;
+    for (const auto &candidate : candidates) {
+      if (candidate.score < 90 || !candidate.release_group[0]) continue;
+      bool used = false;
+      for (std::size_t i = 0; i < count; ++i)
+        if (out[i] == candidate.release_group) { used = true; break; }
+      if (used) continue;
     std::array<char, artist_capacity> artist{};
     std::array<char, title_capacity> title{};
     if (!normalize(candidate.artist, artist) || !normalize(candidate.title, title) ||
         std::strcmp(artist.data(), wanted.normalized_artist.data()) != 0 ||
         std::strcmp(title.data(), wanted.normalized_title.data()) != 0) continue;
-    if (candidate.score > best_score) {
-      out = candidate.release_group;
-      best_score = candidate.score;
+      if (!best || candidate.score > best->score) best = &candidate;
     }
+    if (!best) break;
+    out[count++] = best->release_group;
   }
-  return best_score >= 90;
+  return count;
+}
+
+bool select_release_group(const Identity &wanted,
+                          std::span<const Candidate> candidates,
+                          std::array<char, mbid_capacity> &out) {
+  return rank_release_groups(wanted, candidates, std::span(&out, 1)) == 1;
 }
 
 ImageFormat inspect_image(std::span<const std::uint8_t> bytes, JpegInfo &info) {

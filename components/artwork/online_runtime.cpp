@@ -288,26 +288,38 @@ bool lookup(const Identity &identity) {
   Candidate candidates[5]{};
   const auto count = parse_musicbrainz(
       {reinterpret_cast<const char *>(encoded), response.size}, candidates, 5);
-  std::array<char, mbid_capacity> release_group{};
-  if (!select_release_group(identity, {candidates, count}, release_group)) {
+  std::array<std::array<char, mbid_capacity>, 5> release_groups{};
+  const auto release_group_count = rank_release_groups(
+      identity, {candidates, count}, release_groups);
+  if (!release_group_count) {
     ESP_LOGW(tag, "lookup_rejected stage=selection candidates=%u", unsigned(count));
     record(stats.lookup_rejected); runtime->negatives.remember(identity, now_ms()); return false;
   }
-  if (!still_current(identity)) return false;
-  std::snprintf(url, sizeof url,
-                "https://coverartarchive.org/release-group/%s/front-250",
-                release_group.data());
-  response = {};
   runtime->positive_identity = {};
-  const bool image_transport = https_get(url, encoded_limit, response);
-  const bool image_payload = image_transport && response.status == 200 &&
-      std::strncmp(response.type, "image/jpeg", 10) == 0;
-  const bool image_decoded = image_payload && decode_jpeg(response.size);
+  bool image_decoded = false;
+  for (std::size_t attempt = 0; attempt < release_group_count; ++attempt) {
+    if (!still_current(identity)) return false;
+    std::snprintf(url, sizeof url,
+                  "https://coverartarchive.org/release-group/%s/front-250",
+                  release_groups[attempt].data());
+    response = {};
+    const bool image_transport = https_get(url, encoded_limit, response);
+    const bool image_payload = image_transport && response.status == 200 &&
+        std::strncmp(response.type, "image/jpeg", 10) == 0;
+    image_decoded = image_payload && decode_jpeg(response.size);
+    if (image_decoded) break;
+    ESP_LOGW(tag,
+             "cover_candidate_rejected attempt=%u count=%u status=%d bytes=%u type=%s",
+             unsigned(attempt + 1), unsigned(release_group_count), response.status,
+             unsigned(response.size), response.type);
+    // A coverless exact release group is expected.  Transport failures are not
+    // evidence that another release group is usable, so do not multiply them.
+    if (!response.status || (response.status != 404 && response.status != 410))
+      break;
+  }
   if (!image_decoded) {
     ESP_LOGW(tag,
-             "lookup_rejected stage=%s status=%d bytes=%u type=%s",
-             !image_transport ? "image_transport" :
-             (!image_payload ? "image_payload" : "image_decode"),
+             "lookup_rejected stage=image_candidates status=%d bytes=%u type=%s",
              response.status, unsigned(response.size), response.type);
     record(stats.image_rejected); runtime->negatives.remember(identity, now_ms()); return false;
   }

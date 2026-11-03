@@ -55,6 +55,9 @@ struct Candidate {
 // Returns true only for one unambiguous exact artist/title release group.
 bool select_release_group(const Identity &, std::span<const Candidate>,
                           std::array<char, mbid_capacity> &);
+std::size_t rank_release_groups(
+    const Identity &, std::span<const Candidate>,
+    std::span<std::array<char, mbid_capacity>>);
 std::size_t parse_musicbrainz(std::string_view, Candidate *, std::size_t);
 
 enum class ImageFormat : std::uint8_t { unsupported, baseline_jpeg };
