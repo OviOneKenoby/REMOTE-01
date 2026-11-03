@@ -30,6 +30,12 @@ int main() {
   expect(request_size(1, 16717, bytes) && bytes == 16717, "exact checked product");
   expect(!request_size(std::numeric_limits<std::size_t>::max(), 2, bytes),
          "overflow product rejected");
+  expect(is_scoped_fallback_request(524), "observed RSA limb fallback admitted");
+  expect(is_scoped_fallback_request(1036), "observed large RSA limb fallback admitted");
+  expect(!is_scoped_fallback_request(0), "zero fallback rejected");
+  expect(!is_scoped_fallback_request(4097), "oversized fallback rejected");
+  expect(!is_scoped_fallback_request(resolved_input_buffer_bytes),
+         "record buffer handled only by exact record policy");
   std::cout << "PASS " << checks << "/" << checks
             << " TLS input record-buffer allocation checks\n";
 }

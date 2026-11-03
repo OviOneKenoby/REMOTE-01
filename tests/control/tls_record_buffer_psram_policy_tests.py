@@ -41,5 +41,15 @@ check("mbedtls_alloc_failure" in runtime,
 check("http_receive_buffer_bytes = 1024" in runtime and
       "config.buffer_size = http_receive_buffer_bytes" in runtime,
       "artwork HTTP receive buffer preserves bounded TLS internal headroom")
+check("ArtworkHttpsScope allocation_scope" in runtime,
+      "PSRAM fallback scope is limited to artwork HTTPS perform")
+check("is_scoped_fallback_request(bytes)" in source and
+      "xTaskGetCurrentTaskHandle()" in source,
+      "fallback requires bounded size and current artwork worker task")
+check(source.index("__real_esp_mbedtls_mem_calloc(count, size)") <
+      source.index("is_scoped_fallback_request(bytes)"),
+      "normal internal mbedTLS allocator remains first choice")
+check("mbedtls_psram_fallback" in runtime,
+      "successful scoped fallback remains observable")
 
 print(f"PASS {checks}/{checks} TLS record-buffer source-policy checks")
