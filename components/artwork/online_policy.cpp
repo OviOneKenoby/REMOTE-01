@@ -114,7 +114,7 @@ bool select_release_group(const Identity &wanted,
                           std::span<const Candidate> candidates,
                           std::array<char, mbid_capacity> &out) {
   out = {};
-  bool accepted = false;
+  int best_score = 89;
   for (const auto &candidate : candidates) {
     if (candidate.score < 90 || !candidate.release_group[0]) continue;
     std::array<char, artist_capacity> artist{};
@@ -122,12 +122,12 @@ bool select_release_group(const Identity &wanted,
     if (!normalize(candidate.artist, artist) || !normalize(candidate.title, title) ||
         std::strcmp(artist.data(), wanted.normalized_artist.data()) != 0 ||
         std::strcmp(title.data(), wanted.normalized_title.data()) != 0) continue;
-    if (accepted && std::strcmp(out.data(), candidate.release_group.data()) != 0)
-      return false;
-    out = candidate.release_group;
-    accepted = true;
+    if (candidate.score > best_score) {
+      out = candidate.release_group;
+      best_score = candidate.score;
+    }
   }
-  return accepted;
+  return best_score >= 90;
 }
 
 ImageFormat inspect_image(std::span<const std::uint8_t> bytes, JpegInfo &info) {

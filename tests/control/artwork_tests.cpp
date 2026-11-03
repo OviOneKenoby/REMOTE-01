@@ -67,7 +67,12 @@ int main() {
   auto ambiguous = exact;
   std::strcpy(ambiguous.release_group.data(), "11111111-2222-3333-4444-555555555555");
   const Candidate matches[]{exact, ambiguous};
-  assert(!select_release_group(identity, matches, selected));
+  assert(select_release_group(identity, matches, selected));
+  assert(selected == exact.release_group); // deterministic first-on-score-tie
+  ambiguous.score = 100;
+  const Candidate ranked[]{exact, ambiguous};
+  assert(select_release_group(identity, ranked, selected));
+  assert(selected == ambiguous.release_group); // highest exact score wins
   auto live = exact;
   std::strcpy(live.title.data(), "Get Lucky (Live)");
   assert(!select_release_group(identity, std::span(&live, 1), selected));
