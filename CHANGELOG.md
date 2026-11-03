@@ -16,6 +16,13 @@
   Replacement requests and all lifecycle fences remain cancelable during both
   waits. TLS validation, HTTP limits, negative caching, RTCP and playback are
   unchanged.
+- Preserve a still-current read-only artwork request when display-idle, sleep
+  preparation or confirmed network loss invalidates an in-progress lookup.
+  The worker remains dormant while ineligible and retries only that unchanged
+  current media after lifecycle eligibility returns. Explicit media/source/
+  session invalidation still cancels it, and deterministic failures remain
+  final. This corrects the captured Thriller sequence where display-idle
+  interrupted a valid lookup and wake left the same track on its placeholder.
 
 ## 2026-11-03 - Make online artwork lookup retryable and release-specific
 

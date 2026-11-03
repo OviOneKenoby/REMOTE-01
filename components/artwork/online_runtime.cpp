@@ -376,20 +376,30 @@ void worker(void *) {
       continue;
     }
     const bool success = lookup(identity);
+    const bool lifecycle_eligible = allowed();
+    bool deferred = false;
     portENTER_CRITICAL(&mux);
     if (request_ready && runtime->requested == identity) {
-      request_ready = false;
-      if (success) { runtime->completed = identity; completion_ready.store(true); increment(stats.completed); }
+      deferred = defer_for_lifecycle(success, true, lifecycle_eligible);
+      if (!deferred) {
+        request_ready = false;
+        if (success) {
+          runtime->completed = identity;
+          completion_ready.store(true);
+          increment(stats.completed);
+        }
+      }
     } else increment(stats.stale);
     portEXIT_CRITICAL(&mux);
     ESP_LOGI(tag,
              "result=%s source=%u session=%llu media_generation=%llu metadata_revision=%llu stack_min_bytes=%u",
-             success ? "cover_ready" : "generic_fallback", unsigned(identity.source),
+             success ? "cover_ready" : deferred ? "deferred_lifecycle" : "generic_fallback",
+             unsigned(identity.source),
              static_cast<unsigned long long>(identity.session),
              static_cast<unsigned long long>(identity.media_generation),
              static_cast<unsigned long long>(identity.metadata_revision),
              unsigned(uxTaskGetStackHighWaterMark(nullptr)));
-    vTaskDelay(pdMS_TO_TICKS(20));
+    vTaskDelay(pdMS_TO_TICKS(deferred ? 100 : 20));
   }
 }
 } // namespace

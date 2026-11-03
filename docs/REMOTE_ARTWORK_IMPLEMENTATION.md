@@ -108,6 +108,17 @@ commercial transitions no longer produce an IDLE0 watchdog or reset. Correct
 cover selection remains dependent on MusicBrainz/CAA availability and the
 artist/title-only metadata available over RTCP.
 
+The first hardware pass on that candidate proved the scheduler boundary but
+also captured a lifecycle corner case. `Michael Jackson - Thriller` lookup
+validated TLS, then REMOTE entered display-idle before publication. The worker
+reported generic fallback and cleared the request; wake retained the same
+semantic media identity, so no duplicate submission was generated. A failed
+lookup is now retained only when the exact request is still current and the
+lifecycle has become ineligible. It remains dormant through display-idle and
+resumes after wake. A changed track/source/session still replaces or cancels
+the request, and an eligible deterministic or transport failure still
+terminates normally.
+
 ## Stage 2 hardware regression and memory-placement correction
 
 The first committed Stage 2 candidate (`2efe4a0`, 2,816,992-byte BIN,

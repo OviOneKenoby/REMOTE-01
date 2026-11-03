@@ -32,6 +32,10 @@ constexpr bool network_start_due(std::uint64_t now,
   return !last_started ||
          (now >= last_started && now - last_started >= network_start_interval_ms);
 }
+constexpr bool defer_for_lifecycle(bool success, bool request_current,
+                                   bool lifecycle_eligible) {
+  return !success && request_current && !lifecycle_eligible;
+}
 
 constexpr bool transient_search_failure(int status) {
   return status == 0 || status == 429 || (status >= 500 && status <= 599);

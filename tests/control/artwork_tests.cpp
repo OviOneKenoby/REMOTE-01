@@ -162,6 +162,10 @@ int main() {
   assert(network_start_due(1, 0));
   assert(!network_start_due(5999, 1000));
   assert(network_start_due(6000, 1000));
+  assert(defer_for_lifecycle(false, true, false));
+  assert(!defer_for_lifecycle(true, true, false));
+  assert(!defer_for_lifecycle(false, false, false));
+  assert(!defer_for_lifecycle(false, true, true));
 
-  std::cout << "ARTWORK_MODEL: PASS assertions=76\n";
+  std::cout << "ARTWORK_MODEL: PASS assertions=80\n";
 }
