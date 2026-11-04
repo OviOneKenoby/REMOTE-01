@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-11-04 - Radio station-logo hardware checkpoint
+
+- Installed Stage 3 build `41da61b` on REMOTE//01 by application-only write;
+  independent 2,823,264-byte readback exactly matched SHA-256
+  `1d37494bc5a6ae9622b384c3a206da66657cf921caf424f1ed7a7da329fa440f`.
+  Normal boot, retained Wi-Fi, authenticated RTCP READY, `/api/status`, `/ota`,
+  zero allocation failures and uninterrupted TUNER playback were verified.
+- West City Radio retained the generic Radio placeholder while HOME and
+  metadata stayed responsive. Current external Radio Browser data contains
+  duplicate exact-name records and no single eligible HTTPS baseline-JPEG
+  favicon, so conservative fallback is the expected result rather than a logo
+  failure.
+- Display-idle continuation passed: metadata advanced with the display off;
+  wake restored current metadata, the safe placeholder and responsive HOME.
+  No reset, watchdog, Wi-Fi error or audio interruption was observed.
+- Hardware status is **PARTIAL PASS**. A real station logo was not displayed,
+  so logo identity and stale-logo clearing across station/source transitions
+  remain pending. No TUNER firmware or configuration was changed.
+
 ## 2026-11-04 - Add bounded Radio Browser station-logo fallback
 
 - Extend the existing single Artwork worker with a Radio-only fallback:

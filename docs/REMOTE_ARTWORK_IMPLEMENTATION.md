@@ -76,10 +76,27 @@ PSRAM-stack task at `tskIDLE_PRIORITY` and never calls LVGL.
   and 322,464 bytes exact headroom in either 3 MiB OTA slot. The additional
   persistent runtime allocation is 41,472 bytes of PSRAM.
 
-Hardware validation is **NOT TESTED** at this checkpoint. It must verify the
-actual displayed logo belongs to the selected station, not merely that the API
-returned HTTP 200. External Radio Browser data and favicon availability remain
-best-effort limitations. TUNER firmware is untouched.
+### Stage 3 hardware checkpoint
+
+Build `41da61b` was installed by one REMOTE-only application write and verified
+by an independent exact 2,823,264-byte readback with SHA-256
+`1d37494bc5a6ae9622b384c3a206da66657cf921caf424f1ed7a7da329fa440f`.
+Normal boot, retained Wi-Fi, authenticated RTCP READY, complete `/api/status`
+and `/ota` responses and zero generic allocation failures passed.
+
+West City Radio retained the generic Radio placeholder while current metadata,
+touch and audio remained responsive. This is the specified conservative result
+for the current external data: the station has multiple exact-name Radio
+Browser records and no one eligible HTTPS baseline-JPEG favicon. Metadata also
+advanced during display-idle; wake restored the latest text, safe placeholder
+and responsive HOME without interrupting TUNER playback.
+
+Hardware status is **PARTIAL PASS**, not complete Stage 3 acceptance. The owner
+kept West City Radio playing, so an actual station logo was not displayed and
+its visual identity was not validated. A qualifying station must still prove
+the logo path, followed by station/source transitions that prove stale artwork
+cannot persist. External Radio Browser data and favicon availability remain
+best-effort limitations. TUNER firmware was not modified.
 
 ## Stage 2: bounded online album covers
 
