@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026-11-04 - Add bounded Radio Browser station-logo fallback
+
+- Extend the existing single Artwork worker with a Radio-only fallback:
+  qualified album cover, then an exact-name Radio Browser station logo, then
+  the generic Radio placeholder. Bluetooth remains album cover then generic
+  Bluetooth artwork. No RTCP, TUNER, partition, NVS or UI-layout change.
+- Query the documented HTTPS `bynameexact` endpoint using the authoritative
+  RTCP station name and existing descriptive User-Agent/TLS bundle. Normalize
+  ASCII case and whitespace conservatively, require exactly one matching
+  record, a valid station UUID and a bounded HTTPS favicon URL, and reject
+  duplicate exact names rather than selecting the first result.
+- Reuse the 128 KiB encoded buffer, baseline-JPEG decoder, 144 x 144 RGB565
+  staging surface, lifecycle fences and five-second network-start spacing.
+  Unsupported PNG/other images, malformed or oversized responses, ambiguity,
+  missing favicons and network failures safely retain the generic placeholder.
+- Add one 41,472-byte PSRAM station-logo cache plus four bounded boot-local
+  negative entries. Logo cache identity is station-specific and reusable over
+  track changes; full request/session/source generations still fence display
+  publication, so station changes and Bluetooth transitions cannot publish
+  stale Radio artwork.
+- Focused verification passes: Artwork model/parser/cache/transport 105
+  assertions; Artwork UI policy 29; HOME metadata UI 15; BTX integration 15;
+  network/sleep boundary 23; local OTA policy PASS. Clean `remote01` build
+  `41da61b` succeeds with 63,788 bytes static RAM and 2,822,769 bytes linked
+  flash. The 2,823,264-byte BIN has SHA-256
+  `1d37494bc5a6ae9622b384c3a206da66657cf921caf424f1ed7a7da329fa440f`
+  and retains 322,464 bytes in either 3 MiB OTA slot. Hardware validation is
+  pending; no station-logo hardware PASS is claimed.
+
 ## 2026-11-04 - Keep display-idle artwork TLS below the watchdog boundary
 
 - Record the clean `9084580` hardware reproduction. Artwork HTTPS correctly

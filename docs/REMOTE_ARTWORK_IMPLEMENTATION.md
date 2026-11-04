@@ -1,5 +1,86 @@
 # REMOTE Artwork Implementation
 
+## Stage 3: bounded Radio Browser station logos
+
+Stage 3 preserves the Stage 2 worker and adds one Radio-only fallback path:
+
+1. a confidently matched album cover;
+2. an exact-name Radio Browser station logo;
+3. the generic Radio placeholder.
+
+Bluetooth remains album cover then generic Bluetooth placeholder. Artist
+photographs remain deferred. The TUNER and RTCP wire format are unchanged: the
+lookup uses the existing authoritative RTCP station field, never the clipped
+HOME label or combined StreamTitle. A Radio identity is now usable with a
+station name even when no artist/title pair is available, so missing or
+advertisement-like StreamTitle does not suppress logo retrieval.
+
+### Radio Browser contract and matching
+
+REMOTE queries the documented HTTPS endpoint
+`https://all.api.radio-browser.info/json/stations/bynameexact/<name>` with
+`hidebroken=true` and a six-record bound. The existing descriptive REMOTE01
+User-Agent, ESP-IDF certificate bundle, hostname verification, eight-second
+request timeout, HTTPS-only redirect limit and five-second network-start
+spacing remain in force. JSON is capped at 32 KiB and parsed into fixed arrays
+without dynamic allocation.
+
+Station names are trimmed, ASCII whitespace is collapsed and ASCII letters are
+compared case-insensitively; non-ASCII UTF-8 bytes are preserved exactly. A
+logo is accepted only when exactly one returned record has that normalized
+name, its station UUID has canonical syntax, and its favicon is a bounded
+HTTPS URL without credentials, fragments or control/space characters. Multiple
+exact names are ambiguous and rejected; result order is never a tie-breaker.
+API payloads, UUIDs and favicon URLs are treated as untrusted.
+
+The validated image path remains baseline JPEG only. Favicon PNG and other
+formats are rejected safely; no PNG library or conversion service was added.
+Encoded images retain the 128 KiB, 2,048 x 2,048 and baseline-JPEG bounds and
+the existing proportional scale/center-crop into the 144 x 144 RGB565 surface.
+
+### Priority, cache and lifecycle ownership
+
+The one existing worker performs album lookup first when qualified track
+metadata exists. A deterministic or exhausted album miss can proceed to the
+station lookup; the album negative cache does not suppress it. One additional
+41,472-byte PSRAM RGB565 buffer caches the most recent station logo across
+track changes. Four station-specific negative entries use the existing
+15-minute boot-local TTL. There is no filesystem or NVS image persistence.
+
+Station-cache reuse copies its pixels into the existing staging surface. A
+station decode invalidates the album-buffer marker, preventing a stale album
+cache claim. A later qualified track request still tries album art first.
+Publication continues to require exact request, source, session and generation
+fences. Changing station/source/session invalidates the displayed prior image;
+Bluetooth can never invoke or publish the station-logo path.
+
+Display-idle continues to allow read-only artwork work. SYSTEM_SLEEP or its
+park sequence, Wi-Fi loss, provisioning/scanning and active OTA keep the worker
+ineligible. A still-current request may resume after lifecycle eligibility
+returns; wake alone does not force a refetch. The worker remains the single
+PSRAM-stack task at `tskIDLE_PRIORITY` and never calls LVGL.
+
+### Stage 3 offline checkpoint
+
+- Artwork model, station parser, exact matching, ambiguity/URL rejection,
+  cache and transport policy: **PASS** (105 assertions).
+- Artwork UI/ownership/PSRAM/single-worker policy: **PASS** (29 assertions).
+- HOME metadata UI: **PASS** (15 assertions).
+- BTX integration policy: **PASS** (15 assertions).
+- Network sleep boundary: **PASS** (23 assertions).
+- Local OTA source/partition policy and image preflight: **PASS**.
+- Clean production environment `remote01`: **PASS**, embedded build `41da61b`.
+  Static RAM is 63,788 bytes; linked flash is 2,822,769 bytes. The complete
+  2,823,264-byte BIN has SHA-256
+  `1d37494bc5a6ae9622b384c3a206da66657cf921caf424f1ed7a7da329fa440f`
+  and 322,464 bytes exact headroom in either 3 MiB OTA slot. The additional
+  persistent runtime allocation is 41,472 bytes of PSRAM.
+
+Hardware validation is **NOT TESTED** at this checkpoint. It must verify the
+actual displayed logo belongs to the selected station, not merely that the API
+returned HTTP 200. External Radio Browser data and favicon availability remain
+best-effort limitations. TUNER firmware is untouched.
+
 ## Stage 2: bounded online album covers
 
 Stage 2 adds album-cover lookup without changing the RTCP wire protocol,
