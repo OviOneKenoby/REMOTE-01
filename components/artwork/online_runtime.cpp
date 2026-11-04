@@ -418,7 +418,8 @@ bool start() {
     increment(stats.allocation_failures); return false;
   }
   if (xTaskCreatePinnedToCoreWithCaps(
-          worker, "artwork", worker_stack_bytes, nullptr, 1, &worker_handle, 0,
+          worker, "artwork", worker_stack_bytes, nullptr, tskIDLE_PRIORITY,
+          &worker_handle, 0,
           MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS) {
     worker_handle = nullptr;
     heap_caps_free(runtime);

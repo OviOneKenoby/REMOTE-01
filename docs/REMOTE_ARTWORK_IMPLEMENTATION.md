@@ -347,6 +347,24 @@ internal heap (9,728-byte largest block), and 7,533,728 bytes free PSRAM.
 Artwork Stage 1 hardware validation is therefore **PASS**. TUNER was not
 flashed, reset or otherwise modified by this milestone.
 
+### Stage 2 display-idle scheduling checkpoint
+
+Clean build `9084580` proved that the power-owned lifecycle gate permits an
+unchanged artwork lookup while the display is off and keeps SYSTEM_SLEEP
+ineligible. An ABBA lookup completed as `cover_ready`. A subsequent lookup
+during `DISPLAY_IDLE` exposed two task-watchdog warnings: the installed ELF
+decoded both CPU0 stacks to the artwork worker's synchronous HTTPS TLS
+handshake, including X.509/ECDSA verification and the scoped mbedTLS allocator.
+The device remained up with Wi-Fi, RTCP and volume synchronized and zero
+allocation failures, so this is verified CPU scheduling starvation rather than
+heap exhaustion or a transport failure.
+
+The artwork worker is consequently scheduled at `tskIDLE_PRIORITY`. This keeps
+online cover retrieval as background work and allows the monitored CPU0 idle
+task to run while mbedTLS is CPU-bound. TLS verification, protocol behavior,
+lookup fencing and task placement are unchanged. Hardware acceptance of this
+priority correction remains pending.
+
 ## Stage 1 next-milestone boundary (historical)
 
 The next artwork milestone may add one bounded decoder and network worker only

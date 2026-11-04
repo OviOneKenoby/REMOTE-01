@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-11-04 - Keep display-idle artwork TLS below the watchdog boundary
+
+- Record the clean `9084580` hardware reproduction. Artwork HTTPS correctly
+  continued during `DISPLAY_IDLE` and produced `cover_ready`, but CPU0's
+  monitored idle task was starved twice during synchronous TLS certificate
+  verification. Both installed-ELF backtraces terminate in the artwork worker:
+  `esp_http_client_perform` -> ESP-TLS -> mbedTLS X.509/ECDSA. REMOTE did not
+  reset, Wi-Fi and authenticated RTCP remained healthy, and allocation failures
+  stayed at zero.
+- Run the read-only artwork worker at `tskIDLE_PRIORITY`. It now time-slices
+  with CPU0's idle task during CPU-bound TLS work while retaining the existing
+  dedicated PSRAM stack, lifecycle fences, request coalescing, HTTPS security,
+  result ownership and rate limits. No control, RTCP or playback task priority
+  changes.
+
 ## 2026-11-03 - Bound artwork metadata bursts and HTTPS scheduling
 
 - Record the hardware-observed task-watchdog warning during a burst of
