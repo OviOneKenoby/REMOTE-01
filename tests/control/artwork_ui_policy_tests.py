@@ -31,8 +31,8 @@ checks = {
     "bounded_encoded_buffer": "encoded_limit = 128 * 1024" in (root / "components/artwork/include/artwork/online.hpp").read_text(encoding="utf-8"),
     "verified_musicbrainz_bound": "search_limit = 64 * 1024" in
         (root / "components/artwork/include/artwork/online.hpp").read_text(encoding="utf-8"),
-    "psram_worker_buffers": online.count("heap_caps_malloc(") == 3 and
-                            online.count("MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT") >= 3,
+    "psram_worker_buffers": online.count("heap_caps_malloc(") == 4 and
+                            online.count("MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT") >= 4,
     "psram_worker_state": "heap_caps_calloc(" in online and
                           "RuntimeState *runtime" in online,
     "psram_worker_stack": "xTaskCreatePinnedToCoreWithCaps(" in online and
@@ -43,7 +43,8 @@ checks = {
     "psram_ui_state": "ArtworkUiState *artwork_ui" in ui and
                       "sizeof(ArtworkUiState), MALLOC_CAP_SPIRAM" in ui,
     "allocation_failure_cleanup": all(token in online for token in (
-        "heap_caps_free(encoded)", "heap_caps_free(decoded)", "heap_caps_free(jpeg_pool)")),
+        "heap_caps_free(encoded)", "heap_caps_free(decoded)",
+        "heap_caps_free(station_logo_pixels)", "heap_caps_free(jpeg_pool)")),
     "no_worker_lvgl_calls": "lv_obj_" not in online and "lv_img_" not in online,
     "tls_bundle_required": "esp_crt_bundle_attach" in online,
     "ota_exclusion": "ota_service::busy()" in online,

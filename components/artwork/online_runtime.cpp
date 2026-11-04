@@ -42,14 +42,37 @@ portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 TaskHandle_t worker_handle = nullptr;
 struct RuntimeState {
   Identity requested{}, completed{}, positive_identity{};
-  NegativeCache negatives{};
+  NegativeCache album_negatives{};
+  struct StationNegativeCache {
+    struct Entry { Identity identity{}; std::uint64_t expires = 0, age = 0; };
+    std::array<Entry, 4> entries{};
+    std::uint64_t age = 0;
+    bool contains(const Identity &identity, std::uint64_t now) const {
+      for (const auto &entry : entries)
+        if (entry.expires > now && same_station(entry.identity, identity))
+          return true;
+      return false;
+    }
+    void remember(const Identity &identity, std::uint64_t now) {
+      auto *slot = &entries.front();
+      for (auto &entry : entries) {
+        if (same_station(entry.identity, identity) || !entry.expires ||
+            entry.expires <= now) { slot = &entry; break; }
+        if (entry.age < slot->age) slot = &entry;
+      }
+      slot->identity = identity;
+      slot->expires = now + negative_ttl_ms;
+      slot->age = ++age;
+    }
+  } station_negatives{};
+  Identity station_positive{};
   std::uint64_t request_changed_ms = 0;
 };
 RuntimeState *runtime = nullptr;
 bool request_ready = false;
 std::atomic_bool completion_ready{false};
 std::uint8_t *encoded = nullptr, *jpeg_pool = nullptr;
-std::uint16_t *decoded = nullptr;
+std::uint16_t *decoded = nullptr, *station_logo_pixels = nullptr;
 Diagnostics stats{};
 NetworkEligibilityGate network_gate{};
 std::uint64_t last_network_start_ms = 0;
@@ -223,6 +246,21 @@ bool search_url(const Identity &identity, char *out, std::size_t capacity) {
   return true;
 }
 
+bool station_search_url(const Identity &identity, char *out,
+                        std::size_t capacity) {
+  constexpr char prefix[] =
+      "https://all.api.radio-browser.info/json/stations/bynameexact/";
+  constexpr char suffix[] = "?hidebroken=true&limit=6";
+  std::size_t used = sizeof prefix - 1;
+  if (used >= capacity) return false;
+  std::memcpy(out, prefix, used + 1);
+  if (!append_encoded(out, capacity, used, identity.station.data()) ||
+      used + sizeof suffix > capacity)
+    return false;
+  std::memcpy(out + used, suffix, sizeof suffix);
+  return true;
+}
+
 struct JpegInput { const std::uint8_t *data; std::size_t size, offset; };
 struct JpegOutput { std::uint16_t *pixels; int crop_x, crop_y; };
 
@@ -279,12 +317,13 @@ bool wait_for_network_slot(const Identity &identity) {
   return false;
 }
 
-bool lookup(const Identity &identity) {
+bool lookup_album(const Identity &identity) {
+  if (!identity.has_track()) return false;
   const auto now = now_ms();
   if (runtime && same_media(runtime->positive_identity, identity)) {
     record(stats.cache_hits); return true;
   }
-  if (runtime && runtime->negatives.contains(identity, now)) {
+  if (runtime && runtime->album_negatives.contains(identity, now)) {
     record(stats.negative_hits); return false;
   }
   char url[640]{};
@@ -307,7 +346,7 @@ bool lookup(const Identity &identity) {
     if (!retryable || attempt + 1 == search_attempts) {
       // Deterministic rejection may be cached.  A transient outage must not
       // suppress the same track for the full negative-cache lifetime.
-      if (!retryable) runtime->negatives.remember(identity, now_ms());
+      if (!retryable) runtime->album_negatives.remember(identity, now_ms());
       return false;
     }
     const unsigned delay_ms = 5000U << attempt;
@@ -324,7 +363,9 @@ bool lookup(const Identity &identity) {
       identity, {candidates, count}, release_groups);
   if (!release_group_count) {
     ESP_LOGW(tag, "lookup_rejected stage=selection candidates=%u", unsigned(count));
-    record(stats.lookup_rejected); runtime->negatives.remember(identity, now_ms()); return false;
+    record(stats.lookup_rejected);
+    runtime->album_negatives.remember(identity, now_ms());
+    return false;
   }
   runtime->positive_identity = {};
   bool image_decoded = false;
@@ -352,11 +393,85 @@ bool lookup(const Identity &identity) {
     ESP_LOGW(tag,
              "lookup_rejected stage=image_candidates status=%d bytes=%u type=%s",
              response.status, unsigned(response.size), response.type);
-    record(stats.image_rejected); runtime->negatives.remember(identity, now_ms()); return false;
+    record(stats.image_rejected);
+    runtime->album_negatives.remember(identity, now_ms());
+    return false;
   }
   if (!still_current(identity)) return false;
   runtime->positive_identity = identity;
   return true;
+}
+
+bool lookup_station_logo(const Identity &identity) {
+  if (!identity.has_station()) return false;
+  const auto now = now_ms();
+  if (runtime && same_station(runtime->station_positive, identity)) {
+    std::memcpy(decoded, station_logo_pixels, pixels * sizeof(std::uint16_t));
+    record(stats.cache_hits);
+    return true;
+  }
+  if (runtime && runtime->station_negatives.contains(identity, now)) {
+    record(stats.negative_hits);
+    return false;
+  }
+  char url[640]{};
+  if (!station_search_url(identity, url, sizeof url) ||
+      !wait_for_network_slot(identity))
+    return false;
+  HttpResult response{};
+  const bool transported = https_get(url, station_search_limit, response);
+  if (!transported || response.status != 200 ||
+      std::strncmp(response.type, "application/json", 16) != 0) {
+    ESP_LOGW(tag,
+             "station_logo_rejected stage=search status=%d bytes=%u type=%s",
+             response.status, unsigned(response.size), response.type);
+    record(stats.network_errors);
+    // Do not suppress a later attempt after transport/server failures.
+    if (response.status && response.status != 429 && response.status < 500)
+      runtime->station_negatives.remember(identity, now_ms());
+    return false;
+  }
+  StationLogoCandidate candidate{};
+  if (!select_station_logo(
+          {reinterpret_cast<const char *>(encoded), response.size}, identity,
+          candidate)) {
+    ESP_LOGW(tag, "station_logo_rejected stage=selection station=%s",
+             identity.station.data());
+    record(stats.lookup_rejected);
+    runtime->station_negatives.remember(identity, now_ms());
+    return false;
+  }
+  if (!wait_for_network_slot(identity)) return false;
+  response = {};
+  const bool image_transport =
+      https_get(candidate.favicon.data(), encoded_limit, response);
+  const bool image_payload = image_transport && response.status == 200 &&
+      std::strncmp(response.type, "image/jpeg", 10) == 0;
+  if (!image_payload || !decode_jpeg(response.size)) {
+    ESP_LOGW(tag,
+             "station_logo_rejected stage=image status=%d bytes=%u type=%s",
+             response.status, unsigned(response.size), response.type);
+    record(stats.image_rejected);
+    // PNG and other unsupported image formats are deterministic fallbacks.
+    if (response.status) runtime->station_negatives.remember(identity, now_ms());
+    return false;
+  }
+  if (!still_current(identity)) return false;
+  std::memcpy(station_logo_pixels, decoded, pixels * sizeof(std::uint16_t));
+  runtime->station_positive = identity;
+  // decoded now contains a station logo, so an old album cache marker must not
+  // claim that the buffer still holds album pixels.
+  runtime->positive_identity = {};
+  return true;
+}
+
+enum class LookupResult : std::uint8_t { none, album, station_logo };
+
+LookupResult lookup(const Identity &identity) {
+  if (lookup_album(identity)) return LookupResult::album;
+  if (!still_current(identity)) return LookupResult::none;
+  if (lookup_station_logo(identity)) return LookupResult::station_logo;
+  return LookupResult::none;
 }
 
 void worker(void *) {
@@ -374,7 +489,8 @@ void worker(void *) {
       vTaskDelay(pdMS_TO_TICKS(100));
       continue;
     }
-    const bool success = lookup(identity);
+    const auto result = lookup(identity);
+    const bool success = result != LookupResult::none;
     const bool lifecycle_eligible = allowed();
     bool deferred = false;
     portENTER_CRITICAL(&mux);
@@ -392,7 +508,11 @@ void worker(void *) {
     portEXIT_CRITICAL(&mux);
     ESP_LOGI(tag,
              "result=%s source=%u session=%llu media_generation=%llu metadata_revision=%llu stack_min_bytes=%u",
-             success ? "cover_ready" : deferred ? "deferred_lifecycle" : "generic_fallback",
+             result == LookupResult::album
+                 ? "album_ready"
+                 : result == LookupResult::station_logo
+                       ? "station_logo_ready"
+                       : deferred ? "deferred_lifecycle" : "generic_fallback",
              unsigned(identity.source),
              static_cast<unsigned long long>(identity.session),
              static_cast<unsigned long long>(identity.media_generation),
@@ -410,11 +530,15 @@ bool start() {
   if (runtime) runtime = new (runtime) RuntimeState{};
   encoded = static_cast<std::uint8_t *>(heap_caps_malloc(encoded_limit, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
   decoded = static_cast<std::uint16_t *>(heap_caps_malloc(pixels * 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+  station_logo_pixels = static_cast<std::uint16_t *>(
+      heap_caps_malloc(pixels * 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
   jpeg_pool = static_cast<std::uint8_t *>(heap_caps_malloc(jpeg_pool_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-  if (!runtime || !encoded || !decoded || !jpeg_pool) {
+  if (!runtime || !encoded || !decoded || !station_logo_pixels || !jpeg_pool) {
     heap_caps_free(runtime);
-    heap_caps_free(encoded); heap_caps_free(decoded); heap_caps_free(jpeg_pool);
-    runtime = nullptr; encoded = nullptr; decoded = nullptr; jpeg_pool = nullptr;
+    heap_caps_free(encoded); heap_caps_free(decoded);
+    heap_caps_free(station_logo_pixels); heap_caps_free(jpeg_pool);
+    runtime = nullptr; encoded = nullptr; decoded = nullptr;
+    station_logo_pixels = nullptr; jpeg_pool = nullptr;
     increment(stats.allocation_failures); return false;
   }
   if (xTaskCreatePinnedToCoreWithCaps(
@@ -423,13 +547,17 @@ bool start() {
           MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS) {
     worker_handle = nullptr;
     heap_caps_free(runtime);
-    heap_caps_free(encoded); heap_caps_free(decoded); heap_caps_free(jpeg_pool);
-    runtime = nullptr; encoded = nullptr; decoded = nullptr; jpeg_pool = nullptr;
+    heap_caps_free(encoded); heap_caps_free(decoded);
+    heap_caps_free(station_logo_pixels); heap_caps_free(jpeg_pool);
+    runtime = nullptr; encoded = nullptr; decoded = nullptr;
+    station_logo_pixels = nullptr; jpeg_pool = nullptr;
     increment(stats.allocation_failures); return false;
   }
-  ESP_LOGI(tag, "online_worker=READY encoded_limit=%u decoded=%u negative_cache=%u",
+  ESP_LOGI(tag,
+           "online_worker=READY encoded_limit=%u decoded=%u station_cache=%u negative_cache=%u",
            unsigned(encoded_limit), unsigned(pixels * 2),
-           unsigned(runtime->negatives.entries.size()));
+           unsigned(pixels * 2),
+           unsigned(runtime->album_negatives.entries.size()));
   return true;
 }
 

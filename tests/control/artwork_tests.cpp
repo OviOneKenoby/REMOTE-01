@@ -49,6 +49,8 @@ int main() {
   assert(make_identity(radio, 2, radio_identity));
   assert(std::string_view(radio_identity.artist.data()) == "Daft Punk");
   assert(std::string_view(radio_identity.title.data()) == "Get Lucky");
+  assert(std::string_view(radio_identity.normalized_station.data()) ==
+         "west city radio");
   auto same = identity; ++same.request_generation;
   assert(same_media(identity, same));
   ++same.metadata_revision;
@@ -56,11 +58,55 @@ int main() {
   std::strcpy(same.title.data(), "Around the World");
   assert(!same_media(identity, same));
   radio.combined = "Station ident - Listen live";
-  assert(!make_identity(radio, 3, radio_identity));
+  assert(make_identity(radio, 3, radio_identity));
+  assert(!radio_identity.has_track() && radio_identity.has_station());
   radio.combined = "Artist - Title - Remix";
-  assert(!make_identity(radio, 4, radio_identity));
+  assert(make_identity(radio, 4, radio_identity));
+  assert(!radio_identity.has_track() && radio_identity.has_station());
   radio.combined = "No separator";
-  assert(!make_identity(radio, 5, radio_identity));
+  assert(make_identity(radio, 5, radio_identity));
+  assert(!radio_identity.has_track() && radio_identity.has_station());
+  radio.station = nullptr;
+  assert(!make_identity(radio, 6, radio_identity));
+  radio.station = "West City Radio";
+  radio.combined = "Daft Punk - Get Lucky";
+  assert(make_identity(radio, 7, radio_identity));
+
+  constexpr std::string_view station_json = R"JSON([
+    {"stationuuid":"12345678-1234-1234-1234-123456789abc",
+     "name":"  WEST   CITY RADIO ",
+     "favicon":"https://example.org/west-city.jpg"}
+  ])JSON";
+  StationLogoCandidate station_logo{};
+  assert(select_station_logo(station_json, radio_identity, station_logo));
+  assert(std::string_view(station_logo.favicon.data()) ==
+         "https://example.org/west-city.jpg");
+  assert(station_favicon_allowed("https://example.org/logo.jpg"));
+  assert(!station_favicon_allowed("http://example.org/logo.jpg"));
+  assert(!station_favicon_allowed("https://user@example.org/logo.jpg"));
+  constexpr std::string_view ambiguous_station_json = R"JSON([
+    {"stationuuid":"12345678-1234-1234-1234-123456789abc",
+     "name":"West City Radio","favicon":"https://example.org/one.jpg"},
+    {"stationuuid":"87654321-4321-4321-4321-cba987654321",
+     "name":"West City Radio","favicon":"https://example.org/two.jpg"}
+  ])JSON";
+  assert(!select_station_logo(ambiguous_station_json, radio_identity,
+                              station_logo));
+  constexpr std::string_view missing_logo_json = R"JSON([
+    {"stationuuid":"12345678-1234-1234-1234-123456789abc",
+     "name":"West City Radio","favicon":""}
+  ])JSON";
+  assert(!select_station_logo(missing_logo_json, radio_identity, station_logo));
+  constexpr std::string_view png_logo_json = R"JSON([
+    {"stationuuid":"12345678-1234-1234-1234-123456789abc",
+     "name":"West City Radio","favicon":"https://example.org/logo.png"}
+  ])JSON";
+  assert(select_station_logo(png_logo_json, radio_identity, station_logo));
+  auto same_station_identity = radio_identity;
+  std::strcpy(same_station_identity.artist.data(), "Another Artist");
+  assert(same_station(radio_identity, same_station_identity));
+  std::strcpy(same_station_identity.normalized_station.data(), "other radio");
+  assert(!same_station(radio_identity, same_station_identity));
 
   Candidate exact{98, {}, {}, {}};
   std::strcpy(exact.artist.data(), "Daft Punk");
@@ -167,5 +213,5 @@ int main() {
   assert(!defer_for_lifecycle(false, false, false));
   assert(!defer_for_lifecycle(false, true, true));
 
-  std::cout << "ARTWORK_MODEL: PASS assertions=80\n";
+  std::cout << "ARTWORK_MODEL: PASS assertions=105\n";
 }

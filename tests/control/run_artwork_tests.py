@@ -17,6 +17,7 @@ with tempfile.TemporaryDirectory(prefix="remote01-artwork-") as work:
                str(root / "tests/control/artwork_tests.cpp"),
                str(root / "components/artwork/online_policy.cpp"),
                str(root / "components/artwork/musicbrainz.cpp"),
+               str(root / "components/artwork/radiobrowser.cpp"),
                "-o", str(binary)]
     subprocess.run(command, cwd=root, env=env, check=True)
     subprocess.run([str(binary)], cwd=root, env=env, check=True)

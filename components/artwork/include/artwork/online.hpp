@@ -13,8 +13,12 @@ namespace artwork::online {
 constexpr std::size_t artist_capacity = 97;
 constexpr std::size_t title_capacity = 160;
 constexpr std::size_t mbid_capacity = 37;
+constexpr std::size_t station_capacity = 64;
+constexpr std::size_t station_uuid_capacity = 37;
+constexpr std::size_t favicon_capacity = 384;
 constexpr std::size_t encoded_limit = 128 * 1024;
 constexpr std::size_t search_limit = 64 * 1024;
+constexpr std::size_t station_search_limit = 32 * 1024;
 constexpr std::uint64_t negative_ttl_ms = 15 * 60 * 1000ULL;
 constexpr unsigned search_attempts = 3;
 // AVRCP commonly publishes artist/title/play-status as separate revisions.
@@ -45,17 +49,23 @@ struct Identity {
   Source source = Source::neutral;
   std::uint64_t session = 0, source_generation = 0, media_generation = 0,
                 metadata_revision = 0, request_generation = 0;
-  std::array<char, 64> station{};
+  std::array<char, station_capacity> station{};
   std::array<char, artist_capacity> artist{};
   std::array<char, title_capacity> title{};
   std::array<char, artist_capacity> normalized_artist{};
   std::array<char, title_capacity> normalized_title{};
+  std::array<char, station_capacity> normalized_station{};
   bool operator==(const Identity &) const = default;
+  bool has_track() const { return artist[0] && title[0]; }
+  bool has_station() const {
+    return source == Source::radio && station[0] && normalized_station[0];
+  }
   bool usable() const {
-    return source != Source::neutral && session && artist[0] && title[0];
+    return source != Source::neutral && session && (has_track() || has_station());
   }
 };
 bool same_media(const Identity &, const Identity &);
+bool same_station(const Identity &, const Identity &);
 
 struct Metadata {
   bool connected = false;
@@ -83,6 +93,19 @@ std::size_t rank_release_groups(
     const Identity &, std::span<const Candidate>,
     std::span<std::array<char, mbid_capacity>>);
 std::size_t parse_musicbrainz(std::string_view, Candidate *, std::size_t);
+
+struct StationLogoCandidate {
+  std::array<char, station_uuid_capacity> station_uuid{};
+  std::array<char, station_capacity> name{};
+  std::array<char, favicon_capacity> favicon{};
+};
+
+// Accepts only one unambiguous exact normalized station-name match with a
+// syntactically bounded HTTPS favicon. Duplicate exact-name records are
+// rejected because the current RTCP station identity has no UUID.
+bool select_station_logo(std::string_view json, const Identity &,
+                         StationLogoCandidate &);
+bool station_favicon_allowed(std::string_view);
 
 enum class ImageFormat : std::uint8_t { unsupported, baseline_jpeg };
 struct JpegInfo { std::uint16_t width = 0, height = 0; };

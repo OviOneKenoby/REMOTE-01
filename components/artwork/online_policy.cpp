@@ -74,29 +74,40 @@ bool make_identity(const Metadata &metadata, std::uint64_t generation,
                    Identity &out) {
   out = {};
   if (!metadata.connected || metadata.source == Source::neutral ||
-      !metadata.session || !metadata.media_generation ||
-      !metadata.metadata_revision)
+      !metadata.session || !metadata.source_generation)
     return false;
+  if (metadata.station && copy(out.station, metadata.station))
+    (void)normalize(out.station, out.normalized_station);
   std::string_view artist, title;
   if (metadata.source == Source::bluetooth) {
-    if (!metadata.artist || !metadata.title) return false;
+    if (!metadata.media_generation || !metadata.metadata_revision ||
+        !metadata.artist || !metadata.title)
+      return false;
     artist = metadata.artist; title = metadata.title;
   } else {
-    if (!metadata.combined || !split_radio(metadata.combined, artist, title))
-      return false;
+    if (metadata.combined)
+      (void)split_radio(metadata.combined, artist, title);
   }
-  if (undesirable(artist) || undesirable(title) ||
-      !copy(out.artist, artist) || !copy(out.title, title) ||
-      !normalize(out.artist, out.normalized_artist) ||
-      !normalize(out.title, out.normalized_title)) return false;
+  if (!artist.empty() && !title.empty()) {
+    const bool track_ok = !undesirable(artist) && !undesirable(title) &&
+        copy(out.artist, artist) && copy(out.title, title) &&
+        normalize(out.artist, out.normalized_artist) &&
+        normalize(out.title, out.normalized_title);
+    if (!track_ok) {
+      out.artist = {};
+      out.title = {};
+      out.normalized_artist = {};
+      out.normalized_title = {};
+      if (metadata.source == Source::bluetooth) return false;
+    }
+  }
   out.source = metadata.source;
   out.session = metadata.session;
   out.source_generation = metadata.source_generation;
   out.media_generation = metadata.media_generation;
   out.metadata_revision = metadata.metadata_revision;
   out.request_generation = generation;
-  if (metadata.station) (void)copy(out.station, metadata.station);
-  return true;
+  return out.usable();
 }
 
 bool same_media(const Identity &left, const Identity &right) {
@@ -105,8 +116,15 @@ bool same_media(const Identity &left, const Identity &right) {
          left.media_generation == right.media_generation &&
          left.station == right.station && left.artist == right.artist &&
          left.title == right.title &&
+         left.normalized_station == right.normalized_station &&
          left.normalized_artist == right.normalized_artist &&
          left.normalized_title == right.normalized_title;
+}
+
+bool same_station(const Identity &left, const Identity &right) {
+  return left.source == Source::radio && right.source == Source::radio &&
+         left.normalized_station[0] &&
+         left.normalized_station == right.normalized_station;
 }
 
 std::size_t rank_release_groups(
