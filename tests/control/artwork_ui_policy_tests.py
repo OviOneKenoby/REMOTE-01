@@ -45,6 +45,8 @@ checks = {
     "no_worker_lvgl_calls": "lv_obj_" not in online and "lv_img_" not in online,
     "tls_bundle_required": "esp_crt_bundle_attach" in online,
     "ota_exclusion": "ota_service::busy()" in online,
+    "display_idle_background_lookup":
+        "power_management::background_network_allowed()" in online,
 }
 
 failed = [name for name, ok in checks.items() if not ok]

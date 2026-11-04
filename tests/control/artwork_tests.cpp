@@ -127,24 +127,24 @@ int main() {
   std::copy(std::begin(baseline), std::end(baseline), progressive.begin());
   progressive[3] = 0xc2;
   assert(inspect_image(progressive, jpeg) == ImageFormat::unsupported);
-  assert(eligible({true,true,false,false,false,true,false}));
-  assert(!eligible({true,true,false,false,true,true,false})); // OTA exclusion
-  assert(!eligible({true,true,true,false,false,true,false})); // provisioning
-  assert(!eligible({true,true,false,false,false,true,true})); // sleep/UI pause
+  assert(eligible({true,true,false,false,false,true}));
+  assert(!eligible({true,true,false,false,true,true})); // OTA exclusion
+  assert(!eligible({true,true,true,false,false,true})); // provisioning
+  assert(!eligible({true,true,false,false,false,false})); // SYSTEM_SLEEP/park
 
   NetworkEligibilityGate network_gate{};
   assert(!eligible(network_gate.observe(false, false, false, false,
-                                        false, true, false)));
+                                        false, true)));
   assert(eligible(network_gate.observe(true, true, false, false,
-                                       false, true, false)));
+                                       false, true)));
   // A zero-wait mutex miss retains the last authoritative connected sample.
   assert(eligible(network_gate.observe(false, false, true, true,
-                                       false, true, false)));
+                                       false, true)));
   // Confirmed network lifecycle changes remain authoritative.
   assert(!eligible(network_gate.observe(true, false, false, false,
-                                        false, true, false)));
+                                        false, true)));
   assert(!eligible(network_gate.observe(true, true, true, false,
-                                        false, true, false)));
+                                        false, true)));
   assert(redirect_allowed(307, "https://archive.org/cover.jpg", 0));
   assert(!redirect_allowed(307, "http://archive.org/cover.jpg", 0));
   assert(!redirect_allowed(307, "https://archive.org/cover.jpg", 3));

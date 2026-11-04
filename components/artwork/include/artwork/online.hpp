@@ -90,13 +90,11 @@ ImageFormat inspect_image(std::span<const std::uint8_t>, JpegInfo &);
 
 struct Lifecycle {
   bool status_available = false, connected = false, provisioning = false,
-       scanning = false, ota_busy = false, commands_allowed = false,
-       ui_paused = false;
+       scanning = false, ota_busy = false, background_allowed = false;
 };
 constexpr bool eligible(const Lifecycle &value) {
   return value.status_available && value.connected && !value.provisioning &&
-         !value.scanning && !value.ota_busy && value.commands_allowed &&
-         !value.ui_paused;
+         !value.scanning && !value.ota_busy && value.background_allowed;
 }
 
 // network_manager::read_status() deliberately uses a zero-wait mutex.  A
@@ -109,7 +107,7 @@ struct NetworkEligibilityGate {
 
   Lifecycle observe(bool available, bool current_connected,
                     bool current_provisioning, bool current_scanning,
-                    bool ota_busy, bool commands_allowed, bool ui_paused) {
+                    bool ota_busy, bool background_allowed) {
     if (available) {
       known = true;
       connected = current_connected;
@@ -117,7 +115,7 @@ struct NetworkEligibilityGate {
       scanning = current_scanning;
     }
     return {known, connected, provisioning, scanning, ota_busy,
-            commands_allowed, ui_paused};
+            background_allowed};
   }
 };
 bool redirect_allowed(int status, std::string_view location,

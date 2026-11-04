@@ -23,6 +23,12 @@
   session invalidation still cancels it, and deterministic failures remain
   final. This corrects the captured Thriller sequence where display-idle
   interrupted a valid lookup and wake left the same track on its placeholder.
+- Permit read-only artwork HTTPS while the display alone is gated off. A new
+  power-owned eligibility query allows only ACTIVE or DISPLAY_IDLE with no
+  sleep/shutdown park in progress. SYSTEM_SLEEP and its preparation remain a
+  hard stop, as do OTA, provisioning, scanning and confirmed Wi-Fi loss.
+  Existing `commands_allowed()` semantics are unchanged, so display-idle does
+  not authorize volume, playback or any other control mutation.
 
 ## 2026-11-03 - Make online artwork lookup retryable and release-specific
 

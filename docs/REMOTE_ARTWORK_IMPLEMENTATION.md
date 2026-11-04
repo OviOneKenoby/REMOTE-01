@@ -66,8 +66,8 @@ fallback artwork available. No image is written to filesystem or NVS.
 ### Offline verification
 
 - Artwork identity/matching/parser/cache/transport/JPEG/scheduling policy:
-  **PASS** (76 assertions).
-- Artwork UI/ownership/memory/TLS/worker policy: **PASS** (27 assertions).
+  **PASS** (80 assertions).
+- Artwork UI/ownership/memory/TLS/worker policy: **PASS** (28 assertions).
 - HOME metadata UI: **PASS** (15 assertions).
 - UI navigation: **PASS** (12 assertions).
 - BTX integration policy: **PASS** (15 assertions).
@@ -109,15 +109,19 @@ cover selection remains dependent on MusicBrainz/CAA availability and the
 artist/title-only metadata available over RTCP.
 
 The first hardware pass on that candidate proved the scheduler boundary but
-also captured a lifecycle corner case. `Michael Jackson - Thriller` lookup
-validated TLS, then REMOTE entered display-idle before publication. The worker
-reported generic fallback and cleared the request; wake retained the same
-semantic media identity, so no duplicate submission was generated. A failed
-lookup is now retained only when the exact request is still current and the
-lifecycle has become ineligible. It remains dormant through display-idle and
-resumes after wake. A changed track/source/session still replaces or cancels
-the request, and an eligible deterministic or transport failure still
-terminates normally.
+also captured a lifecycle-policy mismatch. `Michael Jackson - Thriller`
+lookup validated TLS, then REMOTE entered display-idle before publication.
+The approved behavior is to continue read-only artwork lookup while only the
+display is off and stop it only for SYSTEM_SLEEP. A power-owned background
+eligibility query therefore admits ACTIVE and DISPLAY_IDLE, but rejects
+SYSTEM_SLEEP, shutdown and any active park sequence. The existing stricter
+`commands_allowed()` contract remains unchanged for control mutations.
+
+If a lookup is interrupted by SYSTEM_SLEEP preparation or confirmed network
+loss, the failed request is retained only while its exact media identity stays
+current. It remains dormant until eligibility returns. A changed track,
+source or session still replaces/cancels it; deterministic failures still
+terminate normally.
 
 ## Stage 2 hardware regression and memory-placement correction
 

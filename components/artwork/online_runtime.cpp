@@ -65,8 +65,7 @@ bool allowed() {
   const bool available = network_manager::read_status(network);
   return eligible(network_gate.observe(
       available, network.connected, network.portal, network.scanning,
-      ota_service::busy(), power_management::commands_allowed(),
-      power_management::ui_pause_requested()));
+      ota_service::busy(), power_management::background_network_allowed()));
 }
 
 struct HttpSink {

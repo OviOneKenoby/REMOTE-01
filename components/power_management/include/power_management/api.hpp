@@ -11,6 +11,9 @@ bool touch(bool pressed);
 // the same POWER-owned counter as touch, but adds no SYSTEM_SLEEP wake source.
 void activity();
 bool commands_allowed();
+// Read-only background networking may continue with the display gated off,
+// but never while SYSTEM_SLEEP/shutdown parking is active.
+bool background_network_allowed();
 BatteryView battery_view();
 ExternalView external_view();
 bool development_key(unsigned char);

@@ -23,6 +23,7 @@ namespace {
 std::atomic<Request> request{Request::NONE};
 std::atomic<bool> core_parked{false}, core_refused{false}, ui_pause{false}, ui_parked{false};
 std::atomic<bool> active{true}, consume_contact{false}, settling{false};
+std::atomic<State> published_state{State::ACTIVE};
 std::atomic<unsigned> physical_activity{0}, command{0};
 portMUX_TYPE view_mux = portMUX_INITIALIZER_UNLOCKED;
 BatteryView view;
@@ -307,6 +308,7 @@ void task(void *) {
     }
     STACK_BEGIN(DISPLAY);
     machine.tick(now, sleep_hardware && real.valid && hold, real.external);
+    published_state.store(machine.state);
     if (machine.state != State::ACTIVE) active.store(false);
     if (machine.state == State::SYSTEM_SLEEP && request.load() == Request::NONE) {
       STACK_END(DISPLAY); STACK_BEGIN(SLEEP);
@@ -467,6 +469,12 @@ bool touch(bool pressed) {
   return touch_gate.accept(pressed, active.load(), consume_contact.exchange(false), settling.load());
 }
 bool commands_allowed() { return active.load() && request.load() == Request::NONE; }
+bool background_network_allowed() {
+  const auto state = published_state.load();
+  return (state == State::ACTIVE || state == State::DISPLAY_IDLE) &&
+         request.load() == Request::NONE && !core_parked.load() &&
+         !ui_pause.load();
+}
 BatteryView battery_view() {
   portENTER_CRITICAL(&view_mux); auto copy = view; portEXIT_CRITICAL(&view_mux); return copy;
 }
