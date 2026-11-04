@@ -14,6 +14,12 @@
   dedicated PSRAM stack, lifecycle fences, request coalescing, HTTPS security,
   result ownership and rate limits. No control, RTCP or playback task priority
   changes.
+- Hardware validation of clean build `b147bf2` passes. With the display off,
+  Bon Jovi - Always triggered certificate-verified HTTPS and completed as
+  `cover_ready` without a watchdog warning, reset, allocation failure, Wi-Fi
+  reconnect or RTCP failure. Wake displayed the correct cover and preserved a
+  responsive HOME. SYSTEM_SLEEP exclusion remains source/test verified and was
+  not forced during this bounded hardware check.
 
 ## 2026-11-03 - Bound artwork metadata bursts and HTTPS scheduling
 

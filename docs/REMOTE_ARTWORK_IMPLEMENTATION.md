@@ -363,7 +363,14 @@ The artwork worker is consequently scheduled at `tskIDLE_PRIORITY`. This keeps
 online cover retrieval as background work and allows the monitored CPU0 idle
 task to run while mbedTLS is CPU-bound. TLS verification, protocol behavior,
 lookup fencing and task placement are unchanged. Hardware acceptance of this
-priority correction remains pending.
+priority correction passed on clean build `b147bf2`: Bon Jovi - Always was
+submitted from the phone while REMOTE remained in DISPLAY_IDLE, the HTTPS
+lookup completed as `cover_ready`, and no watchdog warning or reset occurred.
+Wake rendered the correct cover with correct metadata and responsive HOME.
+Final diagnostics retained Wi-Fi and RTCP READY, zero allocation failures and
+authoritative volume synchronization. SYSTEM_SLEEP exclusion remains verified
+by source and deterministic regression coverage; this bounded check did not
+force the device into SYSTEM_SLEEP.
 
 ## Stage 1 next-milestone boundary (historical)
 
