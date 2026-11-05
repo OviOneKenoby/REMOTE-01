@@ -14,7 +14,11 @@
 - Focused host and source-policy tests cover exact-deadline receipt, no data,
   partial and invalid server hellos, proof enforcement, ordinary pre-deadline
   handshakes and the existing authenticated response ordering. Production
-  `remote01` build details are recorded at the software-validation checkpoint.
+  `remote01` build from implementation `ac6aa63` passes without a new warning:
+  63,788 bytes static RAM and 2,819,437 bytes linked flash. The 2,819,936-byte
+  BIN has SHA-256
+  `28da0003128df0c6fb670cbb41db230f8e31cd5321bd243adfd2f0e089e2d467`
+  and leaves 325,792 bytes in each 3 MiB OTA slot.
 - Hardware validation remains pending. This correction addresses the proven
   reconnect-handshake defect only; the initiating cause of the original Radio
   Browser RTCP disconnect remains unproven and is not claimed fixed.
