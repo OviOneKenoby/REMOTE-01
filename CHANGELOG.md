@@ -11,6 +11,11 @@
 - This is diagnostic-only. The intermittent Bluetooth-volume-associated
   disconnect is not yet attributed to a volume request, TUNER close, socket
   error or scheduling delay; one bounded hardware reproduction is required.
+- Hardware checkpoint: authenticated OTA and runtime identity verification
+  passed for build `68243eb`. Three slow Bluetooth-volume detents changed
+  14% to 20% with no close/attempt counter change, popup, audio interruption
+  or metadata loss. The defect was **NOT REPRODUCED**; no functional fix was
+  attempted and the branch remains diagnostic-only.
 
 ## 2026-11-04 - Keep display-idle artwork TLS below the watchdog boundary
 
