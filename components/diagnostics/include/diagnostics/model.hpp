@@ -11,6 +11,7 @@ struct RtcpCloseEvent {
   std::int32_t socket_error=0;
   U64 request=0;
   std::uint8_t state=0,reason=0,awaited=0,response_pending=0;
+  std::uint8_t request_type=0,reset_reason=0,poll_last_32ms=0,poll_max_32ms=0;
 };
 static_assert(sizeof(RtcpCloseEvent)==32);
 struct RtcpCloseHistory {

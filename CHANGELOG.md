@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-11-05 - Retain bounded RTCP disconnect correlation evidence
+
+- Extend each existing four-entry RAM-only RTCP close event with the pending
+  application request kind, reset reason, and compact last/maximum poll gaps.
+  The event remains 32 bytes and the retained history remains 136 bytes.
+- Expose the added non-sensitive fields through the existing read-only
+  `/api/rtcp-history` endpoint. Authentication, framing, socket ownership,
+  deadlines, retry behavior and persistent storage are unchanged.
+- This is diagnostic-only. The intermittent Bluetooth-volume-associated
+  disconnect is not yet attributed to a volume request, TUNER close, socket
+  error or scheduling delay; one bounded hardware reproduction is required.
+
 ## 2026-11-04 - Keep display-idle artwork TLS below the watchdog boundary
 
 - Record the clean `9084580` hardware reproduction. Artwork HTTPS correctly

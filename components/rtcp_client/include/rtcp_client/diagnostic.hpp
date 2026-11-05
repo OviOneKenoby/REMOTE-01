@@ -36,6 +36,10 @@ struct CloseEvent {
   CloseReason reason = CloseReason::none;
   std::uint8_t awaited = 0;
   std::uint8_t response_pending = 0;
+  std::uint8_t request_type = 0;
+  std::uint8_t reset_reason = 0;
+  std::uint8_t poll_last_32ms = 0;
+  std::uint8_t poll_max_32ms = 0;
 };
 static_assert(sizeof(CloseEvent) == 32);
 struct CloseHistory {

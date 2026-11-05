@@ -11,4 +11,8 @@ assert "response_bytes=6248" in model
 assert "sizeof(Entry)==24" in model
 assert "static_assert(sizeof(Storage)<=8192)" in service
 assert "httpd_resp_sendstr(r,s->response)" in service
+for field in ("request_type", "reset_reason", "poll_last_ms", "poll_max_ms"):
+    assert f'\\"{field}\\"' in service
+assert "static_assert(sizeof(RtcpCloseEvent)==32)" in model
+assert "static_assert(sizeof(RtcpCloseHistory)==136)" in model
 print("diagnostics HTTP failure categorization: PASS")

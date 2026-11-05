@@ -96,7 +96,10 @@ esp_err_t rtcp_history(httpd_req_t*r) {
     j.text(",\"network_generation\":");j.number(e.network_generation);j.text(",\"state\":");j.number(e.state);
     j.text(",\"reason\":");j.number(e.reason);j.text(",\"socket_error\":");j.signed_number(e.socket_error);
     j.text(",\"request\":");j.number(e.request);j.text(",\"awaited\":");j.number(e.awaited);
-    j.text(",\"response_pending\":");j.number(e.response_pending);j.text("}");
+    j.text(",\"response_pending\":");j.number(e.response_pending);
+    j.text(",\"request_type\":");j.number(e.request_type);j.text(",\"reset_reason\":");j.number(e.reset_reason);
+    j.text(",\"poll_last_ms\":");j.number(unsigned(e.poll_last_32ms)*32U);
+    j.text(",\"poll_max_ms\":");j.number(unsigned(e.poll_max_32ms)*32U);j.text("}");
   }
   j.text("]}");if(!j.ok)return refuse(r,"503 Service Unavailable");headers(r,"application/json");return httpd_resp_sendstr(r,s->response);
 }
