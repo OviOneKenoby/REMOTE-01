@@ -10,6 +10,16 @@ inline bool connect_deadline_expired(unsigned long long now,
   return deadline != 0 && now >= deadline;
 }
 
+// A handshake response accepted by the one bounded receive/validation pass
+// wins at the exact deadline. Incomplete handshakes retain the existing hard
+// deadline; this helper neither extends it nor permits another read.
+inline bool handshake_deadline_requires_close(
+    unsigned long long now, unsigned long long deadline,
+    bool handshake_active, bool accepted_after_receive) {
+  return handshake_active && connect_deadline_expired(now, deadline) &&
+         !accepted_after_receive;
+}
+
 // An expired response deadline is enforced only after the caller has made its
 // one already-bounded nonblocking receive/accept pass. A response accepted by
 // that pass clears `awaiting_after_receive` and therefore wins at the exact

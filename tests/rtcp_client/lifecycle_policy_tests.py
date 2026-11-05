@@ -21,11 +21,40 @@ checks = {
     "deadline receive helper used": "response_deadline_requires_close" in source,
     "bounded response drain used": "now+response_close_deadline_ms" in source,
     "diagnostic keeps service origin": "deadline_-response_close_deadline_ms" in source,
+    "handshake deadline helper used": "handshake_deadline_requires_close" in source,
 }
 
 receive = source.index("const auto before=rx_used_;const auto reading=receive()")
+server_hello = source.index("if(state_==State::server_hello&&rx_used_==56)", receive)
+server_hello_accept = source.index("accept_server_hello()", server_hello)
+handshake_deadline = source.index(
+    "if(handshake_deadline_requires_close(now,deadline_,handshake_active,handshake_accepted))",
+    server_hello_accept,
+)
 accept = source.index("auto e=accept_record()", receive)
 deadline = source.index("if(response_deadline_requires_close", accept)
+checks["server hello serviced before handshake deadline close"] = (
+    receive < server_hello < server_hello_accept < handshake_deadline
+)
+checks["empty handshake still times out"] = (
+    "DiagnosticFailure::timeout" in source[handshake_deadline:accept]
+    and "CloseReason::response_timeout" in source[handshake_deadline:accept]
+)
+checks["partial server hello retains short-read policy"] = (
+    "const bool partial=rx_used_!=0" in source[handshake_deadline:accept]
+    and "CloseReason::short_read" in source[handshake_deadline:accept]
+)
+server_validation = source[
+    source.index("bool Client::accept_server_hello"):
+    source.index("bool Client::send_plain")
+]
+checks["invalid server hello remains rejected"] = (
+    "DiagnosticFailure::invalid_frame" in server_validation
+)
+checks["server authentication remains enforced"] = (
+    "DiagnosticFailure::proof" in server_validation
+    and "derive(association_" in server_validation
+)
 checks["response serviced before deadline close"] = receive < accept < deadline
 failed = [name for name, ok in checks.items() if not ok]
 if failed:

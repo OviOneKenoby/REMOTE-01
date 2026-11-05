@@ -83,18 +83,6 @@ Client::Event Client::poll(std::uint64_t now,bool command_waiting){
   DiscoveryBatch batch{};
   if(discovery_ready_&&discovery_take(batch)){pending_discovery_=batch;pending_discovery_present_=true;}
   if(awaiting_&&!deadline_)deadline_=now+response_close_deadline_ms;
-  if((state_==State::connecting||state_==State::server_hello)&&deadline_&&now>=deadline_){
-    diagnostic_.server_hello_bytes=state_==State::server_hello?std::uint16_t(rx_used_):diagnostic_.server_hello_bytes;
-    const bool partial=rx_used_!=0;
-    if(!partial&&state_!=State::connecting){
-      int queued=-1;if(socket_>=0){int available=0;if(lwip_ioctl(socket_,FIONREAD,&available)==0&&available>=0)queued=available;}
-      const auto started=deadline_>=3000?deadline_-3000:0;
-      diagnostic_.response_timeout(std::uint8_t(state_),now>=started?now-started:0,queued);
-    }
-    diagnostic_.fail(partial?DiagnosticFailure::short_read:DiagnosticFailure::timeout);
-    close(partial?CloseReason::short_read:(state_==State::connecting?CloseReason::connect_timeout:CloseReason::response_timeout));
-    return Event::disconnected;
-  }
   if(state_==State::disconnected){
     if(pending_discovery_present_){
       endpoints_.replace(pending_discovery_.endpoints.data(),pending_discovery_.count);
@@ -145,10 +133,30 @@ Client::Event Client::poll(std::uint64_t now,bool command_waiting){
     diagnostic_.server_hello_bytes=std::uint16_t(rx_used_);
     if(rx_used_&&rx_used_<56)diagnostic_.stage=DiagnosticStage::server_hello_receiving;
   }
+  const bool handshake_active=
+      state_==State::connecting||state_==State::server_hello;
+  bool handshake_accepted=false;
   if(state_==State::server_hello&&rx_used_==56){
     if(!accept_server_hello()){close(close_reason(diagnostic_.failure),true,diagnostic_.error);return Event::disconnected;}
-    return Event::none;
+    handshake_accepted=true;
   }
+  // Give the existing bounded, nonblocking receive/validation pass above the
+  // final opportunity to consume a server hello that is readable exactly at
+  // the handshake deadline. The deadline is unchanged and remains terminal
+  // when the handshake is still incomplete after that pass.
+  if(handshake_deadline_requires_close(now,deadline_,handshake_active,handshake_accepted)){
+    diagnostic_.server_hello_bytes=state_==State::server_hello?std::uint16_t(rx_used_):diagnostic_.server_hello_bytes;
+    const bool partial=rx_used_!=0;
+    if(!partial&&state_!=State::connecting){
+      int queued=-1;if(socket_>=0){int available=0;if(lwip_ioctl(socket_,FIONREAD,&available)==0&&available>=0)queued=available;}
+      const auto started=deadline_>=3000?deadline_-3000:0;
+      diagnostic_.response_timeout(std::uint8_t(state_),now>=started?now-started:0,queued);
+    }
+    diagnostic_.fail(partial?DiagnosticFailure::short_read:DiagnosticFailure::timeout);
+    close(partial?CloseReason::short_read:(state_==State::connecting?CloseReason::connect_timeout:CloseReason::response_timeout));
+    return Event::disconnected;
+  }
+  if(handshake_accepted)return Event::none;
   if(state_>=State::authenticated){
     auto e=accept_record();
     if(e==Event::disconnected){close(close_reason(diagnostic_.failure),true,diagnostic_.error);return e;}

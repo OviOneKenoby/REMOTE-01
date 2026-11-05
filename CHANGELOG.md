@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-11-05 - Service RTCP server hello before deadline teardown
+
+- Correct the demonstrated reconnect-handshake ordering defect: the existing
+  bounded nonblocking receive and server-proof validation now run before an
+  expired handshake deadline is enforced. A complete valid server hello that
+  is already readable at the exact deadline is therefore accepted instead of
+  being closed as `response_timeout`.
+- Preserve the three-second handshake deadline, partial-frame classification,
+  authentication and proof checks, retry policy, connection fencing, wire
+  protocol and authenticated application-response behavior. No blocking read,
+  additional task or buffer is introduced.
+- Focused host and source-policy tests cover exact-deadline receipt, no data,
+  partial and invalid server hellos, proof enforcement, ordinary pre-deadline
+  handshakes and the existing authenticated response ordering. Production
+  `remote01` build details are recorded at the software-validation checkpoint.
+- Hardware validation remains pending. This correction addresses the proven
+  reconnect-handshake defect only; the initiating cause of the original Radio
+  Browser RTCP disconnect remains unproven and is not claimed fixed.
+
 ## 2026-11-04 - Keep display-idle artwork TLS below the watchdog boundary
 
 - Record the clean `9084580` hardware reproduction. Artwork HTTPS correctly

@@ -17,6 +17,12 @@ int main() {
   check(classify_connect_readiness(1,true,0,0,ECONNREFUSED),ConnectReadiness::failed,ECONNREFUSED);
   assert(!connect_deadline_expired(2999,3000)); ++passed;
   assert(connect_deadline_expired(3000,3000)); ++passed;
+  // A complete, authenticated server hello consumed at the exact deadline
+  // wins; no data or a partial hello remains incomplete and times out.
+  assert(!handshake_deadline_requires_close(3000,3000,true,true)); ++passed;
+  assert(handshake_deadline_requires_close(3000,3000,true,false)); ++passed;
+  assert(!handshake_deadline_requires_close(2999,3000,true,false)); ++passed;
+  assert(!handshake_deadline_requires_close(3000,3000,false,false)); ++passed;
   assert(response_deadline_requires_close(true,true)); ++passed;
   assert(!response_deadline_requires_close(true,false)); ++passed;
   assert(!response_deadline_requires_close(false,true)); ++passed;
