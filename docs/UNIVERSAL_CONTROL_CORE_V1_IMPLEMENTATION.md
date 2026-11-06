@@ -135,7 +135,7 @@ Recipe execution, automatic retry/equivalent fallback, multi-route execution, ge
 
 Validation labels: **CORE IMPLEMENTATION TESTED** and **REMOTE FIRMWARE COMPILE VERIFIED**, limited to the documented foundation slice. No TUNER, protocol or universal-control hardware validation is established. Owner physical HOME/display/touch/navigation PASS remains separate evidence.
 
-No separate TUNER//01/yoRadio repository was accessed. No native adapter, transport, networking, IR, discovery, cloud, capability API or power-management implementation was added. HOME is not integrated; firmware was not uploaded.
+No separate TUNER//01 or third-party radio-firmware repository was accessed. No native adapter, transport, networking, IR, discovery, cloud, capability API or power-management implementation was added. HOME is not integrated; firmware was not uploaded.
 
 Recommended next REMOTE milestone: **HOME UI -> Universal Control Core integration using Mock Adapter for hardware validation**, following owner review of this foundation and a small serialized runtime/memory profile. That milestone has not started.
 

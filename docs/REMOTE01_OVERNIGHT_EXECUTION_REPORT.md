@@ -65,7 +65,7 @@ This closes a decision-independent artifact-check gap only. No inactive-slot wri
 | Encoder/push/three buttons | OWNER HARDWARE INPUT REQUIRED: exact wiring/levels and intended actions absent. No GPIO changes; generic action/debounce semantics not invented. |
 | SD | OWNER DECISION/HARDWARE VALIDATION REQUIRED: dormant interface references are not working integration or an approved use. No card activation, filesystem/staging change. |
 | Production UI | OWNER DECISION REQUIRED; no final design approved. Existing accepted HOME actions/geometry preserved. |
-| Real TUNER/radio | BLOCKED BY VERIFIED SOURCE/PROTOCOL AVAILABILITY. Unapproved Native API candidate alone is insufficient; no target source/server established locally. No Mock-to-real substitution or yoRadio assumptions. |
+| Real TUNER/radio | BLOCKED BY VERIFIED SOURCE/PROTOCOL AVAILABILITY. Unapproved Native API candidate alone is insufficient; no target source/server established locally. No Mock-to-real substitution or third-party radio-firmware assumptions. |
 | Full factory reset | OWNER DECISION REQUIRED: erase-domain, explicit confirmation, accessible recovery and preservation policy. Refusal boundary only. |
 
 No remaining independently justified runtime work was identified without crossing these evidence/decision gates. Display idle remains the safe normal power policy; automatic system sleep and critical hold release remain inhibited for UNKNOWN external power. Inaccessible PWR is never a required acceptance/recovery action.

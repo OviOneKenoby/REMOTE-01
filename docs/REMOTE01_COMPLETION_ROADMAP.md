@@ -185,7 +185,7 @@ The earlier roadmap covered the requested product areas but missed the explicit 
 | Encoder/push/three buttons | OWNER HARDWARE INPUT REQUIRED: pins, levels and semantics absent. No speculative GPIO or action mapping. |
 | SD | OWNER DECISION / HARDWARE VALIDATION REQUIRED: dormant pin/profile references do not establish product use or working card interface. |
 | Production UI | OWNER DECISION REQUIRED; retain qualified fonts and accepted geometry. |
-| Real radio/TUNER | BLOCKED BY VERIFIED SOURCE/PROTOCOL AVAILABILITY: local candidate API is unapproved; no real target implementation established here. No yoRadio assumptions. |
+| Real radio/TUNER | BLOCKED BY VERIFIED SOURCE/PROTOCOL AVAILABILITY: local candidate API is unapproved; no real target implementation established here. No third-party radio-firmware assumptions. |
 | Final hardware/release | PENDING accepted selected branches plus Stage1/2A evidence and POWER headroom review. |
 
 This session may implement bounded IP presentation, local-only recovery foundation/tests and decision-independent OTA preflight only. No final UI, HTTP mutation route, storage/input hardware activation, image flash writer, boot selection, security policy or POWER change is authorized by guessing missing facts. Other branches continue only when their own evidence permits.
@@ -272,7 +272,7 @@ Source references: [main definitions](../main), [POWER hardware](../components/p
 | Power | POWER owns calibrated ADC/filter, motion wake, display idle and SYS_EN | Stage 1 acceptance evidence and Stage 2B.2 measured headroom remain open. No charge status or reliable percentage SOC. |
 | Sleep/shutdown | Automatic system sleep and automatic critical hard-off inhibited for unknown source | Display idle is normal safe policy. Development forced sleep/release commands are not product acceptance requirements or production behavior. |
 | Real device control | Frozen CCM + bounded Core + generic adapter boundary + Mock | Discovery, identity/binding/security, wire transport, real capabilities/state/commands, persistence and actual adapter absent. TUNER API is candidate/unapproved, not a selected contract. |
-| Radio/audio | Static radio-like text and dormant PCM codec example | No streaming client, compressed-audio decoder, bounded audio pipeline, station catalog/favorites persistence or real playback/reconnect service. No yoRadio architecture/library assumed. |
+| Radio/audio | Static radio-like text and dormant PCM codec example | No streaming client, compressed-audio decoder, bounded audio pipeline, station catalog/favorites persistence or real playback/reconnect service. No third-party radio-firmware architecture/library assumed. |
 
 ### Radio architecture decision required
 
@@ -454,7 +454,7 @@ Parallel branches are allowed after their own prerequisites; SD is optional and 
 
 ### Conditional local-audio branch
 
-Only after explicit local-playback approval, propose separate milestones for hardware/codec output proof, bounded decoder/buffer pipeline, then network streaming/station integration. Likely scope: audited `audio_bsp`/`codec_board` or replacement, a separate audio owner, transport/storage/use-case adapters and tests. Preserve shared I2C/expander/SYS_EN and existing task ownership. Before flash require codec/pin proof, format/error fixtures, bounded buffers and integrated soak/build budgets; owner verifies output, underruns, reconnection and coexistence. Roll back to audio-disabled artifact; STOP on unselected hardware or resource/timing conflict. Do not combine output bring-up, decoder selection and internet radio into one milestone or assume yoRadio.
+Only after explicit local-playback approval, propose separate milestones for hardware/codec output proof, bounded decoder/buffer pipeline, then network streaming/station integration. Likely scope: audited `audio_bsp`/`codec_board` or replacement, a separate audio owner, transport/storage/use-case adapters and tests. Preserve shared I2C/expander/SYS_EN and existing task ownership. Before flash require codec/pin proof, format/error fixtures, bounded buffers and integrated soak/build budgets; owner verifies output, underruns, reconnection and coexistence. Roll back to audio-disabled artifact; STOP on unselected hardware or resource/timing conflict. Do not combine output bring-up, decoder selection and internet radio into one milestone or assume third-party radio-firmware.
 
 ### M14 â€” production hardening and full acceptance
 

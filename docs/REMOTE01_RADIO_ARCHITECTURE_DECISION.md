@@ -27,7 +27,7 @@ Earlier OWNER DECISION REQUIRED playback gates, comparative Local playback colum
 | REMOTE performs local playback | Dormant raw-PCM/I2S/codec examples only. | Owner must explicitly choose this role; physical audio resources, decoder/stream pipeline and budgets are unverified. |
 | External automation integration, including documented HA/Matter directions | Architecture future adapters/integration directions only. | No verified owner deployment, real integration or external engine here. Integration direction/ownership must be selected; these names do not establish an audio engine. |
 
-No yoRadio code, protocol, wiring, codec, station catalogue or UI assumptions are imported. REMOTE's control layer must remain protocol-neutral. Core's current bounded implementation is not a claim of complete CCM conformance; accepted Mock tests are not real-target protocol tests.
+No third-party radio-firmware code, protocol, wiring, codec, station catalogue or UI assumptions are imported. REMOTE's control layer must remain protocol-neutral. Core's current bounded implementation is not a claim of complete CCM conformance; accepted Mock tests are not real-target protocol tests.
 
 ## Required owner decisions
 

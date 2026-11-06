@@ -200,7 +200,7 @@ Protected whole-file SHA-256 values, unchanged:
 - HOME/UI source: `e431b3589faa6982f4067b2f74bd1de74f2051d383ddca06492118a723da4e0e`.
 - PlatformIO configuration: `e455b728cecf0d72d391e7bb841e8795ce899c7af85a0ed64e15db67d0c9f175`.
 
-Main/runtime scheduling source, Core schemas/capacities/allocator, Mock foundation, profile sources, factory/brightness pages, LVGL/carousel/spacer, GPIOs, LCD/touch/rotation/mapping/drivers, backlight, fonts/palette/geometry, all configuration/package locks and historical reviews remain unchanged. TUNER/yoRadio repository was not accessed; no real adapter, discovery, networking, transport, IR, cloud or protocol shim was implemented.
+Main/runtime scheduling source, Core schemas/capacities/allocator, Mock foundation, profile sources, factory/brightness pages, LVGL/carousel/spacer, GPIOs, LCD/touch/rotation/mapping/drivers, backlight, fonts/palette/geometry, all configuration/package locks and historical reviews remain unchanged. TUNER or third-party radio-firmware repository was not accessed; no real adapter, discovery, networking, transport, IR, cloud or protocol shim was implemented.
 
 ## Exact file manifest
 
