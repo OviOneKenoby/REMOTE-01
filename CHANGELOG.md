@@ -1,5 +1,60 @@
 # Changelog
 
+## 2026-11-06 - Retain the first RTCP disconnect of an established READY session
+
+Status: **SOFTWARE PASS - HARDWARE NOT VALIDATED.** Diagnostic-only. Build
+`80fb557` (implementation commit `80fb557c4fdd6701be4fe6777672df20c3a5687b`,
+based on `68243eb`) has not been installed on any device.
+
+- Problem: the four-entry RTCP close history is overwritten by the automatic
+  reconnect loop, so the first meaningful disconnect (the evidence needed to
+  find which side initiated the failure) was lost in the last reproduction.
+- Add one separately retained, RAM-only 32-byte snapshot of the first
+  disconnect of an established READY session. The four-entry rolling history is
+  unchanged and still records every close. The snapshot is cleared on runtime
+  initialization and on reboot, is never written to persistent storage, and is
+  exposed as `rtcp_first_ready_disconnect` (with an explicit `valid` field) in
+  the existing `/api/status`. `/api/rtcp-history` is unchanged. No new task,
+  allocation or network request.
+- Defect found in review of the first draft: `Client::queue_next()` assigns
+  `State::ready` when it *sends* the first snapshot request, before any
+  application response exists. Capturing on `State::ready` alone would have
+  recorded a startup failure (first-snapshot send failure, or timeout/EOF while
+  awaiting the first snapshot) as a READY-session disconnect. `queue_next()` was
+  deliberately not reordered.
+- Fix: a session is "established" only when `State::ready` AND at least one
+  application snapshot response was accepted in that session. The gate is a
+  diagnostic-side flag in `Diagnostic` (`session_started()` at
+  `Client::connect_start`, `snapshot_accepted()` when a snapshot response is
+  parsed, consumed in `Diagnostic::closed()`). Planned suspend and
+  `CloseReason::none` are excluded; `network_lost` is captured. Failures before
+  the first accepted snapshot still enter the rolling history. RTCP lifecycle,
+  timing, socket ownership, authentication and reconnect code are unchanged.
+- Software tests (host): `RTCP_DIAGNOSTIC` 36/36 and `DIAGNOSTICS` 9/9 (1000 and
+  10000-cycle soak) pass; both Python policy suites pass (`RTCP_LIFECYCLE_POLICY`
+  26/26). New behaviour tests run against the production `Diagnostic` code:
+  first-snapshot send failure, timeout/EOF before the first snapshot, capture
+  after an accepted snapshot (response_timeout, peer_eof, receive_failed with
+  errno and pending request), later failures not replacing the snapshot, and the
+  flag not leaking across sessions. A scratch copy without the gate fails the new
+  tests, confirming they exercise it. Limitation: `Client` itself needs
+  lwip/mbedTLS/ESP headers and cannot be executed on the host; that the flag is
+  set only on an accepted snapshot and cleared at session start is verified by
+  source-text checks and review, not by executing `Client` against a fake socket.
+- Measurements: worst-case `/api/status` JSON 5540/6248 bytes; diagnostics PSRAM
+  storage 8224 bytes (limit 8448); close-history structure 168 bytes. Production
+  build `pio run -e remote01`: 0 warnings, BIN 2,821,424 bytes, SHA-256
+  `eca111f9e83588c3cd2290eab505ea384d9cff0d5a894d911c61433e56e05072`, 324,304
+  bytes of headroom in the 3,145,728-byte OTA slot (+1,120 bytes versus
+  `68243eb`), static RAM 63,788 bytes (unchanged).
+- The first-failure cause of the intermittent RTCP disconnect is still **not
+  proven**; this change only preserves the evidence. It does not fix any
+  RTCP behaviour.
+- Known pre-existing issue (not addressed here): `hardening_tests`
+  `utf8_snapshot_bounds` fails on clean `68243eb` (`std::strlen(copy.title) ==
+  expected[j]`, hardening_tests.cpp:241) and stops `tests/control/run_tests.py`
+  before later suites; the changed suites were therefore run directly.
+
 ## 2026-11-05 - Retain bounded RTCP disconnect correlation evidence
 
 - Extend each existing four-entry RAM-only RTCP close event with the pending
