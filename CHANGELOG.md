@@ -64,6 +64,30 @@ what it does and does not show.
   was 135 bytes on `ad390a4` (71 bytes on `68243eb`), unchanged between the two
   reads, so it was probably set during startup. Its cause and consequences were
   not investigated.
+- First real capture - **HARDWARE PASS (first-failure snapshot, one real
+  disconnect)**. During a soak read, `core.rtcp_first_ready_disconnect` was
+  `valid` 1 with `uptime_ms` 249324, `session` 1, `network_generation` 1,
+  `state` 9 (READY), `reason` 5 (`response_timeout`), `awaited` 9 (Browser),
+  `response_pending` 1, `request` and `request_type` 0, `socket_error` 0,
+  `poll_last_ms` 0, `poll_max_ms` 96. The event coincided with the owner opening
+  Browse All Stations, which showed the "Tuner disconnected" card. The
+  rolling ring read afterwards held only four `connect_timeout` events
+  (`state` 2, 3 s apart), so the original event was already gone from it; the
+  snapshot was identical in a later read after nine further reconnect events
+  (`rtcp_close_count` 11) and a stable READY state. No reboot occurred and
+  `/api/status` answered every request (3 of 3 in this phase).
+- What it shows: REMOTE's own response deadline expired while it was awaiting a
+  Browser response, with no OS-level socket error and no network-generation
+  change. What it does NOT show: why the TUNER did not answer, or why the
+  following reconnects timed out for about 30 s (the 30 s figure is derived by
+  arithmetic from the close count and the 3 s spacing; it was not observed).
+  The TUNER side was not read. **Root cause NOT PROVEN.**
+- `network.diagnostic_stack_min_bytes` over four consecutive reads: 2,424 ->
+  1,704 -> 1,208 -> 1,080 bytes (all-time minimum free stack of the 4096-byte HTTP
+  task; 72 on `68243eb`). It has not levelled off and the reason it keeps falling
+  is unknown. The planned three-read soak was reduced to one read because the
+  disconnect occurred during it. `core.INT_min` stayed at 135 bytes (open,
+  uninvestigated risk, see above).
 - Known pre-existing issue (unchanged, not addressed): `hardening_tests`
   `utf8_snapshot_bounds` fails on clean `68243eb` and stops
   `tests/control/run_tests.py` before later suites.
