@@ -1,5 +1,47 @@
 # Changelog
 
+## 2026-11-06 - Move /api/status scratch buffers off the HTTP task stack
+
+Status: **SOFTWARE PASS - HARDWARE NOT VALIDATED.** Hypothesis unconfirmed until
+the device test. Implementation commit `ad390a46a47f3898198eb594329d6be25a14d0dd`
+(embedded build `ad390a4`).
+
+- Build `80fb557` (entry below): **SOFTWARE PASS, HARDWARE FAIL.** After the OTA
+  install, 4 of 4 `GET /api/status` requests got no reply (15:17:24, 15:18:12,
+  15:20:06 and 15:26:34 local). The client observed a reboot after the 15:20 and
+  the 15:26 requests. After a reboot the event ring held a single event with
+  `reset_reason` 4 (`ESP_RST_PANIC` per `esp_reset_reason_t` in the local IDF
+  header). `/api/rtcp-history` answered 1 of 2 requests (the 15:17 request timed
+  out; the 15:26 request answered in 0.07 s). **Root cause NOT PROVEN.**
+- Suspected, not confirmed: stack overflow on the 4096-byte HTTP server task.
+  `network.diagnostic_stack_min_bytes` (all-time minimum free stack of that task,
+  sampled at socket open and request entry, not inside the handler) was 72 bytes
+  on `68243eb`, and `80fb557` added about 200 bytes on the `/api/status` path.
+  No serial log or backtrace has been captured, so a panic in this path is
+  consistent with the evidence but unproven.
+- Fix: keep the per-request scratch copies in the existing PSRAM `Storage` instead
+  of on the HTTP task stack: the `RtcpCloseHistory` copy (status and
+  rtcp-history), the 1024-byte `Snapshots` copy and the ELF SHA text buffer. The
+  empty first-failure placeholder becomes a `constexpr` object in flash. The HTTP
+  task stack size is unchanged. `Storage` grows from 8392 to 9488 bytes of PSRAM
+  (`static_assert` bound 10240). The scratch members are used only by the HTTP
+  handlers, which run one at a time on the server task (no async handlers exist in
+  the repo); `publish()` writes only the source members.
+- Measured frames (`-fstack-usage`, committed sources): `status()` 1392 -> 128,
+  `rtcp_history()` 384 -> 208, `status_json` 672 -> 640 bytes. Not measurable on
+  the host: libc `snprintf` internals, the lwIP send path and the real peak on the
+  device.
+- Software tests (host): `DIAGNOSTICS` 9/9 (1000 cycles, 10000-cycle soak),
+  `RTCP_DIAGNOSTIC` 36/36, `RTCP_LIFECYCLE_POLICY` 26/26 and the HTTP policy test
+  pass; worst-case `/api/status` JSON 5540/6248 bytes. The `service.cpp` change is
+  ESP-only and is verified by compilation and frame sizes, not by host execution.
+- Build `pio run -e remote01`: 0 warnings, BIN 2,821,168 bytes, SHA-256
+  `c53aec233787ed8fa973467830c9ae75989cfd82ce2c950078361e320b617913`, 324,560
+  bytes of headroom in the 3,145,728-byte OTA slot, static RAM 63,788 bytes.
+- Known pre-existing issue (unchanged, not addressed): `hardening_tests`
+  `utf8_snapshot_bounds` fails on clean `68243eb` and stops
+  `tests/control/run_tests.py` before later suites.
+
 ## 2026-11-06 - Retain the first RTCP disconnect of an established READY session
 
 Status: **SOFTWARE PASS - HARDWARE NOT VALIDATED.** Diagnostic-only. Build
