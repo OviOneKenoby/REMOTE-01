@@ -74,7 +74,7 @@ template<class T,std::size_t N> void fields(Json &j,const std::array<T,N>&v,cons
 }
 void age(Json &j,U64 time,U64 now) { j.text("{\"available\":");j.number(time!=0);j.text(",\"age_ms\":");j.number(now>=time?now-time:0);j.text(",\"time_ms\":");j.number(time); }
 }
-bool status_json(const Snapshots&s,U64 now,std::string_view project,std::string_view version,std::string_view sha,unsigned reset,char*out,std::size_t n) {
+bool status_json(const Snapshots&s,U64 now,std::string_view project,std::string_view version,std::string_view sha,unsigned reset,char*out,std::size_t n,const RtcpCloseHistory* close_history) {
   Json j{out,n};j.text("{\"system\":{\"uptime_ms\":");j.number(now);j.text(",\"reset_reason\":");j.number(reset);j.text(",\"project\":");j.string(project);j.text(",\"version\":");j.string(version);j.text(",\"elf_sha256\":");j.string(sha);j.text("},\"core\":");age(j,s.core.time,now);fields(j,s.core.values,core_names);fields(j,s.core.control_values,control_names);
   j.text(",\"encoder_diag\":[");
   for(unsigned i=0;i<6;++i){if(i)j.text(",");j.number(s.core.input_values[i]);}
@@ -83,6 +83,17 @@ bool status_json(const Snapshots&s,U64 now,std::string_view project,std::string_
   j.text("]");
   j.text(",\"rtcp_stage\":");j.number(s.core.rtcp.stage());j.text(",\"rtcp_failure\":");j.number(s.core.rtcp.failure());j.text(",\"rtcp_error\":");j.signed_number(s.core.rtcp.error);j.text(",\"rtcp_server_hello_bytes\":");j.number(s.core.rtcp.server_hello_bytes);j.text(",\"rtcp_close_reason\":");j.number(s.core.rtcp.close_reason);j.text(",\"rtcp_close_count\":");j.number(s.core.rtcp.close_count);j.text(",\"rtcp_poll_last_ms\":");j.number(unsigned(s.core.rtcp.last_poll_32ms)*32U);j.text(",\"rtcp_poll_max_ms\":");j.number(unsigned(s.core.rtcp.max_poll_32ms)*32U);j.text(",\"rtcp_timeout_state\":");j.number(s.core.rtcp.timeout_state);j.text(",\"rtcp_timeout_elapsed_ms\":");j.number(unsigned(s.core.rtcp.timeout_elapsed_32ms)*32U);j.text(",\"rtcp_timeout_queued_bytes\":");j.signed_number(s.core.rtcp.timeout_queued_bytes==UINT16_MAX?-1:s.core.rtcp.timeout_queued_bytes);j.text(",\"rtcp_timeouts_with_unread\":");j.number(s.core.rtcp.timeout_unread_count);
   for(std::size_t i=0;i<s.core.rtcp.counters.size();++i){j.text(",");j.string(rtcp_counter_names[i]);j.text(":");j.number(s.core.rtcp.counters[i]);}
+  const RtcpCloseEvent empty_first{};
+  const bool first_valid=close_history&&close_history->first_ready_disconnect.reason;
+  const auto&first=first_valid?close_history->first_ready_disconnect:empty_first;
+  j.text(",\"rtcp_first_ready_disconnect\":{\"valid\":");j.number(first_valid);
+  j.text(",\"uptime_ms\":");j.number(first.uptime_ms);j.text(",\"session\":");j.number(first.session);
+  j.text(",\"network_generation\":");j.number(first.network_generation);j.text(",\"state\":");j.number(first.state);
+  j.text(",\"reason\":");j.number(first.reason);j.text(",\"socket_error\":");j.signed_number(first.socket_error);
+  j.text(",\"request\":");j.number(first.request);j.text(",\"awaited\":");j.number(first.awaited);
+  j.text(",\"response_pending\":");j.number(first.response_pending);j.text(",\"request_type\":");j.number(first.request_type);
+  j.text(",\"reset_reason\":");j.number(first.reset_reason);j.text(",\"poll_last_ms\":");j.number(unsigned(first.poll_last_32ms)*32U);
+  j.text(",\"poll_max_ms\":");j.number(unsigned(first.poll_max_32ms)*32U);j.text("}");
   for(std::size_t i=0;i<s.core.browser.counters.size();++i){j.text(",");j.string(browser_counter_names[i]);j.text(":");j.number(s.core.browser.counters[i]);}
   j.text(",\"browser_mismatch_generation_low16\":");j.number(s.core.browser.mismatch_generation_low16);
   j.text(",\"browser_mismatch_revision_low16\":");j.number(s.core.browser.mismatch_revision_low16);

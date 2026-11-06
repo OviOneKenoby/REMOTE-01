@@ -18,7 +18,7 @@
 namespace diagnostics {
 namespace {
 struct Storage { Snapshots copies; Ring ring; RtcpCloseHistory close_history; char response[response_bytes]{}; };
-static_assert(sizeof(Storage)<=8192);
+static_assert(sizeof(Storage)<=8448);
 struct Control {
   std::atomic<Storage*> storage{nullptr}; std::atomic_flag lock=ATOMIC_FLAG_INIT;
   std::atomic<bool> enabled{false}; std::atomic<unsigned> failures{0}, drops{0}, margin{0};
@@ -59,10 +59,10 @@ constexpr char page[]=R"HTML(<!doctype html><meta name="viewport" content="width
 esp_err_t home(httpd_req_t*r) {if(!request_allowed(r)||std::strcmp(r->uri,"/"))return refuse(r,"403 Forbidden");headers(r,"text/html");return httpd_resp_send(r,page,sizeof page-1);}
 esp_err_t status(httpd_req_t*r) {
   if(!request_allowed(r)||std::strcmp(r->uri,"/api/status"))return refuse(r,"403 Forbidden");
-  auto*s=ctl.storage.load();Snapshots copy{};if(!s)return refuse(r,"503 Service Unavailable","Diagnostics storage unavailable");if(!take())return refuse(r,"503 Service Unavailable","Diagnostics busy");copy=s->copies;give();
+  auto*s=ctl.storage.load();Snapshots copy{};RtcpCloseHistory close_history{};if(!s)return refuse(r,"503 Service Unavailable","Diagnostics storage unavailable");if(!take())return refuse(r,"503 Service Unavailable","Diagnostics busy");copy=s->copies;close_history=s->close_history;give();
   const auto*app=esp_app_get_description();char sha[65]{};constexpr char hex[]="0123456789abcdef";
   for(unsigned i=0;i<32;++i) {sha[2*i]=hex[app->app_elf_sha256[i]>>4];sha[2*i+1]=hex[app->app_elf_sha256[i]&15];}
-  if(!status_json(copy,time_now(),app->project_name,app->version,sha,esp_reset_reason(),s->response,sizeof s->response))return refuse(r,"503 Service Unavailable","Diagnostics serialization overflow");
+  if(!status_json(copy,time_now(),app->project_name,app->version,sha,esp_reset_reason(),s->response,sizeof s->response,&close_history))return refuse(r,"503 Service Unavailable","Diagnostics serialization overflow");
   headers(r,"application/json");return httpd_resp_sendstr(r,s->response);
 }
 esp_err_t events(httpd_req_t*r) {

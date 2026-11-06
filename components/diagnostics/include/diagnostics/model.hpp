@@ -18,8 +18,9 @@ struct RtcpCloseHistory {
   std::array<RtcpCloseEvent,4> events{};
   std::uint8_t next=0,count=0;
   std::uint16_t reserved=0;
+  RtcpCloseEvent first_ready_disconnect{};
 };
-static_assert(sizeof(RtcpCloseHistory)==136);
+static_assert(sizeof(RtcpCloseHistory)==168);
 struct RtcpDiagnostic {
   std::array<std::uint8_t,10> counters{};
   std::int16_t error=0;
@@ -95,5 +96,5 @@ struct Json {
   char *out; std::size_t capacity, used=0; bool ok=true;
   void text(std::string_view); void number(U64); void signed_number(int); void string(std::string_view);
 };
-bool status_json(const Snapshots&,U64 now,std::string_view project,std::string_view version,std::string_view sha,unsigned reset,char*,std::size_t);
+bool status_json(const Snapshots&,U64 now,std::string_view project,std::string_view version,std::string_view sha,unsigned reset,char*,std::size_t,const RtcpCloseHistory* = nullptr);
 } // namespace diagnostics
