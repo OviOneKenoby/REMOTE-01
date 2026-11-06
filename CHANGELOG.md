@@ -2,9 +2,10 @@
 
 ## 2026-11-06 - Move /api/status scratch buffers off the HTTP task stack
 
-Status: **SOFTWARE PASS - HARDWARE NOT VALIDATED.** Hypothesis unconfirmed until
-the device test. Implementation commit `ad390a46a47f3898198eb594329d6be25a14d0dd`
-(embedded build `ad390a4`).
+Status: **SOFTWARE PASS; HARDWARE PASS (LIMITED).** Implementation commit
+`ad390a46a47f3898198eb594329d6be25a14d0dd` (embedded build `ad390a4`). The
+hardware result is a short observation window; see "Hardware result" below for
+what it does and does not show.
 
 - Build `80fb557` (entry below): **SOFTWARE PASS, HARDWARE FAIL.** After the OTA
   install, 4 of 4 `GET /api/status` requests got no reply (15:17:24, 15:18:12,
@@ -38,6 +39,31 @@ the device test. Implementation commit `ad390a46a47f3898198eb594329d6be25a14d0dd
 - Build `pio run -e remote01`: 0 warnings, BIN 2,821,168 bytes, SHA-256
   `c53aec233787ed8fa973467830c9ae75989cfd82ce2c950078361e320b617913`, 324,560
   bytes of headroom in the 3,145,728-byte OTA slot, static RAM 63,788 bytes.
+- Hardware result (limited): after the OTA install, `GET /api/rtcp-history`
+  (16:02:39 local) and two consecutive `GET /api/status` (16:03:17 and 16:04:12
+  local) all returned HTTP 200 in 0.1-0.3 s, and the client observed no reboot.
+  `system.version` was `ad390a4`, `system.elf_sha256` matched the SHA-256 of the
+  candidate ELF, `core.rtcp_first_ready_disconnect.valid` was 0, and uptime
+  advanced by the wall-clock interval (75,890 ms -> 131,060 ms). RTCP was READY
+  (stage 13, failure 0). `system.reset_reason` was 1 (`ESP_RST_POWERON`) after
+  the install, not the 3 (`ESP_RST_SW`) expected after an OTA restart; the cause
+  was not established.
+- `network.diagnostic_stack_min_bytes` (all-time minimum free stack of the
+  4096-byte HTTP task, sampled at socket open and request entry) was 2,424 and
+  then 1,704 bytes; it was 72 on `68243eb`. Because it is an all-time minimum, the
+  second reading includes the deepest point of the previous request, so about
+  2.4 KB of the stack had been used through the first status request. It does not
+  include the request being served.
+- Not proven: the root cause of the `80fb557` failure. A stack overflow on the
+  HTTP task is suspected, but the engineer's estimate (post-fix peak plus the
+  1,264-byte frame reduction) puts `80fb557` near 3.6 KB of 4,096 bytes, i.e.
+  not clearly over the limit, and no serial log or backtrace exists. Other causes
+  are not excluded. The observation window was about one minute and two status
+  reads; long-run stability is unknown.
+- Open, uninvestigated risk: `core.INT_min` (all-time minimum free internal heap)
+  was 135 bytes on `ad390a4` (71 bytes on `68243eb`), unchanged between the two
+  reads, so it was probably set during startup. Its cause and consequences were
+  not investigated.
 - Known pre-existing issue (unchanged, not addressed): `hardening_tests`
   `utf8_snapshot_bounds` fails on clean `68243eb` and stops
   `tests/control/run_tests.py` before later suites.
