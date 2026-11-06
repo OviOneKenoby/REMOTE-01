@@ -83,7 +83,7 @@ bool status_json(const Snapshots&s,U64 now,std::string_view project,std::string_
   j.text("]");
   j.text(",\"rtcp_stage\":");j.number(s.core.rtcp.stage());j.text(",\"rtcp_failure\":");j.number(s.core.rtcp.failure());j.text(",\"rtcp_error\":");j.signed_number(s.core.rtcp.error);j.text(",\"rtcp_server_hello_bytes\":");j.number(s.core.rtcp.server_hello_bytes);j.text(",\"rtcp_close_reason\":");j.number(s.core.rtcp.close_reason);j.text(",\"rtcp_close_count\":");j.number(s.core.rtcp.close_count);j.text(",\"rtcp_poll_last_ms\":");j.number(unsigned(s.core.rtcp.last_poll_32ms)*32U);j.text(",\"rtcp_poll_max_ms\":");j.number(unsigned(s.core.rtcp.max_poll_32ms)*32U);j.text(",\"rtcp_timeout_state\":");j.number(s.core.rtcp.timeout_state);j.text(",\"rtcp_timeout_elapsed_ms\":");j.number(unsigned(s.core.rtcp.timeout_elapsed_32ms)*32U);j.text(",\"rtcp_timeout_queued_bytes\":");j.signed_number(s.core.rtcp.timeout_queued_bytes==UINT16_MAX?-1:s.core.rtcp.timeout_queued_bytes);j.text(",\"rtcp_timeouts_with_unread\":");j.number(s.core.rtcp.timeout_unread_count);
   for(std::size_t i=0;i<s.core.rtcp.counters.size();++i){j.text(",");j.string(rtcp_counter_names[i]);j.text(":");j.number(s.core.rtcp.counters[i]);}
-  const RtcpCloseEvent empty_first{};
+  static constexpr RtcpCloseEvent empty_first{};
   const bool first_valid=close_history&&close_history->first_ready_disconnect.reason;
   const auto&first=first_valid?close_history->first_ready_disconnect:empty_first;
   j.text(",\"rtcp_first_ready_disconnect\":{\"valid\":");j.number(first_valid);

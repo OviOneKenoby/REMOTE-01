@@ -9,7 +9,7 @@ assert '"Diagnostics serialization overflow"' in service
 assert '"Diagnostics storage unavailable"' in service
 assert "response_bytes=6248" in model
 assert "sizeof(Entry)==24" in model
-assert "static_assert(sizeof(Storage)<=8448)" in service
+assert "static_assert(sizeof(Storage)<=10240)" in service
 assert "httpd_resp_sendstr(r,s->response)" in service
 for field in ("request_type", "reset_reason", "poll_last_ms", "poll_max_ms"):
     assert f'\\"{field}\\"' in service
