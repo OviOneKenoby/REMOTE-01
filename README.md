@@ -30,6 +30,39 @@ single-command-in-flight fencing, sleep/wake behavior, and the existing UI
 geometry. This is a software-verified candidate only; it has not been flashed
 or jointly validated with the TUNER D-009 candidate.
 
+## Beta status
+
+REMOTE//01 is a beta test and a work in progress; much is still to be done. It
+has been tested only by the author, on one REMOTE (Waveshare
+ESP32-S3-Touch-LCD-3.49B V2) together with one TUNER (v1.1.12), and has had no
+wider validation. Expect bugs and changes, and do not rely on it for anything
+important. This repository has no firmware release yet; build it yourself with
+PlatformIO.
+
+## Known issues
+
+- The REMOTE needs a TUNER running compatible firmware (TUNER v1.1.12,
+  https://github.com/OviOneKenoby/ESP32-WROVER-Internet-radio) on the same local
+  network. The two devices talk over the authenticated RTCP/1 link and must be
+  paired.
+- After a station is started from a catalog, the REMOTE waits 15,000 ms for the
+  TUNER to confirm playback. If the confirmation does not arrive in that time,
+  it closes the link and shows "Playback not confirmed" for 3 seconds. On the
+  author's hardware this message has appeared for some https stations while the
+  audio was playing; the cause has not been established.
+- Two behaviours of the TUNER are shown by the REMOTE as they are and are listed
+  as "Not fixed" in the TUNER changelog: a stream that fails or stops after it
+  has started is not restored, and the link can close shortly after a station
+  start.
+- This state of `main` contains the RTCP close-correlation and first-disconnect
+  capture and the read-only diagnostics pages (`/api/status`, `/api/events`,
+  `/api/rtcp-history`, answered only for requests addressed to the device's own
+  address). The changelog of the branch `diagnostics/remote-rtcp-first-failure`
+  records the hardware result of the HTTP-stack change (commit `ad390a4`) as
+  "SOFTWARE PASS; HARDWARE PASS (LIMITED)" and "The hardware result is a short
+  observation window", and the root cause of the failure of the preceding build
+  as "NOT PROVEN". Long-run stability is unknown.
+
 ## Baseline
 
 The baseline is Waveshare's official V2 `ESP-IDF/11_FactoryProgram` example from [waveshareteam/ESP32-S3-Touch-LCD-3.49-V2](https://github.com/waveshareteam/ESP32-S3-Touch-LCD-3.49-V2). It is not the similarly named V1 project. The factory UI is the main/demo view followed by its swipe-left backlight page; the implementation is in `components/ui_bsp/generated/setup_scr_screen.c`, `components/lvgl/src/extra/widgets/carousel/lv_carousel.c`, and `components/user_app/user_app.cpp`.
@@ -78,3 +111,11 @@ Wi-Fi provisioning stores credentials in the default NVS namespace. RTCP associa
   changes, lifecycle recovery, and regression testing remain pending.
 
 See [docs/HARDWARE.md](docs/HARDWARE.md) for verified V2 facts and source citations.
+
+## License
+
+This project is licensed under the GNU General Public License, version 3 (see
+`LICENSE`). The GPL applies to the project's own files; third-party files keep
+their own licences. Third-party components, the files that come from Waveshare's
+example, and the points that could not be verified are listed in
+`THIRD_PARTY_NOTICES.md`.
