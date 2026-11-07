@@ -14,10 +14,12 @@
 #include "power_management/api.hpp"
 #include "network_manager/presentation.hpp"
 #include "encoder_volume.hpp"
+#include "settings_model.hpp"
 #include "button_inputs.hpp"
 #include "diagnostics/api.hpp"
 #include "ota_service/api.hpp"
 #include "driver/gpio.h"
+#include "esp_app_desc.h"
 #include "esp_heap_caps.h"
 #include "esp_timer.h"
 #include <atomic>
@@ -977,6 +979,15 @@ static void tuner_control_refresh(lv_timer_t *)
 	}
 }
 
+// Shared by HOME and the settings page: voltage text for the battery row.
+static void battery_voltage_text(char (&out)[6])
+{
+	const auto battery = power_management::battery_view();
+	if (battery.simulated) std::snprintf(out, sizeof out, "SIM");
+	else if (battery.valid) std::snprintf(out, sizeof out, "%u.%uV", (battery.millivolts + 50) / 1000 % 10, ((battery.millivolts + 50) / 100) % 10);
+	else std::snprintf(out, sizeof out, "--");
+}
+
 static void home_refresh(lv_timer_t *)
 {
 	ota_service::UiView update{};
@@ -1012,11 +1023,8 @@ static void home_refresh(lv_timer_t *)
 	(void)network_manager::read_status(network); // Never wait for NETWORK/HTTP.
 	const auto ip = network_manager::ip_text(network);
 	home_text(home.ip, ip.text);
-	const auto battery = power_management::battery_view();
 	char voltage[6];
-	if (battery.simulated) std::snprintf(voltage, sizeof voltage, "SIM");
-	else if (battery.valid) std::snprintf(voltage, sizeof voltage, "%u.%uV", (battery.millivolts + 50) / 1000 % 10, ((battery.millivolts + 50) / 100) % 10);
-	else std::snprintf(voltage, sizeof voltage, "--");
+	battery_voltage_text(voltage);
 	home_text(home.battery, voltage);
 	const bool plugged=power_management::external_plugged_in(power_management::external_view());
 	if(plugged) {
@@ -1365,6 +1373,144 @@ static void ota_overlay_create()
 	lv_obj_add_flag(ota.panel, LV_OBJ_FLAG_HIDDEN);
 }
 
+// ---- Settings/info page (carousel page 1) ----------------------------------
+// Reuses the factory brightness slider (generated, element 1) and adds a
+// display-timeout selector and read-only status rows. All values already exist
+// elsewhere in the firmware; nothing is stored (RAM only, defaults at boot).
+struct SettingsWidgets {
+	lv_obj_t *page = nullptr, *percent = nullptr;
+	lv_obj_t *timeout_button[ui_settings::timeout_choices.size()]{};
+	lv_obj_t *timeout_label[ui_settings::timeout_choices.size()]{};
+	lv_obj_t *connection = nullptr, *battery = nullptr, *firmware = nullptr,
+	         *uptime = nullptr, *disconnect = nullptr;
+	lv_timer_t *timer = nullptr;
+	int shown_timeout = -2;
+} settings;
+
+static void settings_show_timeout(void)
+{
+	const int selected = ui_settings::timeout_index(power_management::display_idle_ms());
+	if (selected == settings.shown_timeout) return;
+	settings.shown_timeout = selected;
+	for (std::size_t i = 0; i < ui_settings::timeout_choices.size(); ++i) {
+		const bool on = int(i) == selected;
+		lv_obj_set_style_bg_color(settings.timeout_button[i],
+		                          on ? lv_color_hex(0xc2ff00) : lv_color_hex(0x1c292e),
+		                          LV_PART_MAIN);
+		lv_obj_set_style_text_color(settings.timeout_label[i],
+		                            on ? lv_color_hex(0x11191d) : lv_color_hex(0xf3f5f2),
+		                            LV_PART_MAIN);
+	}
+}
+
+static void settings_timeout_event(lv_event_t *event)
+{
+	if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+	const auto index = std::size_t(reinterpret_cast<std::uintptr_t>(lv_event_get_user_data(event)));
+	if (index >= ui_settings::timeout_choices.size()) return;
+	(void)power_management::set_display_idle_ms(ui_settings::timeout_choices[index].ms);
+	settings_show_timeout();
+}
+
+static void settings_slider_event(lv_event_t *event)
+{
+	if (lv_event_get_code(event) != LV_EVENT_VALUE_CHANGED) return;
+	char text[8];
+	std::snprintf(text, sizeof text, "%u%%",
+	              ui_settings::brightness_percent(std::uint8_t(lv_slider_get_value(lv_event_get_current_target(event)))));
+	home_text(settings.percent, text);
+}
+
+static void settings_refresh(lv_timer_t *)
+{
+	// Nothing to do while another page is shown (the display may be off).
+	if (lv_carousel_get_element_act(src_ui.screen_carousel_1) != settings.page) return;
+	settings_show_timeout();
+	home_text(settings.connection, tuner_control.state.connected ? "Connected" : "Not connected");
+	char voltage[6];
+	battery_voltage_text(voltage);
+	char battery[16];
+	std::snprintf(battery, sizeof battery, "%s%s", voltage,
+	              power_management::external_plugged_in(power_management::external_view()) ? "  USB" : "");
+	home_text(settings.battery, battery);
+	char uptime[24];
+	ui_settings::format_uptime(uptime, sizeof uptime, std::uint64_t(esp_timer_get_time() / 1000));
+	home_text(settings.uptime, uptime);
+	home_text(settings.disconnect,
+	          ui_settings::close_reason_text(tuner_control.state.rtcp_close_reason));
+}
+
+static lv_obj_t *settings_row(lv_obj_t *page, const char *caption, lv_coord_t y)
+{
+	remote01_label(page, caption, &lv_font_montserrat_12, lv_color_hex(0x91a3a6), 12, y);
+	return remote01_single_line(page, "--", &lv_font_montserrat_14, lv_color_hex(0xf3f5f2),
+	                            12, y + 15, 148, LV_LABEL_LONG_CLIP, LV_TEXT_ALIGN_LEFT);
+}
+
+static void settings_page_create(void)
+{
+	const lv_color_t background = lv_color_hex(0x11191d);
+	const lv_color_t text = lv_color_hex(0xf3f5f2);
+	const lv_color_t muted = lv_color_hex(0x91a3a6);
+	const lv_color_t track = lv_color_hex(0x344247);
+	lv_obj_t *page = settings.page = src_ui.screen_carousel_1_element_2;
+	lv_obj_set_style_bg_color(page, background, LV_PART_MAIN);
+	lv_obj_set_style_bg_opa(page, LV_OPA_COVER, LV_PART_MAIN);
+	lv_obj_set_style_border_width(page, 0, LV_PART_MAIN);
+	lv_obj_set_style_pad_all(page, 0, LV_PART_MAIN);
+
+	remote01_label(page, "SETTINGS", &lv_font_montserrat_12, text, 12, 10);
+	remote01_panel(page, 12, 32, 148, 1, track, 0);
+
+	// Brightness: the existing generated slider and its caption label.
+	lv_obj_t *caption = src_ui.screen_label_22;
+	lv_label_set_text(caption, "BRIGHTNESS");
+	lv_label_set_long_mode(caption, LV_LABEL_LONG_CLIP);
+	lv_obj_set_style_text_font(caption, &lv_font_montserrat_12, LV_PART_MAIN);
+	lv_obj_set_style_text_color(caption, muted, LV_PART_MAIN);
+	lv_obj_set_style_text_align(caption, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
+	lv_obj_set_pos(caption, 12, 46);
+	lv_obj_set_size(caption, 90, lv_font_montserrat_12.line_height);
+	settings.percent = remote01_single_line(page, "50%", &lv_font_montserrat_14, text, 102, 44, 58,
+	                                        LV_LABEL_LONG_CLIP, LV_TEXT_ALIGN_RIGHT);
+	lv_obj_set_pos(src_ui.screen_slider_1, 12, 76);
+	lv_obj_set_size(src_ui.screen_slider_1, 148, 20);
+	lv_obj_set_ext_click_area(src_ui.screen_slider_1, 14); // about 48 px tall touch area
+	lv_obj_add_event_cb(src_ui.screen_slider_1, settings_slider_event, LV_EVENT_VALUE_CHANGED, nullptr);
+
+	// Screen-off timeout: five buttons, the current one filled.
+	remote01_panel(page, 12, 112, 148, 1, track, 0);
+	remote01_label(page, "SCREEN OFF AFTER", &lv_font_montserrat_12, muted, 12, 124);
+	for (std::size_t i = 0; i < ui_settings::timeout_choices.size(); ++i) {
+		lv_obj_t *button = settings.timeout_button[i] =
+			remote01_panel(page, 12, lv_coord_t(146 + 50 * int(i)), 148, 44, lv_color_hex(0x1c292e), 6);
+		lv_obj_add_flag(button, LV_OBJ_FLAG_CLICKABLE);
+		settings.timeout_label[i] = remote01_single_line(
+			button, ui_settings::timeout_choices[i].label, &lv_font_montserrat_16, text,
+			0, (44 - lv_font_montserrat_16.line_height) / 2, 148, LV_LABEL_LONG_CLIP,
+			LV_TEXT_ALIGN_CENTER);
+		lv_obj_add_event_cb(button, settings_timeout_event, LV_EVENT_CLICKED,
+		                    reinterpret_cast<void *>(std::uintptr_t(i)));
+	}
+
+	// Read-only information.
+	remote01_panel(page, 12, 402, 148, 1, track, 0);
+	remote01_label(page, "INFO", &lv_font_montserrat_12, muted, 12, 414);
+	settings.connection = settings_row(page, "TUNER LINK", 436);
+	settings.battery = settings_row(page, "BATTERY", 474);
+	settings.firmware = settings_row(page, "FIRMWARE", 512);
+	settings.uptime = settings_row(page, "UPTIME", 550);
+	settings.disconnect = settings_row(page, "LAST DISCONNECT", 588);
+	const auto *description = esp_app_get_description();
+	home_text(settings.firmware, description && description->version[0] ? description->version : "unknown");
+
+	// Boot value: 50 % of the slider scale, every boot (not stored).
+	lv_slider_set_value(src_ui.screen_slider_1, ui_settings::brightness_boot, LV_ANIM_OFF);
+	lv_event_send(src_ui.screen_slider_1, LV_EVENT_VALUE_CHANGED, nullptr);
+	settings_show_timeout();
+	settings.timer = lv_timer_create(settings_refresh, 250, nullptr);
+}
+
 static void lvgl_obj_event_callback(lv_event_t *event)
 {
 	if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
@@ -1380,8 +1526,10 @@ void user_app_init(void)
 	remote01_mockup_create();
 	tuner_control_create();
 	ota_overlay_create();
+	settings_page_create();
 	lv_obj_set_element_id(src_ui.screen_carousel_1, 0, LV_ANIM_OFF);
-	lcd_bl_pwm_bsp_init(LCD_PWM_MODE_255);
+	// Every boot starts at 50 % brightness (slider 128 of 255, LEDC duty 127).
+	lcd_bl_pwm_bsp_init(ui_settings::brightness_pwm(ui_settings::brightness_boot));
 	lv_obj_add_event_cb(src_ui.screen_slider_1, lvgl_obj_event_callback, LV_EVENT_ALL, NULL);
 	gpio_config_t encoder{};
 	encoder.pin_bit_mask = (1ULL << encoder_a) | (1ULL << encoder_b);
