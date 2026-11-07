@@ -9,19 +9,26 @@ copied from the named files (line endings normalised to LF).
 
 ## 1. Scope: the project's own files and third-party files
 
-Project's own files (GNU General Public License, version 3):
-`components/artwork`, `components/control`, `components/control_home`,
-`components/control_profile`, `components/diagnostics`,
-`components/network_manager`, `components/ota_service`,
-`components/physical_input`, `components/power_management`,
-`components/remote_persistence`, `components/rtcp_client`, `include/`, `tests/`,
-`tools/`, `docs/`, `CMakeLists.txt`, `platformio.ini`, `sdkconfig.defaults`,
-`README.md`, `CHANGELOG.md`, and the project's own changes in the files listed
-in section 2 as "modified from the Waveshare example".
+The GNU General Public License, version 3 (`LICENSE`) applies to the project's
+own files and to the project's own additions and changes. Files that come from
+the Waveshare example repository, identical or modified, keep the original
+Apache License 2.0 notices and terms (licence text A); for a modified Waveshare
+file only the project's own changes are under the GNU General Public License,
+version 3. Vendored libraries and build-time dependencies keep their own
+licences (sections 3 and 4). No `NOTICE` file exists in the Waveshare
+repository.
 
-Files taken from the Waveshare example repository (section 2), vendored
-libraries (section 3) and build-time dependencies (section 4) are third-party
-files.
+| Path | Classification | Licence |
+|---|---|---|
+| `components/artwork`, `components/control`, `components/control_home`, `components/control_profile`, `components/diagnostics`, `components/network_manager`, `components/ota_service`, `components/physical_input`, `components/power_management`, `components/remote_persistence`, `components/rtcp_client` | project's own | GPL v3 |
+| `components/user_app/button_inputs.hpp`, `components/user_app/encoder_volume.hpp`, `include/`, `tests/`, `tools/`, `docs/`, `main/CMakeLists.txt`, `platformio.ini`, `README.md`, `CHANGELOG.md`, `THIRD_PARTY_NOTICES.md`, `.gitignore`, `.gitattributes` | project's own (no counterpart in `ESP-IDF/11_FactoryProgram`, or no similarity found) | GPL v3 |
+| `CMakeLists.txt` (47% line similarity), `dependencies.lock` (85%), `partitions.csv` (27%), `sdkconfig.defaults` (94%), `main/main.cpp` (88%), `main/user_config.h` (96%), `components/user_app/user_app.cpp`, `components/user_app/user_app.h`, `components/user_app/CMakeLists.txt`, `components/lcd_bl_pwm_bsp/CMakeLists.txt` | derived from / modified from the Waveshare example | Waveshare's Apache License 2.0 notices and terms remain; the project's own changes are GPL v3 |
+| `main/idf_component.yml`, `components/adc_bsp`, `components/audio_bsp`, `components/ble_scan_bsp`, `components/esp_wifi_bsp`, `components/i2c_bsp`, `components/i2c_equipment`, `components/sdcard_bsp`, `components/lcd_bl_pwm_bsp` (2 of 3 files), `components/ui_bsp` | identical to the Waveshare example | Waveshare's Apache License 2.0, plus the per-file notices in section 2 |
+| `components/lvgl` (1198 of 1199 files identical; `src/extra/widgets/carousel/lv_carousel.c` modified), `components/SensorLib`, `components/codec_board`, `components/button_bsp` | vendored libraries (identical to the Waveshare copies except as stated) | see section 3 |
+
+The percentages are line or token similarity to the Waveshare file of the same
+path (method: SHA-256 for identical files, line/12-token comparison for
+modified files); they only indicate how much of the Waveshare file remains.
 
 ## 2. Waveshare example baseline
 
@@ -44,7 +51,8 @@ Byte-identical to files in the Waveshare repository:
   (1198 of 1199 files), `components/SensorLib` (178), `components/codec_board`
   (17), `components/button_bsp` (5).
 
-Modified from the Waveshare example: `components/lcd_bl_pwm_bsp/CMakeLists.txt`,
+Modified from the Waveshare example: `CMakeLists.txt`, `dependencies.lock`,
+`partitions.csv`, `sdkconfig.defaults`, `components/lcd_bl_pwm_bsp/CMakeLists.txt`,
 `components/user_app/CMakeLists.txt`, `components/user_app/user_app.cpp`,
 `components/user_app/user_app.h`, `main/main.cpp`, `main/user_config.h`, and the
 LVGL file `components/lvgl/src/extra/widgets/carousel/lv_carousel.c`. Files
@@ -60,9 +68,16 @@ Details that are specific:
   values from the vendor example. The function `espwifi_init()` is not called
   by this project and the component is not part of the build described in the
   README.
-- `components/audio_bsp/canon.pcm` is embedded in the firmware image. Its origin
-  and the terms of the recording are not verified (the file is identical to the
-  one in the Waveshare repository).
+- `components/audio_bsp/canon.pcm` is stored in the repository but is not part
+  of the firmware: `audio_bsp` is listed in `EXCLUDE_COMPONENTS` in
+  `CMakeLists.txt` and the linked image contains no embedded copy of the file.
+  Its origin and the terms of the recording are not verified (the file is
+  identical to the one in the Waveshare repository).
+- The root `CMakeLists.txt` also excludes `adc_bsp`, `ble_scan_bsp`,
+  `button_bsp`, `codec_board`, `esp_wifi_bsp`, `i2c_equipment`, `sdcard_bsp` and
+  `SensorLib` from the build; their files are in the repository but are not
+  compiled into the firmware. Compiled from the baseline: `i2c_bsp`,
+  `lcd_bl_pwm_bsp`, `ui_bsp`, `lvgl` and the application component `user_app`.
 - Eleven files in `components/ui_bsp` (`custom/custom.c`, `custom/custom.h`,
   `custom/lv_conf_ext.h`, `generated/events_init.c`, `generated/events_init.h`,
   `generated/gui_guider.c`, `generated/gui_guider.h`,

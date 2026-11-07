@@ -24,6 +24,12 @@ on one REMOTE with one TUNER (v1.1.12); no wider validation.
   addresses of the author's two devices now use placeholders. The earlier
   history is unchanged.
 - README: "Beta status" and "Known issues" sections added.
+- Older entries below that say "HARDWARE NOT VALIDATED" (for example the one for
+  build `80fb557`) describe the state when they were written. Build `80fb557`
+  was later installed on the author's REMOTE and failed there (status requests
+  unanswered, a reboot observed, root cause not proven); `ad390a4` is the
+  follow-up, and its limited hardware result is recorded only in the changelog
+  of the branch `diagnostics/remote-rtcp-first-failure`.
 - Not fixed: see "Known issues" in the README.
 
 ## 2026-11-06 - Retain the first RTCP disconnect of an established READY session

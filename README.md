@@ -115,7 +115,8 @@ See [docs/HARDWARE.md](docs/HARDWARE.md) for verified V2 facts and source citati
 ## License
 
 This project is licensed under the GNU General Public License, version 3 (see
-`LICENSE`). The GPL applies to the project's own files; third-party files keep
-their own licences. Third-party components, the files that come from Waveshare's
-example, and the points that could not be verified are listed in
-`THIRD_PARTY_NOTICES.md`.
+`LICENSE`). The GPL applies to the project's own files and to the project's own
+changes. Files that come from Waveshare's example, identical or modified, keep
+the original Apache License 2.0 notices and terms; vendored libraries keep their
+own licences. The list of files, the third-party components and the points that
+could not be verified are in `THIRD_PARTY_NOTICES.md`.
