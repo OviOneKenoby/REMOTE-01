@@ -158,8 +158,9 @@ Bosch Sensortec header, verbatim (`components/SensorLib/src/bosch/bhi3.c`):
   `espressif/esp_io_expander` 1.2.1, `espressif/esp_io_expander_tca9554` 2.0.3,
   `espressif/esp_lcd_axs15231b` 1.0.1~1, `espressif/esp_lcd_touch` 1.2.1: Apache
   License, Version 2.0 (their `license.txt` files, byte-identical to licence text B).
-  `espressif/mdns` 1.14.0: licence not verified from disk (no copy of its files
-  was available).
+  `espressif/mdns` 1.14.0: Apache License, Version 2.0 (the `LICENSE` file of its
+  copy in another local build tree, byte-identical to licence text B; the copy
+  is not part of this repository).
 
 ## 5. Licence texts
 

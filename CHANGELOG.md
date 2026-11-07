@@ -19,8 +19,7 @@ on one REMOTE with one TUNER (v1.1.12); no wider validation.
   libraries and build-time dependencies keep their own licences and are listed
   in `THIRD_PARTY_NOTICES.md`. Not verified: the terms of eleven `ui_bsp` files
   headed "NXP Proprietary", the SIL Open Font License text for the generated
-  fonts, the terms of `canon.pcm` and of the MultiButton files, and the licence
-  of `espressif/mdns` 1.14.0.
+  fonts, and the terms of `canon.pcm` and of the MultiButton files.
 - Documentation lines that named the author's build machine folders and the LAN
   addresses of the author's two devices now use placeholders. The earlier
   history is unchanged.
