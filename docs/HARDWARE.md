@@ -21,7 +21,7 @@ Inspected Waveshare V2 source snapshot: commit `1c157e6e8e68b89fd4dc400f46bf1724
 | Display rotation in V2 baseline | Factory LVGL coordinates are 172 x 640; raw touch X/Y is mapped in `example_lvgl_touch_cb` | `main/main.cpp`; `components/ui_bsp/generated/setup_scr_screen.c` |
 | Backlight control | LEDC PWM on GPIO42, 8-bit duty, 50 kHz; TCA9554 backlight enable uses expander bit 1 | `components/lcd_bl_pwm_bsp/lcd_bl_pwm_bsp.c`; `main/user_config.h` (`EXAMPLE_PIN_NUM_BK_LIGHT`, `EXAMPLE_EXIO_PIN_BL_EN`); `main/main.cpp` |
 | LCD reset | TCA9554 output bit 5 | `main/user_config.h` (`EXAMPLE_EXIO_PIN_LCD_RST`); `main/main.cpp` reset/expander initialization |
-| Factory page behavior | Generated LVGL carousel with two 172-pixel elements; main/demo followed by brightness page and a 0-255 brightness slider | `components/ui_bsp/generated/setup_scr_screen.c`; `components/lvgl/src/extra/widgets/carousel/lv_carousel.c`; `components/user_app/user_app.cpp` |
+| Factory page behavior | Generated LVGL carousel with two 172-pixel elements; originally main/demo followed by a brightness page with a 0-255 slider. In the current beta change the demo page is removed: element 0 is HOME and element 1 is the settings/info page with the brightness slider | `components/ui_bsp/generated/setup_scr_screen.c`; `components/lvgl/src/extra/widgets/carousel/lv_carousel.c`; `components/user_app/user_app.cpp` |
 | Flash size configuration | ESP-IDF factory config selects 16 MB flash | `ESP-IDF/11_FactoryProgram/sdkconfig.defaults` (`CONFIG_ESPTOOLPY_FLASHSIZE_16MB`) |
 | PSRAM configuration | Enabled, octal mode, 80 MHz | `ESP-IDF/11_FactoryProgram/sdkconfig.defaults` (`CONFIG_SPIRAM`, `CONFIG_SPIRAM_MODE_OCT`, `CONFIG_SPIRAM_SPEED_80M`) |
 | V2 factory framework/dependencies | ESP-IDF lock 5.5.4; LVGL 8.3.11; `esp_lcd_axs15231b` 1.0.1; `esp_io_expander_tca9554` 2.0.3; `esp_codec_dev` 1.3.6 | `ESP-IDF/11_FactoryProgram/dependencies.lock`; `components/lvgl/lvgl.h`; component manifests |
@@ -50,7 +50,7 @@ Physical owner detail observations:
 - LVGL symbols at 20 px are very clear.
 - Dark background + white text + `#C2FF00` accent works well on the physical panel.
 
-The owner also physically confirmed the 180-degree LCD orientation, touch mapping, carousel snapping, natural navigation (LEFT advances 0 -> 1 -> 2 with the next page entering from the RIGHT; RIGHT returns 2 -> 1 -> 0 with the previous page entering from the LEFT), and the previous clipping fixes.
+The owner also physically confirmed the 180-degree LCD orientation, touch mapping, carousel snapping, natural navigation (at the time of that observation the carousel had three pages: LEFT advanced 0 -> 1 -> 2 with the next page entering from the RIGHT; RIGHT returned 2 -> 1 -> 0 with the previous page entering from the LEFT; the current beta change has two pages, HOME = 0 and settings/info = 1, with the same directions, not yet re-observed on hardware), and the previous clipping fixes.
 
 The temporary qualification content was subsequently replaced by the first static REMOTE//01 HOME screen. The owner has now physically tested that HOME screen and confirmed **HOME UI hardware PASS**. Qualification and HOME results are physical owner observations; neither establishes protocol, adapter or end-to-end universal-control-path validation. This evidence correction changes documentation only.
 

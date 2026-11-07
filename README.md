@@ -10,7 +10,7 @@ specification rather than silently changing approved behavior.
 The authenticated, browser-based local firmware update design and recovery
 boundary are documented in [REMOTE local Wi-Fi OTA](docs/REMOTE_LOCAL_WIFI_OTA.md).
 
-PlatformIO firmware for REMOTE//01 on the Waveshare ESP32-S3-Touch-LCD-3.49B V2, PCB Rev1.1. The accepted A-REMOTE-012 baseline retains the factory demo and brightness pages, provides an active 172x640 HOME status/control page, and rotates the complete display/touch coordinate path 180 degrees.
+PlatformIO firmware for REMOTE//01 on the Waveshare ESP32-S3-Touch-LCD-3.49B V2, PCB Rev1.1. The accepted A-REMOTE-012 baseline retained the Waveshare factory demo and brightness pages and provided an active 172x640 HOME status/control page. In the current beta change HOME is the first carousel page, the factory demo page is removed and the brightness page became a settings/info page (see "Pages and Rotation"). The complete display/touch coordinate path is rotated 180 degrees.
 
 The installed accepted application is 2,526,848 bytes with SHA-256 `b6053c04c03114a24a59f178da4eb03d4bada77faded43b6009667579c21d5da`. It interoperates with TUNER v1.1.12 through authenticated RTCP/1 for identity, capabilities, authoritative volume/playback observations and correlated `volume.set`. This repository has no public REMOTE firmware release yet.
 
@@ -65,7 +65,7 @@ PlatformIO.
 
 ## Baseline
 
-The baseline is Waveshare's official V2 `ESP-IDF/11_FactoryProgram` example from [waveshareteam/ESP32-S3-Touch-LCD-3.49-V2](https://github.com/waveshareteam/ESP32-S3-Touch-LCD-3.49-V2). It is not the similarly named V1 project. The factory UI is the main/demo view followed by its swipe-left backlight page; the implementation is in `components/ui_bsp/generated/setup_scr_screen.c`, `components/lvgl/src/extra/widgets/carousel/lv_carousel.c`, and `components/user_app/user_app.cpp`.
+The baseline is Waveshare's official V2 `ESP-IDF/11_FactoryProgram` example from [waveshareteam/ESP32-S3-Touch-LCD-3.49-V2](https://github.com/waveshareteam/ESP32-S3-Touch-LCD-3.49-V2). It is not the similarly named V1 project. The factory UI was the main/demo view followed by its swipe-left backlight page (the demo page has since been removed here); the implementation is in `components/ui_bsp/generated/setup_scr_screen.c`, `components/lvgl/src/extra/widgets/carousel/lv_carousel.c`, and `components/user_app/user_app.cpp`.
 
 The official V2 lockfile pins ESP-IDF 5.5.4, LVGL 8.3.11, AXS15231B 1.0.1, TCA9554 expander 2.0.3, and ESP codec 1.3.6. The production PlatformIO environment instead pins ESP-IDF 5.5.3 and the package versions recorded in `dependencies.lock`. The display and touch controller path remains Waveshare's AXS15231B QSPI implementation. Factory Wi-Fi/BLE, audio and SD demo tasks remain disabled; production networking, provisioning, RTCP, persistence, physical input and power-management components provide the active behavior.
 
@@ -81,13 +81,18 @@ The successful build environment and its difference from the official lockfile a
 
 ## Pages and Rotation
 
+**Beta test change, hardware-untested until flashed:** the page order, the settings page, the 50% brightness at boot and the 10% volume step described here are a beta test change that has been built and host-tested only; the layout, touch behaviour, brightness feel and encoder feel have not been checked on the device.
+
 The UI sequence is:
 
-1. Waveshare factory main/demo page
-2. Waveshare brightness page with the existing working LVGL slider
-3. REMOTE//01 HOME status/control screen with authoritative playback and volume state, provisional desired-volume indication and encoder volume routing
+1. REMOTE//01 HOME status/control screen with authoritative playback and volume state, provisional desired-volume indication and encoder volume routing. The REMOTE starts on this page.
+2. Settings/info page (the Waveshare brightness page, extended): the existing brightness slider, a screen-off timeout selector (15 s, 30 s, 1 min, 2 min, 5 min; the current one is filled) and read-only rows for the link to the TUNER, battery, firmware version, uptime and the last RTCP disconnect reason.
 
-Both panel axes are mirrored through the AXS15231B panel API. The factory's original raw-touch orientation mapping is then followed by the matching 171-x / 639-y transform before LVGL receives the point. Carousel IDs are 0 (factory), 1 (brightness), and 2 (HOME), at logical X=0, 172, and 344. Physical left swipes advance, bringing the next page in from the right; physical right swipes go back, bringing the previous page in from the left. End-stop directions retain the official factory behavior in LVGL logical coordinates; the spacer is excluded from snapping so only real pages are snap targets. The owner physically validated orientation, touch mapping, snapping, navigation direction and clipping fixes as PASS.
+The Waveshare factory demo page is no longer part of the carousel.
+
+Brightness: the backlight starts at 50% of the slider scale on every boot (slider value 128 of 0-255, LEDC duty 127). The slider range and behaviour are unchanged; the value is not stored. Screen-off timeout: the default is 30 s; the selection is kept in RAM only and returns to 30 s at every boot (a stored setting is future work). The system sleep delay (5 minutes of inactivity) is unchanged, so with a 5 minute timeout the display turns off at the moment the system sleep is attempted. Volume: each encoder detent or touch step changes the TUNER volume by 10% (it was 2%), clamped to 0-100%.
+
+Both panel axes are mirrored through the AXS15231B panel API. The factory's original raw-touch orientation mapping is then followed by the matching 171-x / 639-y transform before LVGL receives the point. Carousel IDs are 0 (HOME) and 1 (settings/info), at logical X=0 and 172. Physical left swipes advance, bringing the next page in from the right; physical right swipes go back, bringing the previous page in from the left. End-stop directions retain the official factory behavior in LVGL logical coordinates; the spacer is excluded from snapping so only real pages are snap targets. The owner physically validated orientation, touch mapping, snapping, navigation direction and clipping fixes as PASS.
 
 ## Physical Display Qualification
 
@@ -103,6 +108,7 @@ Wi-Fi provisioning stores credentials in the default NVS namespace. RTCP associa
 
 ## Current limits
 
+- The screen-off timeout selected on the settings page is not stored: it is kept in RAM and returns to 30 s after a reboot.
 - The public source matches the active local source after line-ending normalization, but the historical Git-less build has no immutable source commit proving byte-reproducible derivation of the installed binary.
 - Intermittent QMI8658 motion-wake initialization remains a known separate limitation.
 - Playback commands and richer metadata from the owner-approved/frozen

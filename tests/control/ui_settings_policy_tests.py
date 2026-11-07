@@ -45,10 +45,10 @@ checks = {
     "disconnect_from_existing_state": "tuner_control.state.rtcp_close_reason" in settings_block,
     # Fonts: only the qualified sizes 12, 14, 16 (18 and 24 are disabled and unqualified)
     "only_qualified_fonts": fonts(settings_block) <= {"12", "14", "16"},
-    "no_new_font_sizes_enabled": not re.search(r"MONTSERRAT_(18|22|24|26)=y",
-                                               (root / "sdkconfig.remote01").read_text(encoding="utf-8"))
-    and not re.search(r"MONTSERRAT_(18|22|24|26)=y",
-                      (root / "sdkconfig.defaults").read_text(encoding="utf-8")),
+    # sdkconfig.remote01 is a generated, untracked file: checked only when present.
+    "no_new_font_sizes_enabled": not any(
+        re.search(r"MONTSERRAT_(18|22|24|26)=y", f.read_text(encoding="utf-8"))
+        for f in (root / "sdkconfig.defaults", root / "sdkconfig.remote01") if f.exists()),
     # Geometry: nothing leaves the 172x640 page
     "timeout_buttons_44px_inside_page": "lv_coord_t(146 + 50 * int(i)), 148, 44" in settings_block
     and 146 + 50 * 4 + 44 <= 640,

@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-11-07 - Beta test change: HOME first, settings/info page, 50% brightness, 10% volume step
+
+Status: BETA TEST build change on branch `feature/remote-ui-home-first-settings`.
+Built and covered by host tests only; **hardware-untested** (layout, touch,
+brightness feel and encoder feel are unverified until flashed).
+
+- Carousel: HOME is page 0 and the REMOTE boots on it without animation. The
+  Waveshare factory demo page (status rows, RGB test images, canvas, buttons and
+  the boot animation task) is removed from the generated UI and the app. Pages:
+  0 HOME, 1 settings/info. Spacer, snapping, swipe directions and end stops are
+  unchanged.
+- Settings/info page (page 1): the existing brightness slider (with a percent
+  label), a screen-off timeout selector (15 s, 30 s, 1 min, 2 min, 5 min) and
+  read-only rows for the TUNER link, battery, firmware version, uptime and the
+  last RTCP disconnect reason. Only values that already existed in the firmware
+  are shown. Fonts: Montserrat 12, 14 and 16 only.
+- Screen-off timeout: `power_management::set_display_idle_ms()` accepts only the
+  five values above; the default is 30 s and the selection lives in RAM only.
+  `system_idle_ms` (5 min) and the activity/wake logic are unchanged; with 5 min
+  selected the display idle and the system sleep attempt happen at the same
+  moment.
+- Brightness: every boot starts at slider 128 of 255 (LEDC duty 127, 50% of the
+  scale). Nothing is stored.
+- Volume: `Channel::volume_step` is 10 (was 2); clamping at 0 and 100 is
+  unchanged. Host tests now take the step from the channel and cover steps next
+  to the limits.
+- `THIRD_PARTY_NOTICES.md`: two generated `ui_bsp` files (`setup_scr_screen.c`,
+  `gui_guider.h`) are no longer identical to the Waveshare files; their headers
+  are unchanged.
+- Known pre-existing test failures on `main` (not changed here): the
+  `hardening_tests` case `utf8_snapshot_bounds` and the policy check
+  `command_no_retry` in `btx_integration_policy_tests.py`.
+
 ## 2026-11-07 - First public beta state
 
 Status: beta test, work in progress, much still to do. Tested only by the author

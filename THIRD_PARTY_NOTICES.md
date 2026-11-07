@@ -21,9 +21,9 @@ repository.
 | Path | Classification | Licence |
 |---|---|---|
 | `components/artwork`, `components/control`, `components/control_home`, `components/control_profile`, `components/diagnostics`, `components/network_manager`, `components/ota_service`, `components/physical_input`, `components/power_management`, `components/remote_persistence`, `components/rtcp_client` | project's own | GPL v3 |
-| `components/user_app/button_inputs.hpp`, `components/user_app/encoder_volume.hpp`, `include/`, `tests/`, `tools/`, `docs/`, `main/CMakeLists.txt`, `platformio.ini`, `README.md`, `CHANGELOG.md`, `THIRD_PARTY_NOTICES.md`, `.gitignore`, `.gitattributes` | project's own (no counterpart in `ESP-IDF/11_FactoryProgram`, or no similarity found) | GPL v3 |
-| `CMakeLists.txt` (47% line similarity), `dependencies.lock` (85%), `partitions.csv` (27%), `sdkconfig.defaults` (94%), `main/main.cpp` (88%), `main/user_config.h` (96%), `components/user_app/user_app.cpp`, `components/user_app/user_app.h`, `components/user_app/CMakeLists.txt`, `components/lcd_bl_pwm_bsp/CMakeLists.txt` | derived from / modified from the Waveshare example | Waveshare's Apache License 2.0 notices and terms remain; the project's own changes are GPL v3 |
-| `main/idf_component.yml`, `components/adc_bsp`, `components/audio_bsp`, `components/ble_scan_bsp`, `components/esp_wifi_bsp`, `components/i2c_bsp`, `components/i2c_equipment`, `components/sdcard_bsp`, `components/lcd_bl_pwm_bsp` (2 of 3 files), `components/ui_bsp` | identical to the Waveshare example | Waveshare's Apache License 2.0, plus the per-file notices in section 2 |
+| `components/user_app/button_inputs.hpp`, `components/user_app/encoder_volume.hpp`, `components/user_app/settings_model.hpp`, `include/`, `tests/`, `tools/`, `docs/`, `main/CMakeLists.txt`, `platformio.ini`, `README.md`, `CHANGELOG.md`, `THIRD_PARTY_NOTICES.md`, `.gitignore`, `.gitattributes` | project's own (no counterpart in `ESP-IDF/11_FactoryProgram`, or no similarity found) | GPL v3 |
+| `CMakeLists.txt` (47% line similarity), `dependencies.lock` (85%), `partitions.csv` (27%), `sdkconfig.defaults` (94%), `main/main.cpp` (88%), `main/user_config.h` (96%), `components/user_app/user_app.cpp`, `components/user_app/user_app.h`, `components/user_app/CMakeLists.txt`, `components/lcd_bl_pwm_bsp/CMakeLists.txt`, `components/ui_bsp/generated/setup_scr_screen.c` (demo page removed), `components/ui_bsp/generated/gui_guider.h` (demo members removed) | derived from / modified from the Waveshare example | Waveshare's Apache License 2.0 notices and terms remain; the project's own changes are GPL v3 |
+| `main/idf_component.yml`, `components/adc_bsp`, `components/audio_bsp`, `components/ble_scan_bsp`, `components/esp_wifi_bsp`, `components/i2c_bsp`, `components/i2c_equipment`, `components/sdcard_bsp`, `components/lcd_bl_pwm_bsp` (2 of 3 files), `components/ui_bsp` (19 of 21 files) | identical to the Waveshare example | Waveshare's Apache License 2.0, plus the per-file notices in section 2 |
 | `components/lvgl` (1198 of 1199 files identical; `src/extra/widgets/carousel/lv_carousel.c` modified), `components/SensorLib`, `components/codec_board`, `components/button_bsp` | vendored libraries (identical to the Waveshare copies except as stated) | see section 3 |
 
 The percentages are line or token similarity to the Waveshare file of the same
@@ -46,7 +46,8 @@ Byte-identical to files in the Waveshare repository:
   `canon.pcm`), `components/ble_scan_bsp` (3), `components/esp_wifi_bsp` (3),
   `components/i2c_bsp` (3), `components/i2c_equipment` (3),
   `components/sdcard_bsp` (3), `components/lcd_bl_pwm_bsp` (2 of 3),
-  `components/ui_bsp` (all 21 files).
+  `components/ui_bsp` (19 of 21 files; `generated/setup_scr_screen.c` and
+  `generated/gui_guider.h` are modified, see below).
 - Vendored libraries of the Waveshare example (section 3): `components/lvgl`
   (1198 of 1199 files), `components/SensorLib` (178), `components/codec_board`
   (17), `components/button_bsp` (5).
@@ -54,7 +55,8 @@ Byte-identical to files in the Waveshare repository:
 Modified from the Waveshare example: `CMakeLists.txt`, `dependencies.lock`,
 `partitions.csv`, `sdkconfig.defaults`, `components/lcd_bl_pwm_bsp/CMakeLists.txt`,
 `components/user_app/CMakeLists.txt`, `components/user_app/user_app.cpp`,
-`components/user_app/user_app.h`, `main/main.cpp`, `main/user_config.h`, and the
+`components/user_app/user_app.h`, `components/ui_bsp/generated/setup_scr_screen.c`,
+`components/ui_bsp/generated/gui_guider.h`, `main/main.cpp`, `main/user_config.h`, and the
 LVGL file `components/lvgl/src/extra/widgets/carousel/lv_carousel.c`. Files
 `components/user_app/button_inputs.hpp` and `components/user_app/encoder_volume.hpp`
 are not in the Waveshare repository. The only licence files found under
@@ -84,7 +86,9 @@ Details that are specific:
   `generated/guider_customer_fonts/guider_customer_fonts.h`,
   `generated/setup_scr_screen.c`, `generated/widgets_init.c`,
   `generated/widgets_init.h`) carry this header (generated by NXP's GUI Guider;
-  the same files, with the same header, are in the Waveshare repository). The
+  the same files, with the same header, are in the Waveshare repository;
+  `generated/setup_scr_screen.c` and `generated/gui_guider.h` were edited here
+  to remove the factory demo page and still carry the unchanged header). The
   applicable NXP licence terms are not stated in these files or in this
   repository: terms not verified.
 

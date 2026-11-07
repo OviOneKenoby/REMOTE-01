@@ -161,7 +161,7 @@ The firmware and ELF remain private and are not committed. The preserved Round
    authoritative state without automatic retry.
 8. Disconnect/reconnect the phone and switch back to radio; verify command
    withdrawal, metadata clearing and restored radio semantics.
-9. Verify slow/rapid/reversal volume behavior remains fixed at 2% per accepted
+9. Verify slow/rapid/reversal volume behavior remains fixed per accepted (2% when this checklist was written, 10% since the beta change recorded in CHANGELOG.md)
    detent and remains source-independent.
 10. Verify RTCP reconnect and one sleep/wake cycle do not replay a command or
     retain stale Bluetooth authority.
