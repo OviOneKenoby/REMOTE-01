@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-11-07 - Beta test change: selectable system-sleep delay, SETTINGS and INFO pages
+
+Status: BETA TEST build change on branch `feature/remote-ui-home-first-settings`
+(continues the entry below). Built and covered by host tests only;
+**hardware-untested** (layout, touch, the - / + behaviour, the display and
+system-sleep timings and the wake are unverified until flashed).
+
+- System sleep delay: `power_management::set_system_idle_ms()` accepts only
+  1, 2, 5, 10 and 30 minutes (default 5 min, unchanged at boot); there is no
+  "never" choice. Invariant, enforced in the power model and tested: the sleep
+  delay is strictly greater than the display timeout; both setters reject a
+  value that would break it or that is not a choice (no state change). Both
+  values live in RAM only.
+- Carousel: three pages, 0 HOME, 1 SETTINGS, 2 INFO (logical X = 0, 172, 344).
+  The app adds the INFO element; the generated UI still has the two elements.
+- SETTINGS: the existing brightness slider (boot 50%) plus "SCREEN OFF AFTER"
+  and "SYSTEM SLEEP AFTER" rows, each "- value +" with 44x44 buttons. Steps the
+  rule rejects are dimmed and inert; the other value is never adjusted
+  automatically. A 5 min screen-off needs a sleep delay above 5 min first.
+- INFO: the five read-only rows (TUNER LINK, BATTERY with USB, FIRMWARE, UPTIME,
+  LAST DISCONNECT) with wider spacing; nothing else was added.
+- The previous page layout (both selectors and the info rows on one page) is
+  replaced; no new font size is enabled (Montserrat 12, 14, 16).
+- Known pre-existing test failures on `main` are unchanged: the `hardening_tests`
+  case `utf8_snapshot_bounds` and the policy check `command_no_retry` in
+  `btx_integration_policy_tests.py`.
+
 ## 2026-11-07 - Beta test change: HOME first, settings/info page, 50% brightness, 10% volume step
 
 Status: BETA TEST build change on branch `feature/remote-ui-home-first-settings`.
