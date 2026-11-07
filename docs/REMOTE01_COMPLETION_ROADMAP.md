@@ -95,7 +95,7 @@ Initial audit date: 2026-10-04. The initial audit was documentation-only. The su
 
 **2026-10-05 - Overnight work / Today's Step 1: OWNER HARDWARE VALIDATION PASS. CLOSED / PASS.** Scope: verify the overnight Codex work on real hardware/software. This is not the historical Stage1 acceptance ledger. The earlier "Overall Stage1 / Step1" wording below refers to historical Stage1 only; it must not be read as today's Step1 status.
 
-HOME/IP, carousel0->1->2->1->0, touch/controls, display idle, touch wake, lift wake and browser diagnostics owner PASS. NETWORK CONNECTED/stored1/provisioning0/IP192.168.1.83, errors/allocation_errors0, stack minimum1692 B. POWER IMU1/motions220/bus_errors0/errors0/wakes20/sleep_requests0/rounds0, minimum1256 B, wake-ready240ms; battery REAL/calibrated/valid/NORMAL. G/Y, K/!, Z not used. Exact evidence: [overnight owner closure](REMOTE01_OVERNIGHT_EXECUTION_REPORT.md#2026-10-05---overnight-work--todays-step-1-owner-closure).
+HOME/IP, carousel0->1->2->1->0, touch/controls, display idle, touch wake, lift wake and browser diagnostics owner PASS. NETWORK CONNECTED/stored1/provisioning0/IP<remote-ip>, errors/allocation_errors0, stack minimum1692 B. POWER IMU1/motions220/bus_errors0/errors0/wakes20/sleep_requests0/rounds0, minimum1256 B, wake-ready240ms; battery REAL/calibrated/valid/NORMAL. G/Y, K/!, Z not used. Exact evidence: [overnight owner closure](REMOTE01_OVERNIGHT_EXECUTION_REPORT.md#2026-10-05---overnight-work--todays-step-1-owner-closure).
 
 | Classification | Final owner decision |
 | --- | --- |

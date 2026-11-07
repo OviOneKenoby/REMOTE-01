@@ -73,7 +73,7 @@ and motion wake remain outside this correction's hardware PASS.
 | Allocation-failure / Wi-Fi-TX-refusal deltas | NOT OBSERVABLE in current HTTP diagnostics |
 
 Private evidence:
-`C:\Users\RYZEN\Documents\BTX_PRIVATE_HARDWARE_EVIDENCE\20261025T172806Z-REMOTE-radio-ownership-install`
+`<private-evidence-folder>\20261025T172806Z-REMOTE-radio-ownership-install`
 
 The earlier failure and its diagnosis remain below as historical evidence; the
 corrected-candidate results above supersede its pending-retest status.
@@ -123,7 +123,7 @@ Clean production build `remote01`: PASS, exit 0, zero warning/error lines.
 | 8 MiB factory-partition headroom | 5,805,600 bytes |
 
 Private candidate:
-`C:\Users\RYZEN\Documents\BTX_PRIVATE_CANDIDATES\20261025T130324Z-remote-radio-ownership-596cb71`
+`<private-evidence-folder>\20261025T130324Z-remote-radio-ownership-596cb71`
 
 The previously installed application and fresh 16 MiB rollback backup remain
 unchanged and independently hash-verified. No hardware was accessed for this
@@ -154,7 +154,7 @@ The partition-table sector matched the preserved layout SHA-256
 Private NVS, OTA metadata and `remote_ctl` region backups were also retained.
 
 Private evidence:
-`C:\Users\RYZEN\Documents\BTX_PRIVATE_HARDWARE_EVIDENCE\20261025T105633Z-REMOTE-BTX-integration`
+`<private-evidence-folder>\20261025T105633Z-REMOTE-BTX-integration`
 
 ## Previous installation verification (historical failed run)
 

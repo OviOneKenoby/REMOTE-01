@@ -73,7 +73,7 @@ Generic Core additions are controlled reachability update (invalidates observati
 
 ### Initial Phase B build and telemetry (before serial correction)
 
-Exact commands, unchanged installed executable `C:\Users\RYZEN\.platformio\penv\Scripts\pio.exe`:
+Exact commands, unchanged installed executable `<pio-home>\penv\Scripts\pio.exe`:
 
 ```text
 pio run -e remote01 -t clean -j 1
@@ -99,10 +99,10 @@ Limitations: one synthetic target/binding; process-local Journal; no durable reb
 
 ## Owner physical procedure — instructions only
 
-Run from `C:\Users\RYZEN\Documents\REMOTE01\Code` in a real interactive PowerShell terminal. Identify the REMOTE USB Serial/JTAG port; replace COMx. These upload/monitor commands were **not executed by Codex**:
+Run from `<user-profile>\Documents\REMOTE01\Code` in a real interactive PowerShell terminal. Identify the REMOTE USB Serial/JTAG port; replace COMx. These upload/monitor commands were **not executed by Codex**:
 
 ```powershell
-$remotePio = 'C:\Users\RYZEN\.platformio\penv\Scripts\pio.exe'
+$remotePio = '<pio-home>\penv\Scripts\pio.exe'
 & $remotePio device list
 & $remotePio run -e remote01 -t upload --upload-port COMx
 & $remotePio device monitor --port COMx --baud 115200 --echo --filter log2file
@@ -163,7 +163,7 @@ Owner hardware FAIL: the development-only Mock serial interface. On the same int
 
 ### Exact diagnosis against the resolved SDK
 
-The build's `project_description.json` selects `C:\Users\RYZEN\.platformio\packages\framework-espidf@3.50503.0`, whose version is **ESP-IDF 5.5.3**. This versioned SDK, not another installed unversioned SDK, is the source authority for the diagnosis. Project configuration/package versions are unchanged.
+The build's `project_description.json` selects `<pio-home>\packages\framework-espidf@3.50503.0`, whose version is **ESP-IDF 5.5.3**. This versioned SDK, not another installed unversioned SDK, is the source authority for the diagnosis. Project configuration/package versions are unchanged.
 
 | Question | Verified result |
 | --- | --- |
@@ -204,7 +204,7 @@ Final checksum comparison verifies the six-file correction manifest and all othe
 From the REMOTE repository in interactive PowerShell, with the same board/COM3:
 
 ```powershell
-$remotePio = 'C:\Users\RYZEN\.platformio\penv\Scripts\pio.exe'
+$remotePio = '<pio-home>\penv\Scripts\pio.exe'
 & $remotePio run -e remote01 -t upload --upload-port COM3
 & $remotePio device monitor --port COM3 --baud 115200 --echo --filter log2file
 ```

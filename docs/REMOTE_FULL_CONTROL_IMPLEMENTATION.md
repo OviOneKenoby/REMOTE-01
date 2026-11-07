@@ -248,7 +248,7 @@ TUNER dependency warning about AudioTools include ordering remains unchanged;
 no new warning was identified.
 
 Private candidates and manifests are preserved under
-`C:\Users\RYZEN\Documents\FULL_CONTROL_PRIVATE_CANDIDATES\20261026T214412Z-targeted-fixes`.
+`<private-evidence-folder>\20261026T214412Z-targeted-fixes`.
 Installation and hardware retesting require separate owner authorization.
 
 ## Milestone 1 implementation

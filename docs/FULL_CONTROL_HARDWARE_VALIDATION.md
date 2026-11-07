@@ -64,7 +64,7 @@ Only `0x10000` application regions were written; the verified partition
 tables, NVS, credentials, pairing, station data and original D: full-flash
 backups were preserved. Private commands, readbacks and partition-table
 evidence are retained under
-`FULL_CONTROL_PRIVATE_HARDWARE_EVIDENCE/20261028T040652Z-joint-fc13-stability`.
+`<private-evidence-folder>/20261028T040652Z-joint-fc13-stability`.
 
 ### Verified results
 
@@ -181,7 +181,7 @@ any of these runtime defects and remains unresolved outside this checkpoint.
 ## Validation run — 2026-10-26 (in progress)
 
 - Smoke A1: PASS. TUNER build `e51e39db9ab4`; Wi-Fi connected at
-  `192.168.1.57`; uptime advanced continuously. Last-reset reason reported
+  `<tuner-ip>`; uptime advanced continuously. Last-reset reason reported
   `watchdog` and is retained as a baseline warning, with no observed reset
   loop. Initial internal free/largest was 106,808/102,388 bytes and free PSRAM
   was 4,180,715 bytes.
@@ -190,7 +190,7 @@ any of these runtime defects and remains unresolved outside this checkpoint.
 - Smoke A3: PARTIAL PASS. Encoder volume, Pause, Play and encoder return to
   Station Select passed. Next-station behavior was NOT TESTED because only one
   saved station exists; the assembly has no Previous button.
-- Smoke A4/A5: PASS. REMOTE HOME/touch/Wi-Fi passed at `192.168.1.55`;
+- Smoke A4/A5: PASS. REMOTE HOME/touch/Wi-Fi passed at `<remote-ip>`;
   authenticated RTCP was complete with authoritative volume available and no
   operation in flight.
 - Source B1 first observation: owner confirms Radio-to-Bluetooth transition

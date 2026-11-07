@@ -91,7 +91,7 @@ pio run -e remote01 -t clean -j 1
 pio run -e remote01 -j 1
 ```
 
-The installed executable was invoked by its absolute path, `C:\Users\RYZEN\.platformio\penv\Scripts\pio.exe`. Actual clean build: **SUCCESS**, 482.39 seconds. Final correction rebuild with `pio run -e remote01 -j 1`: **SUCCESS**, 28.26 seconds. The initial measurement build discarded the detached code despite whole-archive; explicit anchors and component-only section grouping corrected that measurement, followed by the clean build and final correction rebuild. ELF symbol inspection confirms both implementation anchors, the target-size table and allocator counters are retained.
+The installed executable was invoked by its absolute path, `<pio-home>\penv\Scripts\pio.exe`. Actual clean build: **SUCCESS**, 482.39 seconds. Final correction rebuild with `pio run -e remote01 -j 1`: **SUCCESS**, 28.26 seconds. The initial measurement build discarded the detached code despite whole-archive; explicit anchors and component-only section grouping corrected that measurement, followed by the clean build and final correction rebuild. ELF symbol inspection confirms both implementation anchors, the target-size table and allocator counters are retained.
 
 | PlatformIO measurement | Before | Final | Delta |
 | --- | ---: | ---: | ---: |
@@ -190,7 +190,7 @@ Actual commands: `pio run -e remote01 -t clean -j 1`, then `pio run -e remote01 
 1. Connect the same REMOTE board and identify its port. The prepared firmware is `.pio/build/remote01/firmware.bin`; use the normal project upload so bootloader/partition handling stays correct. These PowerShell commands are instructions only, never executed by Codex:
 
 ```powershell
-$remotePio = 'C:\Users\RYZEN\.platformio\penv\Scripts\pio.exe'
+$remotePio = '<pio-home>\penv\Scripts\pio.exe'
 & $remotePio device list
 # Replace COMx with the enumerated board port.
 & $remotePio run -e remote01 -t upload --upload-port COMx

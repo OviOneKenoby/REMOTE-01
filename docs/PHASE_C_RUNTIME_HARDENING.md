@@ -6,7 +6,7 @@
 
 Read the complete changelog, frozen CCM, architecture, Core implementation report, HOME integration report and REMOTE-local Native API candidate before editing. Inspected current Core/Mock/facade/channel/runtime/UI/profile code and existing suites. No applicable AGENTS.md was found in the workspace/ancestors.
 
-`git status --short` returned `fatal: not a git repository (or any of the parent directories): .git`. No closure commit or Git diff exists in this supplied workspace; none was fabricated or initialized. Baseline is the actual post-Phase-B-closure working tree at `C:\Users\RYZEN\Documents\REMOTE01\Code`. A sorted SHA-256 manifest captured all 1,594 files outside `.pio`/`.git` before modifications: `%TEMP%\remote01-phase-c-baseline.json`, manifest SHA-256 `0ad0c7f7bea4798473d1eca675e4e67c82e800f1128f5e0553df5e4aa317b6f1`. Baseline clean/build changed none of these files. Original versions of all six changed firmware files were reconstructed and verified against their baseline hashes for the complete source diff review.
+`git status --short` returned `fatal: not a git repository (or any of the parent directories): .git`. No closure commit or Git diff exists in this supplied workspace; none was fabricated or initialized. Baseline is the actual post-Phase-B-closure working tree at `<user-profile>\Documents\REMOTE01\Code`. A sorted SHA-256 manifest captured all 1,594 files outside `.pio`/`.git` before modifications: `%TEMP%\remote01-phase-c-baseline.json`, manifest SHA-256 `0ad0c7f7bea4798473d1eca675e4e67c82e800f1128f5e0553df5e4aa317b6f1`. Baseline clean/build changed none of these files. Original versions of all six changed firmware files were reconstructed and verified against their baseline hashes for the complete source diff review.
 
 Unchanged pinned environment: PlatformIO `remote01`, espressif32 6.13.0, resolved `framework-espidf@3.50503.0` / ESP-IDF 5.5.3, Xtensa GCC 14.2.0+20251107; existing host compiler and strict warning checks. No package, toolchain, framework, library or configuration changes.
 
@@ -224,7 +224,7 @@ Added: `tests/control/hardening_tests.cpp`, this report. No deletions or unrelat
 Owner only, from this repository in interactive PowerShell:
 
 ```powershell
-$remotePio = 'C:\Users\RYZEN\.platformio\penv\Scripts\pio.exe'
+$remotePio = '<pio-home>\penv\Scripts\pio.exe'
 Get-FileHash .pio/build/remote01/firmware.bin -Algorithm SHA256
 & $remotePio run -e remote01 -t upload --upload-port COM3
 & $remotePio device monitor --port COM3 --baud 115200 --echo --filter log2file

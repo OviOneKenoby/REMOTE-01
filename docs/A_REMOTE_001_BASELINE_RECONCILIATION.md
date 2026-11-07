@@ -10,7 +10,7 @@ PM planning input `dd63c07` is not the execution revision. Assignment and public
 
 | Item | Current inspected fact / limit |
 | --- | --- |
-| Workspace | `C:/Users/RYZEN/Documents/REMOTE01/Code`, inspected 2026-10-08. No `.git` or inherited repository identity; branch/HEAD and dirty-against-commit unavailable. No Git initialization. Entry SHA inventory replaces a fabricated commit. |
+| Workspace | `<user-profile>/Documents/REMOTE01/Code`, inspected 2026-10-08. No `.git` or inherited repository identity; branch/HEAD and dirty-against-commit unavailable. No Git initialization. Entry SHA inventory replaces a fabricated commit. |
 | Inventory | 4038 files hashed at entry; 1704 outside `.pio/` published as path/hash inventory. Generated test products may be among them; no claim they are all source. |
 | Target | `platformio.ini`: remote01 / espressif32@6.13.0 / ESP-IDF package3.50503.0 / Xtensa14.2.0+20251107 / esp32-s3-devkitc-1 target / custom16MiB partitions. Device board is documented Waveshare3.49B V2 Rev1.1; no new physical inspection. |
 | Version | Existing app descriptor: project `12_LVGL_Test`, project version `1`, IDF5.5.3, build text `Oct 6 2026 23:57:20` (timezone unspecified). Not a product release identifier. sdkconfig.defaults' old5.3.2 header is not the resolved SDK. |

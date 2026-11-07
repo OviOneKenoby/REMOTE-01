@@ -11,7 +11,7 @@
 Physical evidence supplied by owner:
 
 - New partition table boots successfully from retained factory app. Physical16MiB flash was previously verified with esptool flash_id. No full-chip erase performed; NVS/Wi-Fi credentials survived.
-- Initially one authentication attempt failed, then automatic recovery succeeded: reconnects=1, finalCONNECTED, stored=1, provisioning=0, IP192.168.1.83. Captive HTTP/DNS remained disabled after normal STA connection. Do not classify the recovered attempt as an unexplained current failure or infer deliberate router-outage validation.
+- Initially one authentication attempt failed, then automatic recovery succeeded: reconnects=1, finalCONNECTED, stored=1, provisioning=0, IP<remote-ip>. Captive HTTP/DNS remained disabled after normal STA connection. Do not classify the recovered attempt as an unexplained current failure or infer deliberate router-outage validation.
 - Battery use without USB, SYS_EN power hold, buttons/UI on battery, display idle, motion wake and touchscreen wake: **OWNER HARDWARE PASS**.
 - No reboot during USB-disconnected test: boot remained19, uptime advanced approximately161s to429s. No observed brownout/WDT. This is evidence for the reported interval, not an unlimited stability claim.
 - POWER: hold=1, wakes=3, errors=0, bus_errors=0, batteryREAL/NORMAL. UC runtime: failed_allocations=0, accounting_corrupt=0, owner_ok=1, queue_rejected=0. Final network: CONNECTED, stored=1, provisioning=0, allocation_errors=0.

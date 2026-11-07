@@ -84,7 +84,7 @@ A direct ad-hoc g++ invocation lacked the MSYS runtime PATH and did not produce 
 
 Final settled complete normal: **242 PASS /0 FAIL /408,133 assertions**, native exit0. Complete soak: **242 PASS /0 FAIL /3,722,383 assertions**, native exit0. The original229 cases are retained; additions are4 network cases,1 source-boundary audit and8 offline cases. Source-boundary audit checks actual SETTINGS enqueue/factory refusal, zero-wait status copying, and absence of settings mutation calls from both HTTP services. Logs are retained as TEMP/remote01-overnight/normal-settled.log and soak-settled.log. Focused and earlier run logs are retained as well.
 
-Clean `pio run -e remote01 -t clean -j 1` succeeded (2.23s), followed by `pio run -e remote01 -j 1` (557.88s), native exit0. Installed `C:/Users/RYZEN/.platformio/penv/Scripts/platformio.exe` used. Zero compiler/CMake warning/error lines in both final logs. No incremental build substituted for final evidence. No test proves physical stack safety, Wi-Fi/IP lifecycle, UI readability, actual NVS mutation or OTA behavior on hardware.
+Clean `pio run -e remote01 -t clean -j 1` succeeded (2.23s), followed by `pio run -e remote01 -j 1` (557.88s), native exit0. Installed `<pio-home>/penv/Scripts/platformio.exe` used. Zero compiler/CMake warning/error lines in both final logs. No incremental build substituted for final evidence. No test proves physical stack safety, Wi-Fi/IP lifecycle, UI readability, actual NVS mutation or OTA behavior on hardware.
 
 ### Target resource measurements
 
@@ -165,7 +165,7 @@ No temporary objects/logs/binaries retained in product source; Python bytecode o
 ```text
 NETWORK W:
 state=CONNECTED provisioning=0 connected=1 stored=1 storage_ready=1
-ip=192.168.1.83 reconnects=0 reason=0 errors=0 allocation_errors=0
+ip=<remote-ip> reconnects=0 reason=0 errors=0 allocation_errors=0
 stack_min_bytes=1692
 
 POWER B:

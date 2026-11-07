@@ -8,7 +8,7 @@ This document defines what the separate TUNER project must eventually provide to
 
 Precedence: explicit owner decisions establish product scope; [frozen CCM 1.0.0](COMMON_CONTROL_MODEL_V1.md) governs common semantics; [product decisions](REMOTE01_PRODUCT_DECISIONS.md) and [control architecture](CONTROL_ARCHITECTURE.md) establish responsibility boundaries. The [Native API candidate](TUNER_NATIVE_API_V1.md) supplies design proposals only. Any mapping mismatch requires a TUNER correction, explicit adapter contract, or unavailable capability, never relaxation of CCM.
 
-REMOTE baseline: `C:/Users/RYZEN/Documents/REMOTE01/Code`; no Git metadata, so branch/HEAD unavailable. TUNER evidence: `OviOneKenoby/ESP32-WROVER-Internet-radio`, main, commit `371cdebce7ba2648ea71636d5bdb5d738b42e680`, firmware 1.1.0. Read-only audit checkout: `C:/Users/RYZEN/Documents/TUNER01-audit`. Evidence references below use:
+REMOTE baseline: `<user-profile>/Documents/REMOTE01/Code`; no Git metadata, so branch/HEAD unavailable. TUNER evidence: `OviOneKenoby/ESP32-WROVER-Internet-radio`, main, commit `371cdebce7ba2648ea71636d5bdb5d738b42e680`, firmware 1.1.0. Read-only audit checkout: `<user-profile>/Documents/TUNER01-audit`. Evidence references below use:
 
 - **A**: `docs/TUNER_IMPLEMENTATION_AUDIT.md`, sections A–L and defects B01–B11.
 - **S**: `docs/TUNER_REMOTE_SYSTEM_ARCHITECTURE.md`.

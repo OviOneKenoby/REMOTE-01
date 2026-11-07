@@ -2,9 +2,9 @@
 
 2026-10-04. Owner explicitly designated Stage 2A networking/provisioning as the **accepted baseline for Stage 2B**. This authorization supersedes the prior closure review's decision to stop progression; it does not turn unperformed tests into physical PASS.
 
-**Criterion I: PASS, no longer DEFERRED.** Owner performed an actual MCU reset using esptool usb_reset/hard_reset. Without intervention, stored credentials led to CONNECTING (not PROVISIONING), WPA2 association and DHCP at 192.168.1.83. A later normal firmware upload/reset independently repeated stored credentials -> CONNECTING -> association -> DHCP.
+**Criterion I: PASS, no longer DEFERRED.** Owner performed an actual MCU reset using esptool usb_reset/hard_reset. Without intervention, stored credentials led to CONNECTING (not PROVISIONING), WPA2 association and DHCP at <remote-ip>. A later normal firmware upload/reset independently repeated stored credentials -> CONNECTING -> association -> DHCP.
 
-After each reported reset: CONNECTED, provisioning=0, connected=1, stored=1, storage_ready=1, IP=192.168.1.83, reconnects=0, reason=0, errors=0, allocation_errors=0, HTTP/DNS running=0; first reset also reported RSSI=-61. These are physical owner observations, not inferred from stored=1. Earlier errors=1/reason=2 from the wrong-password attempt remain historical evidence, not contradicted by these later zero counters.
+After each reported reset: CONNECTED, provisioning=0, connected=1, stored=1, storage_ready=1, IP=<remote-ip>, reconnects=0, reason=0, errors=0, allocation_errors=0, HTTP/DNS running=0; first reset also reported RSSI=-61. These are physical owner observations, not inferred from stored=1. Earlier errors=1/reason=2 from the wrong-password attempt remain historical evidence, not contradicted by these later zero counters.
 
 Current acceptance classification: A?I and M PASS within the previously recorded observation limits; J/K router loss/recovery and L deliberate reprovision remain DEFERRED. Independent manual direct-IP fallback remains unreported; Apple/Windows physical testing is not claimed. Existing successful Android captive/protected provisioning evidence and the original two-client portal failure/correction are preserved below.
 
@@ -30,7 +30,7 @@ Evidence: owner's corrected-firmware hardware report, supplied on 2026-10-04; or
 | D. Select supported normal protected network | PASS | Intended protected home network selected and connected. Specific negotiated WPA version not supplied. |
 | E. Password entry without logging password | PASS | Credential submission exercised; supplied diagnostics contain no password. Existing audited redaction/secret-handling and automated coverage retained. No exhaustive owner log audit claimed; actual password is not recorded here. |
 | F. Leave provisioning and connect STA | PASS | CONNECTED, connected=1, provisioning=0; HTTP/DNS stopped. |
-| G. IP/RSSI/CONNECTED diagnostics | PASS | Owner W: IP=192.168.1.83, RSSI=-61, CONNECTED. No independent RF measurement claimed. |
+| G. IP/RSSI/CONNECTED diagnostics | PASS | Owner W: IP=<remote-ip>, RSSI=-61, CONNECTED. No independent RF measurement claimed. |
 | H. HOME/touch/controls remain functional | PASS | Owner reports local usability and existing Stage 1 operation, with no HOME/touch failure. No separate exhaustive control/capability retest claimed. |
 | I. Reboot retains credentials and reconnects | DEFERRED | Next natural firmware upload/reset. stored=1 is not reboot evidence; USB removal is not a reset with SYS_EN held. |
 | J. Temporary AP loss retains credentials/local usability | DEFERRED | Owner cannot intentionally disable production Wi-Fi. Wrong password recovery is a different test. |
@@ -54,7 +54,7 @@ No original criterion is marked FAIL by this corrected retest. Earlier CONNECTIO
 ```text
 NETWORK:
 state=CONNECTED provisioning=0 connected=1 stored=1 storage_ready=1
-rssi=-61 ip=192.168.1.83 reconnects=0 reason=2 scanning=0 scan_count=12
+rssi=-61 ip=<remote-ip> reconnects=0 reason=2 scanning=0 scan_count=12
 rejected=0 errors=1 allocation_errors=0
 stack_min_bytes=1796 http_stack_min_bytes=2472
 INT_free=62239 PSRAM_free=7636068

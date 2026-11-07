@@ -2,7 +2,7 @@
 
 2026-10-08. **READY FOR REVIEW — DESIGN ONLY. NOT IMPLEMENTED.**
 
-Current-main execution/publication recheck input: `8e1ab9d87c4647964bbc48d0e50982472a0b9cca`. Original design input: `dce15583873f66fd56239b3b6cb805135477719a`. Device: REMOTE. Firmware workspace: `C:/Users/RYZEN/Documents/REMOTE01/Code`. Actual coordination worktree: `C:/Users/RYZEN/AppData/Local/Temp/remote-a002/publication`; originating checkout: `C:/Users/RYZEN/Documents/REMOTE-TUNER-SYSTEM/remote_tuner_system`.
+Current-main execution/publication recheck input: `8e1ab9d87c4647964bbc48d0e50982472a0b9cca`. Original design input: `dce15583873f66fd56239b3b6cb805135477719a`. Device: REMOTE. Firmware workspace: `<user-profile>/Documents/REMOTE01/Code`. Actual coordination worktree: `<user-profile>/AppData/Local/Temp/remote-a002/publication`; originating checkout: `<user-profile>/Documents/REMOTE-TUNER-SYSTEM/remote_tuner_system`.
 
 The prior completed result package was UNPUBLISHED following owner delegation to PM. The latest owner instruction now explicitly authorizes this REMOTE executor to deliver and publish from current main. Existing design and byte-preserved evidence were rechecked and reused; this branch supplies the complete result for review. Administrative publication already completed is recorded below to prevent duplication. No firmware/test/config edits, build, upload, hardware activity, Git initialization or shared-contract approval.
 
