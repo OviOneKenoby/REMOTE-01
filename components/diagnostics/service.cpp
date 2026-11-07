@@ -17,8 +17,8 @@
 #include <new>
 namespace diagnostics {
 namespace {
-struct Storage { Snapshots copies; Ring ring; RtcpCloseHistory close_history; char response[response_bytes]{}; };
-static_assert(sizeof(Storage)<=8192);
+struct Storage { Snapshots copies; Ring ring; RtcpCloseHistory close_history; RtcpCloseHistory http_history; Snapshots http_copy; char http_sha[65]; char response[response_bytes]{}; };
+static_assert(sizeof(Storage)<=10240);
 struct Control {
   std::atomic<Storage*> storage{nullptr}; std::atomic_flag lock=ATOMIC_FLAG_INIT;
   std::atomic<bool> enabled{false}; std::atomic<unsigned> failures{0}, drops{0}, margin{0};
@@ -59,10 +59,10 @@ constexpr char page[]=R"HTML(<!doctype html><meta name="viewport" content="width
 esp_err_t home(httpd_req_t*r) {if(!request_allowed(r)||std::strcmp(r->uri,"/"))return refuse(r,"403 Forbidden");headers(r,"text/html");return httpd_resp_send(r,page,sizeof page-1);}
 esp_err_t status(httpd_req_t*r) {
   if(!request_allowed(r)||std::strcmp(r->uri,"/api/status"))return refuse(r,"403 Forbidden");
-  auto*s=ctl.storage.load();Snapshots copy{};if(!s)return refuse(r,"503 Service Unavailable","Diagnostics storage unavailable");if(!take())return refuse(r,"503 Service Unavailable","Diagnostics busy");copy=s->copies;give();
-  const auto*app=esp_app_get_description();char sha[65]{};constexpr char hex[]="0123456789abcdef";
-  for(unsigned i=0;i<32;++i) {sha[2*i]=hex[app->app_elf_sha256[i]>>4];sha[2*i+1]=hex[app->app_elf_sha256[i]&15];}
-  if(!status_json(copy,time_now(),app->project_name,app->version,sha,esp_reset_reason(),s->response,sizeof s->response))return refuse(r,"503 Service Unavailable","Diagnostics serialization overflow");
+  auto*s=ctl.storage.load();if(!s)return refuse(r,"503 Service Unavailable","Diagnostics storage unavailable");if(!take())return refuse(r,"503 Service Unavailable","Diagnostics busy");s->http_copy=s->copies;s->http_history=s->close_history;give();
+  const auto*app=esp_app_get_description();char*sha=s->http_sha;constexpr char hex[]="0123456789abcdef";
+  for(unsigned i=0;i<32;++i) {sha[2*i]=hex[app->app_elf_sha256[i]>>4];sha[2*i+1]=hex[app->app_elf_sha256[i]&15];}sha[64]=0;
+  if(!status_json(s->http_copy,time_now(),app->project_name,app->version,sha,esp_reset_reason(),s->response,sizeof s->response,&s->http_history))return refuse(r,"503 Service Unavailable","Diagnostics serialization overflow");
   headers(r,"application/json");return httpd_resp_sendstr(r,s->response);
 }
 esp_err_t events(httpd_req_t*r) {
@@ -85,9 +85,9 @@ esp_err_t events(httpd_req_t*r) {
 }
 esp_err_t rtcp_history(httpd_req_t*r) {
   if(!request_allowed(r)||std::strcmp(r->uri,"/api/rtcp-history"))return refuse(r,"403 Forbidden");
-  auto*s=ctl.storage.load();RtcpCloseHistory copy{};if(!s)return refuse(r,"503 Service Unavailable");
+  auto*s=ctl.storage.load();if(!s)return refuse(r,"503 Service Unavailable");
   if(!take())return refuse(r,"503 Service Unavailable","Diagnostics busy");
-  copy=s->close_history;give();
+  s->http_history=s->close_history;give();const RtcpCloseHistory&copy=s->http_history;
   Json j{s->response,sizeof s->response};j.text("{\"count\":");j.number(copy.count);j.text(",\"events\":[");
   for(unsigned age=0;age<copy.count&&age<copy.events.size();++age){
     const auto index=(copy.next+copy.events.size()-1-age)%copy.events.size();const auto&e=copy.events[index];
@@ -96,7 +96,10 @@ esp_err_t rtcp_history(httpd_req_t*r) {
     j.text(",\"network_generation\":");j.number(e.network_generation);j.text(",\"state\":");j.number(e.state);
     j.text(",\"reason\":");j.number(e.reason);j.text(",\"socket_error\":");j.signed_number(e.socket_error);
     j.text(",\"request\":");j.number(e.request);j.text(",\"awaited\":");j.number(e.awaited);
-    j.text(",\"response_pending\":");j.number(e.response_pending);j.text("}");
+    j.text(",\"response_pending\":");j.number(e.response_pending);
+    j.text(",\"request_type\":");j.number(e.request_type);j.text(",\"reset_reason\":");j.number(e.reset_reason);
+    j.text(",\"poll_last_ms\":");j.number(unsigned(e.poll_last_32ms)*32U);
+    j.text(",\"poll_max_ms\":");j.number(unsigned(e.poll_max_32ms)*32U);j.text("}");
   }
   j.text("]}");if(!j.ok)return refuse(r,"503 Service Unavailable");headers(r,"application/json");return httpd_resp_sendstr(r,s->response);
 }

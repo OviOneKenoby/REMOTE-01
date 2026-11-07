@@ -36,6 +36,10 @@ struct CloseEvent {
   CloseReason reason = CloseReason::none;
   std::uint8_t awaited = 0;
   std::uint8_t response_pending = 0;
+  std::uint8_t request_type = 0;
+  std::uint8_t reset_reason = 0;
+  std::uint8_t poll_last_32ms = 0;
+  std::uint8_t poll_max_32ms = 0;
 };
 static_assert(sizeof(CloseEvent) == 32);
 struct CloseHistory {
@@ -51,6 +55,11 @@ struct CloseHistory {
     return events[(next + events.size() - 1 - age) % events.size()];
   }
 };
+struct FirstReadyDisconnect {
+  CloseEvent event{};
+  bool valid() const { return event.reason != CloseReason::none; }
+};
+static_assert(sizeof(FirstReadyDisconnect) == 32);
 struct Diagnostic {
   DiagnosticStage stage = DiagnosticStage::disabled;
   DiagnosticFailure failure = DiagnosticFailure::none;
@@ -68,6 +77,13 @@ struct Diagnostic {
   std::uint8_t last_response_timeout_state = 0;
   std::uint32_t session = 0;
   CloseHistory close_history{};
+  FirstReadyDisconnect first_ready_disconnect{};
+  // True once an application snapshot response was accepted in the current
+  // session. Diagnostic-only: it gates first-failure capture and nothing else.
+  bool snapshot_received = false;
+  void reset_first_ready_disconnect() { first_ready_disconnect = {}; snapshot_received = false; }
+  void session_started() { snapshot_received = false; }
+  void snapshot_accepted() { snapshot_received = true; }
   void polled(std::uint64_t now_ms) {
     if(previous_poll_ms!=std::numeric_limits<std::uint64_t>::max() && now_ms>=previous_poll_ms) {
       const auto delta=now_ms-previous_poll_ms;
@@ -98,9 +114,14 @@ struct Diagnostic {
     close_reason = reason; error = e;
     if (close_count != std::numeric_limits<std::uint32_t>::max()) ++close_count;
   }
-  void closed(const CloseEvent& event) {
+  void closed(const CloseEvent& event, bool ready_session = false) {
     closed(event.reason, event.socket_error);
     close_history.retain(event);
+    if (!first_ready_disconnect.valid() && ready_session && snapshot_received &&
+        event.reason != CloseReason::none && event.reason != CloseReason::suspend) {
+      first_ready_disconnect.event = event;
+    }
+    snapshot_received = false;
   }
 };
 } // namespace rtcp_client

@@ -55,7 +55,7 @@ private:
   std::array<std::uint8_t,556>rx_{},tx_{};std::size_t rx_used_{0},rx_need_{56},tx_used_{0},tx_sent_{0};
   std::array<std::uint8_t,40>ch_{};std::array<std::uint8_t,56>sh_{};std::array<std::uint8_t,16>cn_{},sn_{};
   std::array<std::uint8_t,16>c2s_key_{},s2c_key_{};std::array<std::uint8_t,4>c2s_prefix_{},s2c_prefix_{};
-  std::array<std::uint8_t,8>session_id_{};std::uint64_t tx_counter_{1},rx_counter_{1},pending_request_{0};
+  std::array<std::uint8_t,8>session_id_{};std::uint64_t tx_counter_{1},rx_counter_{1},pending_request_{0};std::uint8_t pending_request_type_{0};
   wire::Identity identity_{};wire::Capabilities capabilities_{};wire::BtxCapabilities btx_capabilities_{};wire::FullControlCapabilities full_control_capabilities_{};wire::SourceState source_state_{};wire::MenuState menu_state_{};wire::CatalogPage catalog_page_{};wire::BrowserPage browser_page_{};wire::Snapshot snapshot_{};wire::NowPlaying now_playing_{};wire::Result result_{};
   wire::BtxNegotiation btx_negotiation_{};
   Awaited awaited_{Awaited::none};bool source_state_due_{false},menu_state_due_{false},now_playing_due_{false},btx_state_due_{false};
