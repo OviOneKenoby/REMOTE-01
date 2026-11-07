@@ -208,6 +208,42 @@ bool automatic_sleep_external_independent() {
   }
   return true;
 }
+bool display_idle_selectable() {
+  static_assert(Machine::system_idle_ms == 300000 && Machine::default_display_idle_ms == 30000);
+  CHECK(Machine().display_idle_ms == 30000);
+  for(Time ms:{Time(15000),Time(30000),Time(60000),Time(120000),Time(300000)}) CHECK(display_idle_choice(ms));
+  for(Time ms:{Time(0),Time(1),Time(14999),Time(29999),Time(30001),Time(59999),Time(301000),Time(600000)}) CHECK(!display_idle_choice(ms));
+  CHECK(display_idle_choices.size() == 5);
+  for(Time ms:display_idle_choices) {
+    Machine m; m.display_idle_ms = ms;
+    m.tick(ms - 1, true, External::ABSENT); CHECK(m.state == State::ACTIVE);
+    if(ms < Machine::system_idle_ms) {
+      m.tick(ms, true, External::ABSENT); CHECK(m.state == State::DISPLAY_IDLE && m.sleep_requests == 0);
+      m.tick(Machine::system_idle_ms - 1, true, External::ABSENT); CHECK(m.state == State::DISPLAY_IDLE);
+      m.tick(Machine::system_idle_ms, true, External::ABSENT); CHECK(m.state == State::SYSTEM_SLEEP && m.sleep_requests == 1);
+    }
+  }
+  { // Activity restarts the selected delay.
+    Machine m; m.display_idle_ms = 15000; m.activity(10000);
+    m.tick(24999, true, External::ABSENT); CHECK(m.state == State::ACTIVE);
+    m.tick(25000, true, External::ABSENT); CHECK(m.state == State::DISPLAY_IDLE);
+    m.wake(25001, Wake::TOUCH); CHECK(m.state == State::ACTIVE);
+    m.tick(40000, true, External::ABSENT); CHECK(m.state == State::ACTIVE);
+    m.tick(40001, true, External::ABSENT); CHECK(m.state == State::DISPLAY_IDLE);
+  }
+  { // 5 min display timeout equals the 5 min system delay: no separate idle
+    // phase when sleep is allowed; when sleep is refused the display idles and
+    // the next attempt waits 60 s, exactly as with the 30 s timeout.
+    Machine m; m.display_idle_ms = 300000;
+    m.tick(299999, true, External::ABSENT); CHECK(m.state == State::ACTIVE);
+    m.tick(300000, true, External::ABSENT); CHECK(m.state == State::SYSTEM_SLEEP && m.sleep_requests == 1);
+    Machine r; r.display_idle_ms = 300000;
+    r.tick(300000, false, External::ABSENT); CHECK(r.state == State::DISPLAY_IDLE && r.refusals == 1 && r.retry_after == 360000);
+    r.tick(359999, true, External::ABSENT); CHECK(r.state == State::DISPLAY_IDLE);
+    r.tick(360000, true, External::ABSENT); CHECK(r.state == State::SYSTEM_SLEEP);
+  }
+  return true;
+}
 bool expander_display_and_release_faults() {
   struct Outputs {
     unsigned display_calls = 0, release_calls = 0;
@@ -347,7 +383,7 @@ int main(int argc, char **argv) {
   const Test tests[] = {
 #define TEST(x) {#x, x}
     TEST(battery_truth_and_faults), TEST(battery_hysteresis), TEST(critical_qualification_and_sources), TEST(exact_threshold_convergence),
-    TEST(idle_wake_and_fail_safe), TEST(encoder_activity_display_policy), TEST(automatic_sleep_external_independent), TEST(first_touch_consumed), TEST(expander_display_and_release_faults), TEST(motion_config_and_ack), TEST(motion_failure_matrix),
+    TEST(idle_wake_and_fail_safe), TEST(encoder_activity_display_policy), TEST(automatic_sleep_external_independent), TEST(display_idle_selectable), TEST(first_touch_consumed), TEST(expander_display_and_release_faults), TEST(motion_config_and_ack), TEST(motion_failure_matrix),
     TEST(owner_session_fence), TEST(capabilities_and_disconnect_preserved), TEST(pending_refuses_sleep),
     TEST(wrong_owner_and_shutdown_recovery), TEST(repeated_power_cycles)
     , TEST(reset_record_validation_and_torn_write), TEST(reset_history_bounded_and_wrap),

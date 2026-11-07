@@ -25,6 +25,7 @@ std::atomic<bool> core_parked{false}, core_refused{false}, ui_pause{false}, ui_p
 std::atomic<bool> active{true}, consume_contact{false}, settling{false};
 std::atomic<State> published_state{State::ACTIVE};
 std::atomic<unsigned> physical_activity{0}, command{0};
+std::atomic<unsigned> selected_display_idle_ms{unsigned(Machine::default_display_idle_ms)};
 portMUX_TYPE view_mux = portMUX_INITIALIZER_UNLOCKED;
 BatteryView view;
 ExternalView external_published;
@@ -307,6 +308,7 @@ void task(void *) {
       STACK_END(COMMAND);
     }
     STACK_BEGIN(DISPLAY);
+    machine.display_idle_ms = selected_display_idle_ms.load(std::memory_order_relaxed);
     machine.tick(now, sleep_hardware && real.valid && hold, real.external);
     published_state.store(machine.state);
     if (machine.state != State::ACTIVE) active.store(false);
@@ -464,6 +466,12 @@ void task(void *) {
 }
 } // namespace
 void activity() { physical_activity.fetch_add(1); }
+bool set_display_idle_ms(unsigned ms) {
+  if (!display_idle_choice(ms)) return false;
+  selected_display_idle_ms.store(ms, std::memory_order_relaxed);
+  return true;
+}
+unsigned display_idle_ms() { return selected_display_idle_ms.load(std::memory_order_relaxed); }
 bool touch(bool pressed) {
   if (pressed) activity();
   return touch_gate.accept(pressed, active.load(), consume_contact.exchange(false), settling.load());

@@ -10,6 +10,10 @@ bool touch(bool pressed);
 // Thread-safe physical input activity. It refreshes/wakes display-idle through
 // the same POWER-owned counter as touch, but adds no SYSTEM_SLEEP wake source.
 void activity();
+// Display timeout in ms. Only the values in display_idle_choices are accepted;
+// the system sleep delay is unchanged. RAM only: the default returns at boot.
+bool set_display_idle_ms(unsigned ms);
+unsigned display_idle_ms();
 bool commands_allowed();
 // Read-only background networking may continue with the display gated off,
 // but never while SYSTEM_SLEEP/shutdown parking is active.

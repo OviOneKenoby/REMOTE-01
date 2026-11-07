@@ -21,8 +21,16 @@ struct Battery {
   void sample(bool calibrated_valid, unsigned raw_value, unsigned mv, Time now);
   bool shutdown_required() const { return valid && condition == Condition::CRITICAL && external == External::ABSENT; }
 };
+// Display timeouts the user may select (ms): 15 s, 30 s, 1 min, 2 min, 5 min.
+inline constexpr std::array<Time, 5> display_idle_choices{15000, 30000, 60000, 120000, 300000};
+constexpr bool display_idle_choice(Time ms) {
+  for (const Time choice : display_idle_choices) if (choice == ms) return true;
+  return false;
+}
 struct Machine {
-  static constexpr Time display_idle_ms = 30000, system_idle_ms = 300000;
+  static constexpr Time default_display_idle_ms = 30000, system_idle_ms = 300000;
+  // Selectable at runtime (display_idle_choice); the system sleep delay is not.
+  Time display_idle_ms = default_display_idle_ms;
   State state = State::ACTIVE;
   Wake reason = Wake::BOOT;
   Time last_activity = 0, retry_after = 0;
