@@ -27,10 +27,22 @@ constexpr bool display_idle_choice(Time ms) {
   for (const Time choice : display_idle_choices) if (choice == ms) return true;
   return false;
 }
+// System sleep delays the user may select (ms): 1, 2, 5, 10 and 30 min.
+// There is deliberately no "never" choice.
+inline constexpr std::array<Time, 5> system_idle_choices{60000, 120000, 300000, 600000, 1800000};
+constexpr bool system_idle_choice(Time ms) {
+  for (const Time choice : system_idle_choices) if (choice == ms) return true;
+  return false;
+}
+// Invariant: both values are allowed choices and the sleep delay is STRICTLY
+// greater than the display timeout (the display always idles first).
+constexpr bool sleep_settings_valid(Time display_ms, Time system_ms) {
+  return display_idle_choice(display_ms) && system_idle_choice(system_ms) && system_ms > display_ms;
+}
 struct Machine {
-  static constexpr Time default_display_idle_ms = 30000, system_idle_ms = 300000;
-  // Selectable at runtime (display_idle_choice); the system sleep delay is not.
-  Time display_idle_ms = default_display_idle_ms;
+  static constexpr Time default_display_idle_ms = 30000, default_system_idle_ms = 300000;
+  // Selectable at runtime (see SleepSettings); defaults apply at every boot.
+  Time display_idle_ms = default_display_idle_ms, system_idle_ms = default_system_idle_ms;
   State state = State::ACTIVE;
   Wake reason = Wake::BOOT;
   Time last_activity = 0, retry_after = 0;
@@ -42,6 +54,20 @@ struct Machine {
   void tick(Time now, bool sleep_safe, External source = External::UNKNOWN);
   void refuse_sleep(Time now);
 };
+// The two user-selectable delays. A setter that would break the invariant
+// (see sleep_settings_valid) is rejected and changes nothing.
+struct SleepSettings {
+  Time display_ms = Machine::default_display_idle_ms, system_ms = Machine::default_system_idle_ms;
+  bool set_display(Time ms) {
+    if (!sleep_settings_valid(ms, system_ms)) return false;
+    display_ms = ms; return true;
+  }
+  bool set_system(Time ms) {
+    if (!sleep_settings_valid(display_ms, ms)) return false;
+    system_ms = ms; return true;
+  }
+};
+static_assert(sleep_settings_valid(Machine::default_display_idle_ms, Machine::default_system_idle_ms));
 // LVGL-owner-only gesture latch. First wake contact never becomes a command.
 struct TouchGate {
   bool consume_until_release = false;

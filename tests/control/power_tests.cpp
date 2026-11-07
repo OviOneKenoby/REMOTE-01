@@ -209,18 +209,18 @@ bool automatic_sleep_external_independent() {
   return true;
 }
 bool display_idle_selectable() {
-  static_assert(Machine::system_idle_ms == 300000 && Machine::default_display_idle_ms == 30000);
-  CHECK(Machine().display_idle_ms == 30000);
+  static_assert(Machine::default_system_idle_ms == 300000 && Machine::default_display_idle_ms == 30000);
+  CHECK(Machine().display_idle_ms == 30000 && Machine().system_idle_ms == 300000);
   for(Time ms:{Time(15000),Time(30000),Time(60000),Time(120000),Time(300000)}) CHECK(display_idle_choice(ms));
   for(Time ms:{Time(0),Time(1),Time(14999),Time(29999),Time(30001),Time(59999),Time(301000),Time(600000)}) CHECK(!display_idle_choice(ms));
   CHECK(display_idle_choices.size() == 5);
   for(Time ms:display_idle_choices) {
     Machine m; m.display_idle_ms = ms;
     m.tick(ms - 1, true, External::ABSENT); CHECK(m.state == State::ACTIVE);
-    if(ms < Machine::system_idle_ms) {
+    if(ms < Machine::default_system_idle_ms) {
       m.tick(ms, true, External::ABSENT); CHECK(m.state == State::DISPLAY_IDLE && m.sleep_requests == 0);
-      m.tick(Machine::system_idle_ms - 1, true, External::ABSENT); CHECK(m.state == State::DISPLAY_IDLE);
-      m.tick(Machine::system_idle_ms, true, External::ABSENT); CHECK(m.state == State::SYSTEM_SLEEP && m.sleep_requests == 1);
+      m.tick(Machine::default_system_idle_ms - 1, true, External::ABSENT); CHECK(m.state == State::DISPLAY_IDLE);
+      m.tick(Machine::default_system_idle_ms, true, External::ABSENT); CHECK(m.state == State::SYSTEM_SLEEP && m.sleep_requests == 1);
     }
   }
   { // Activity restarts the selected delay.
@@ -241,6 +241,74 @@ bool display_idle_selectable() {
     r.tick(300000, false, External::ABSENT); CHECK(r.state == State::DISPLAY_IDLE && r.refusals == 1 && r.retry_after == 360000);
     r.tick(359999, true, External::ABSENT); CHECK(r.state == State::DISPLAY_IDLE);
     r.tick(360000, true, External::ABSENT); CHECK(r.state == State::SYSTEM_SLEEP);
+  }
+  return true;
+}
+bool system_sleep_selectable() {
+  // Value list: exactly 1, 2, 5, 10 and 30 minutes; no "never".
+  CHECK(system_idle_choices.size() == 5);
+  const Time wanted[] = {60000, 120000, 300000, 600000, 1800000};
+  for (unsigned i = 0; i < 5; ++i) CHECK(system_idle_choices[i] == wanted[i] && system_idle_choice(wanted[i]));
+  for (Time ms : {Time(0), Time(1), Time(30000), Time(59999), Time(60001), Time(180000), Time(900000),
+                  Time(1800001), Time(3600000), Time(UINT64_MAX), Time(UINT32_MAX)})
+    CHECK(!system_idle_choice(ms));
+  // Sleep is entered at exactly the selected delay (from last activity), after the display idles.
+  for (Time ms : system_idle_choices) {
+    Machine m; m.system_idle_ms = ms;
+    m.tick(30000, true, External::ABSENT); CHECK(m.state == State::DISPLAY_IDLE);
+    m.tick(ms - 1, true, External::ABSENT); CHECK(m.state == State::DISPLAY_IDLE && m.sleep_requests == 0);
+    m.tick(ms, true, External::ABSENT); CHECK(m.state == State::SYSTEM_SLEEP && m.sleep_requests == 1);
+    // Activity restarts the selected delay.
+    Machine a; a.system_idle_ms = ms; a.activity(7000);
+    a.tick(7000 + ms - 1, true, External::ABSENT); CHECK(a.state != State::SYSTEM_SLEEP);
+    a.tick(7000 + ms, true, External::ABSENT); CHECK(a.state == State::SYSTEM_SLEEP);
+    // A refusal still waits 60 s before the next attempt, whatever the delay.
+    Machine r; r.system_idle_ms = ms;
+    r.tick(ms, false, External::ABSENT); CHECK(r.state == State::DISPLAY_IDLE && r.refusals == 1 && r.retry_after == ms + 60000);
+    r.tick(ms + 59999, true, External::ABSENT); CHECK(r.state == State::DISPLAY_IDLE);
+    r.tick(ms + 60000, true, External::ABSENT); CHECK(r.state == State::SYSTEM_SLEEP);
+  }
+  // Display timeout and sleep delay combined: display idles first, then sleep.
+  Machine both; both.display_idle_ms = 120000; both.system_idle_ms = 600000;
+  both.tick(119999, true, External::ABSENT); CHECK(both.state == State::ACTIVE);
+  both.tick(120000, true, External::ABSENT); CHECK(both.state == State::DISPLAY_IDLE);
+  both.tick(599999, true, External::ABSENT); CHECK(both.state == State::DISPLAY_IDLE);
+  both.tick(600000, true, External::ABSENT); CHECK(both.state == State::SYSTEM_SLEEP);
+  return true;
+}
+bool sleep_settings_invariant() {
+  // Defaults satisfy it and are what every boot starts with.
+  SleepSettings s;
+  CHECK(s.display_ms == 30000 && s.system_ms == 300000 && sleep_settings_valid(s.display_ms, s.system_ms));
+  // The rule: both allowed values and system strictly greater than display.
+  for (Time d : display_idle_choices)
+    for (Time y : system_idle_choices) CHECK(sleep_settings_valid(d, y) == (y > d));
+  CHECK(!sleep_settings_valid(300000, 300000));  // equal is rejected
+  CHECK(!sleep_settings_valid(30000, 45000) && !sleep_settings_valid(45000, 300000));
+  // Setter: sleep side.
+  CHECK(s.set_system(60000) && s.system_ms == 60000);          // 30 s < 1 min
+  CHECK(!s.set_display(60000) && s.display_ms == 30000);       // equal to sleep: rejected, no change
+  CHECK(!s.set_display(120000) && s.display_ms == 30000);      // above sleep: rejected, no change
+  CHECK(s.set_display(15000) && s.display_ms == 15000);
+  CHECK(!s.set_system(0) && !s.set_system(61000) && s.system_ms == 60000);  // not a choice: no change
+  CHECK(s.set_system(120000) && s.set_display(60000) && s.display_ms == 60000 && s.system_ms == 120000);
+  CHECK(!s.set_system(60000) && s.system_ms == 120000 && s.display_ms == 60000);  // equal to display
+  // Setter: display side. Selecting a 5 min screen-off needs a longer sleep first.
+  SleepSettings d;
+  CHECK(!d.set_display(300000) && d.display_ms == 30000 && d.system_ms == 300000);  // default sleep is 5 min
+  CHECK(d.set_system(600000) && d.set_display(300000) && d.display_ms == 300000);
+  CHECK(!d.set_system(300000) && !d.set_system(120000) && !d.set_system(60000) && d.system_ms == 600000);
+  CHECK(d.set_system(1800000) && d.system_ms == 1800000);
+  CHECK(!d.set_display(7) && d.display_ms == 300000);
+  // Whatever the call sequence, the state never leaves the valid set.
+  unsigned seed = 12345;
+  SleepSettings f;
+  const Time probes[] = {0, 15000, 30000, 60000, 120000, 300000, 600000, 1800000, 45000, 3600000};
+  for (unsigned i = 0; i < 20000; ++i) {
+    seed = seed * 1664525u + 1013904223u;
+    const Time v = probes[(seed >> 16) % 10];
+    if ((seed >> 8) & 1) (void)f.set_display(v); else (void)f.set_system(v);
+    CHECK(sleep_settings_valid(f.display_ms, f.system_ms));
   }
   return true;
 }
@@ -383,7 +451,7 @@ int main(int argc, char **argv) {
   const Test tests[] = {
 #define TEST(x) {#x, x}
     TEST(battery_truth_and_faults), TEST(battery_hysteresis), TEST(critical_qualification_and_sources), TEST(exact_threshold_convergence),
-    TEST(idle_wake_and_fail_safe), TEST(encoder_activity_display_policy), TEST(automatic_sleep_external_independent), TEST(display_idle_selectable), TEST(first_touch_consumed), TEST(expander_display_and_release_faults), TEST(motion_config_and_ack), TEST(motion_failure_matrix),
+    TEST(idle_wake_and_fail_safe), TEST(encoder_activity_display_policy), TEST(automatic_sleep_external_independent), TEST(display_idle_selectable), TEST(system_sleep_selectable), TEST(sleep_settings_invariant), TEST(first_touch_consumed), TEST(expander_display_and_release_faults), TEST(motion_config_and_ack), TEST(motion_failure_matrix),
     TEST(owner_session_fence), TEST(capabilities_and_disconnect_preserved), TEST(pending_refuses_sleep),
     TEST(wrong_owner_and_shutdown_recovery), TEST(repeated_power_cycles)
     , TEST(reset_record_validation_and_torn_write), TEST(reset_history_bounded_and_wrap),

@@ -30,7 +30,7 @@ checks = {
     "timeout_goes_through_power_api": "power_management::set_display_idle_ms(ui_settings::timeout_choices[index].ms)" in settings_block,
     "timeout_state_read_from_power_api": "ui_settings::timeout_index(power_management::display_idle_ms())" in settings_block,
     "timeout_value_validated_in_power": "if (!display_idle_choice(ms)) return false;" in power_rt,
-    "system_idle_unchanged": "system_idle_ms = 300000" in power_model,
+    "system_idle_default_unchanged": "default_system_idle_ms = 300000" in power_model,
     "display_idle_applied_before_tick": power_rt.index("machine.display_idle_ms = selected_display_idle_ms") < power_rt.index("machine.tick(now,"),
     "timeout_not_persisted": "nvs" not in settings_block.lower() and "persist" not in settings_block.lower(),
     # Information rows: only existing sources

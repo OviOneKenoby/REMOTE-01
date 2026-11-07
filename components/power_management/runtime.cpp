@@ -25,7 +25,10 @@ std::atomic<bool> core_parked{false}, core_refused{false}, ui_pause{false}, ui_p
 std::atomic<bool> active{true}, consume_contact{false}, settling{false};
 std::atomic<State> published_state{State::ACTIVE};
 std::atomic<unsigned> physical_activity{0}, command{0};
-std::atomic<unsigned> selected_display_idle_ms{unsigned(Machine::default_display_idle_ms)};
+// Both delays in one word (display << 32 | system) so the invariant is checked and
+// applied atomically; the POWER worker reads it every loop.
+constexpr std::uint64_t pack_delays(Time display_ms, Time system_ms) { return (std::uint64_t(display_ms) << 32) | std::uint64_t(system_ms); }
+std::atomic<std::uint64_t> selected_delays{pack_delays(Machine::default_display_idle_ms, Machine::default_system_idle_ms)};
 portMUX_TYPE view_mux = portMUX_INITIALIZER_UNLOCKED;
 BatteryView view;
 ExternalView external_published;
@@ -288,7 +291,7 @@ void task(void *) {
       ESP_LOGI("POWER_DEV", "key=%c DEVELOPMENT_ONLY source=%s", char(key), injection ? "SIMULATED" : "REAL");
       switch (key) {
         case 'I': machine.state = State::DISPLAY_IDLE; machine.activity(now); break;
-        case 'Z': machine.last_activity = now >= Machine::system_idle_ms ? now - Machine::system_idle_ms : 0;
+        case 'Z': machine.last_activity = now >= machine.system_idle_ms ? now - machine.system_idle_ms : 0;
           // Explicit DEVELOPMENT_ONLY override; never normal idle policy.
           if (sleep_hardware && real.valid && hold) { machine.state = State::SYSTEM_SLEEP; forced_sleep=true; ++machine.sleep_requests; }
           else ESP_LOGW("POWER", "forced_sleep=REFUSED wake_or_measurement_prerequisite=0");
@@ -308,7 +311,10 @@ void task(void *) {
       STACK_END(COMMAND);
     }
     STACK_BEGIN(DISPLAY);
-    machine.display_idle_ms = selected_display_idle_ms.load(std::memory_order_relaxed);
+    {
+      const auto delays = selected_delays.load(std::memory_order_relaxed);
+      machine.display_idle_ms = delays >> 32; machine.system_idle_ms = delays & 0xffffffffu;
+    }
     machine.tick(now, sleep_hardware && real.valid && hold, real.external);
     published_state.store(machine.state);
     if (machine.state != State::ACTIVE) active.store(false);
@@ -414,7 +420,7 @@ void task(void *) {
       reset_report();
       report_external();
       ESP_LOGI("POWER", "awake_irq_type=%u expected_negedge=%u gpio_low=%u irq_service_core=%d worker_cpu=%d", unsigned(GPIO.pin[8].int_type), unsigned(GPIO_INTR_NEGEDGE), gpio_get_level(GPIO_NUM_8) == 0, irq_core, int(xPortGetCoreID()));
-      ESP_LOGI("POWER", "automatic_system_sleep=ENABLED external_gate=NONE system_idle_ms=300000 forced_sleep=DEVELOPMENT_ONLY");
+      ESP_LOGI("POWER", "automatic_system_sleep=ENABLED external_gate=NONE display_idle_ms=%llu system_idle_ms=%llu forced_sleep=DEVELOPMENT_ONLY", static_cast<unsigned long long>(machine.display_idle_ms), static_cast<unsigned long long>(machine.system_idle_ms));
       ESP_LOGI("POWER", "state=%s hold=%u wake=%u wakes=%llu sleep_requests=%llu rounds=%llu errors=%llu idle_ms=%llu IMU=%u motions=%llu bus_errors=%llu", state_name(machine.state), hold, unsigned(machine.reason), static_cast<unsigned long long>(machine.wakes), static_cast<unsigned long long>(machine.sleep_requests), sleep_rounds, sleep_errors, static_cast<unsigned long long>(now - machine.last_activity), board.imu_ready, motions, bus_errors);
       ESP_LOGI("BATTERY", "source=REAL calibrated=%u raw=%u mv=%u filtered_mv=%u valid=%u condition=%s external=%s charging=UNKNOWN SOC=UNAVAILABLE read_errors=%llu injection=%u simulated_mv=%u simulated_condition=%s dry_run=1", board.adc_ready, real.raw, real.voltage_mv, real.filtered_mv, real.valid, condition_name(real.condition), external_name(external_measurement.view.state), measurement_errors, injection, simulated.filtered_mv, condition_name(simulated.condition));
       ESP_LOGI("POWER", "stack_min_bytes=%u INT_free=%u PSRAM_free=%u", unsigned(uxTaskGetStackHighWaterMark(nullptr)), unsigned(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)), unsigned(heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)));
@@ -466,12 +472,25 @@ void task(void *) {
 }
 } // namespace
 void activity() { physical_activity.fetch_add(1); }
-bool set_display_idle_ms(unsigned ms) {
-  if (!display_idle_choice(ms)) return false;
-  selected_display_idle_ms.store(ms, std::memory_order_relaxed);
-  return true;
+namespace {
+template <class Change> bool change_delays(Change change) {
+  auto current = selected_delays.load(std::memory_order_relaxed);
+  for (;;) {
+    SleepSettings settings{current >> 32, current & 0xffffffffu};
+    if (!change(settings)) return false;
+    if (selected_delays.compare_exchange_weak(current, pack_delays(settings.display_ms, settings.system_ms),
+                                              std::memory_order_relaxed)) return true;
+  }
 }
-unsigned display_idle_ms() { return selected_display_idle_ms.load(std::memory_order_relaxed); }
+} // namespace
+bool set_display_idle_ms(unsigned ms) {
+  return change_delays([ms](SleepSettings &s) { return s.set_display(ms); });
+}
+unsigned display_idle_ms() { return unsigned(selected_delays.load(std::memory_order_relaxed) >> 32); }
+bool set_system_idle_ms(unsigned ms) {
+  return change_delays([ms](SleepSettings &s) { return s.set_system(ms); });
+}
+unsigned system_idle_ms() { return unsigned(selected_delays.load(std::memory_order_relaxed) & 0xffffffffu); }
 bool touch(bool pressed) {
   if (pressed) activity();
   return touch_gate.accept(pressed, active.load(), consume_contact.exchange(false), settling.load());
