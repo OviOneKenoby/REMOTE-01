@@ -39,7 +39,7 @@ checks = {
     "freshness_withdrawal": "btx_authoritative_" in adapter and
                             "btx_observed_at_" in adapter,
     "home_bound": "char title[227]{}, subtitle[32]{}" in api,
-    "volume_unchanged": "static constexpr std::uint8_t volume_step = 2" in api,
+    "volume_step_is_ten": "static constexpr std::uint8_t volume_step = 10" in api,
     "no_new_task": "xTaskCreate" not in client and "xTaskCreate" not in adapter,
 }
 

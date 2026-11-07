@@ -4,6 +4,9 @@
 namespace {
 using namespace control_home;
 unsigned assertions = 0;
+// The step is read from the channel: no test may hard-code it.
+constexpr unsigned S = Channel::volume_step;
+static_assert(S == 10, "the volume step is 10 %");
 #define CHECK(x) do { ++assertions; if (!(x)) { std::printf("FAIL line=%d %s\n", __LINE__, #x); return false; } } while (0)
 
 Snapshot ready(std::uint8_t volume = 50) {
@@ -51,10 +54,11 @@ bool decision_is_unchanged_and_counted() {
   CHECK(c.request(Action::VOLUME_UP));
   CHECK(c.volume_attempts == 2 && c.volume_accepted == 2);
   CHECK(c.last_volume_admission == VolumeAdmission::ACCEPTED);
-  Snapshot confirmed = ready(72);
-  CHECK(c.volume_outstanding&&c.volume_target==72);
-  Intent next;CHECK(c.pop(next)&&next.volume==72);
-  confirmed.volume=72;c.publish(confirmed);
+  const auto target = static_cast<std::uint8_t>(68 + 2 * S);
+  Snapshot confirmed = ready(target);
+  CHECK(c.volume_outstanding&&c.volume_target==target);
+  Intent next;CHECK(c.pop(next)&&next.volume==target);
+  confirmed.volume=target;c.publish(confirmed);
   CHECK(!c.volume_outstanding&&!c.desired_volume_valid);
   CHECK(c.request(Action::VOLUME_DOWN));
   CHECK(c.volume_attempts == 3 && c.volume_accepted == 3);
@@ -65,7 +69,7 @@ bool exact_resolution_and_lifecycle_fencing() {
   Channel c;c.publish(ready(100));
   CHECK(c.request(Action::VOLUME_DOWN));
   Intent first;CHECK(c.pop(first));
-  CHECK(first.volume==98&&c.volume_outstanding&&c.volume_token==first.token);
+  CHECK(first.volume==100-S&&c.volume_outstanding&&c.volume_token==first.token);
   CHECK(!c.resolve(first.token+1,VolumeResolution::DEFINITE_FAILURE));
   CHECK(!c.resolve(first.token,VolumeResolution::UNCERTAIN));
   CHECK(c.resolve(first.token,VolumeResolution::CONFIRMED));
@@ -77,10 +81,10 @@ bool exact_resolution_and_lifecycle_fencing() {
   Intent second;CHECK(c.pop(second));
   CHECK(c.request(Action::VOLUME_DOWN));
   CHECK(c.last_volume_admission==VolumeAdmission::ACCEPTED);
-  c.publish(ready(98));
-  CHECK(c.volume_outstanding&&c.volume_target==96);
-  Intent queued;CHECK(c.pop(queued)&&queued.volume==96);
-  c.publish(ready(96));
+  c.publish(ready(100-S));
+  CHECK(c.volume_outstanding&&c.volume_target==100-2*S);
+  Intent queued;CHECK(c.pop(queued)&&queued.volume==100-2*S);
+  c.publish(ready(100-2*S));
   CHECK(!c.volume_outstanding);
 
   CHECK(c.request(Action::VOLUME_DOWN));
@@ -103,10 +107,10 @@ bool rapid_accumulation_reversal_and_bounds() {
   for (unsigned steps : {1u,3u,5u}) {
     Channel c;c.publish(ready(95));
     for (unsigned i=0;i<steps;++i)CHECK(c.request(Action::VOLUME_DOWN));
-    CHECK(c.count==1&&c.desired_volume==95-2*steps);
-    Intent command;CHECK(c.pop(command));CHECK(command.volume==95-2*steps);
-    c.publish(ready(static_cast<std::uint8_t>(95-2*steps)));
-    CHECK(!c.volume_outstanding&&!c.desired_volume_valid&&c.latest.volume==95-2*steps);
+    CHECK(c.count==1&&c.desired_volume==95-S*steps);
+    Intent command;CHECK(c.pop(command));CHECK(command.volume==95-S*steps);
+    c.publish(ready(static_cast<std::uint8_t>(95-S*steps)));
+    CHECK(!c.volume_outstanding&&!c.desired_volume_valid&&c.latest.volume==95-S*steps);
   }
   Channel reversal;reversal.publish(ready(50));
   CHECK(reversal.request(Action::VOLUME_DOWN));
@@ -114,9 +118,9 @@ bool rapid_accumulation_reversal_and_bounds() {
   CHECK(reversal.request(Action::VOLUME_DOWN));
   CHECK(reversal.request(Action::VOLUME_UP));
   CHECK(reversal.request(Action::VOLUME_UP));
-  CHECK(reversal.desired_volume==48);
-  Intent command;CHECK(reversal.pop(command)&&command.volume==48);
-  reversal.publish(ready(48));
+  CHECK(reversal.desired_volume==50-S);
+  Intent command;CHECK(reversal.pop(command)&&command.volume==50-S);
+  reversal.publish(ready(50-S));
   CHECK(!reversal.volume_outstanding&&!reversal.desired_volume_valid);
 
   Channel cancelled;cancelled.publish(ready(50));
@@ -136,20 +140,20 @@ bool rapid_accumulation_reversal_and_bounds() {
   return true;
 }
 
-bool fixed_two_point_examples() {
+bool fixed_step_examples() {
   Channel up; up.publish(ready(50));
   CHECK(up.request(Action::VOLUME_UP));
-  Intent command; CHECK(up.pop(command) && command.volume == 52);
+  Intent command; CHECK(up.pop(command) && command.volume == 50 + S);
   Channel down; down.publish(ready(50));
   CHECK(down.request(Action::VOLUME_DOWN));
-  CHECK(down.pop(command) && command.volume == 48);
+  CHECK(down.pop(command) && command.volume == 50 - S);
 
   Channel high; high.publish(ready(80));
-  for (unsigned i = 0; i < 10; ++i) CHECK(high.request(Action::VOLUME_UP));
+  for (unsigned i = 0; i < (100 - 80) / S; ++i) CHECK(high.request(Action::VOLUME_UP));
   CHECK(high.desired_volume == 100);
   CHECK(!high.request(Action::VOLUME_UP));
   Channel low; low.publish(ready(80));
-  for (unsigned i = 0; i < 10; ++i) CHECK(low.request(Action::VOLUME_DOWN));
+  for (unsigned i = 0; i < (80 - 60) / S; ++i) CHECK(low.request(Action::VOLUME_DOWN));
   CHECK(low.desired_volume == 60);
 
   Channel odd_high; odd_high.publish(ready(99));
@@ -167,10 +171,14 @@ bool fixed_two_point_examples() {
 
 bool bounded_latency_model_and_provisional_view() {
   Channel c;c.publish(ready(95),0);
+  constexpr unsigned kRequests = 6;                       // 4 ms apart
+  constexpr std::uint64_t last_request_ms = 4 * (kRequests - 1);
+  constexpr unsigned final_volume = 95 - kRequests * S;   // 35
+  static_assert(95 >= kRequests * S);
   unsigned submissions=0;std::uint64_t response_at=UINT64_MAX;
   std::uint8_t response_volume=0;std::uint64_t first_audio=UINT64_MAX;
   for(std::uint64_t now=0;now<=250;++now) {
-    if(now<60 && now%4==0) CHECK(c.request(Action::VOLUME_DOWN,now));
+    if(now<4*kRequests && now%4==0) CHECK(c.request(Action::VOLUME_DOWN,now));
     if(now==response_at) {
       if(first_audio==UINT64_MAX) first_audio=now;
       c.publish(ready(response_volume),now);
@@ -184,15 +192,15 @@ bool bounded_latency_model_and_provisional_view() {
       const auto view=c.view();
       CHECK(view.volume==95&&view.desired_volume_known&&view.desired_volume<95&&view.volume_pending);
     }
-    if(!c.volume_outstanding&&!c.desired_volume_valid&&c.latest.volume==65) {
+    if(!c.volume_outstanding&&!c.desired_volume_valid&&c.latest.volume==final_volume) {
       CHECK(first_audio<100);
-      CHECK(now-56<250);
+      CHECK(now-last_request_ms<250);
       CHECK(submissions<=3);
       CHECK(c.last_authoritative_ms==now);
       std::printf("LATENCY MODEL first_command_ms=0 first_audio_ms=%llu "
                   "final_after_last_ms=%llu ui_refresh_ms=20 submissions=%u\n",
                   static_cast<unsigned long long>(first_audio),
-                  static_cast<unsigned long long>(now-56), submissions);
+                  static_cast<unsigned long long>(now-last_request_ms), submissions);
       return true;
     }
   }
@@ -203,7 +211,7 @@ bool bounded_latency_model_and_provisional_view() {
 bool external_change_and_invalidation_do_not_replay() {
   Channel c;c.publish(ready(50),1);
   CHECK(c.request(Action::VOLUME_UP,2));
-  Intent command;CHECK(c.pop(command)&&command.volume==52);
+  Intent command;CHECK(c.pop(command)&&command.volume==50+S);
   auto disconnected=ready(70);disconnected.connection=Connection::UNAVAILABLE;
   c.publish(disconnected,3);
   CHECK(!c.volume_outstanding&&!c.desired_volume_valid&&c.count==0);
@@ -215,13 +223,13 @@ bool external_change_and_invalidation_do_not_replay() {
 bool in_flight_reversal_and_external_authority() {
   Channel reversal;reversal.publish(ready(50),1);
   CHECK(reversal.request(Action::VOLUME_DOWN,2));
-  Intent first;CHECK(reversal.pop(first)&&first.volume==48);
+  Intent first;CHECK(reversal.pop(first)&&first.volume==50-S);
   CHECK(reversal.request(Action::VOLUME_DOWN,3));
   CHECK(reversal.request(Action::VOLUME_UP,4));
   CHECK(reversal.request(Action::VOLUME_UP,5));
   CHECK(reversal.desired_volume==50&&reversal.count==0);
   CHECK(reversal.resolve(first.token,VolumeResolution::CONFIRMED));
-  reversal.publish(ready(48),6);
+  reversal.publish(ready(50-S),6);
   Intent successor;CHECK(reversal.pop(successor)&&successor.volume==50);
   CHECK(reversal.resolve(successor.token,VolumeResolution::CONFIRMED));
   reversal.publish(ready(50),7);
@@ -229,9 +237,9 @@ bool in_flight_reversal_and_external_authority() {
 
   Channel external;external.publish(ready(50),1);
   CHECK(external.request(Action::VOLUME_DOWN,2));
-  Intent command;CHECK(external.pop(command)&&command.volume==48);
+  Intent command;CHECK(external.pop(command)&&command.volume==50-S);
   CHECK(external.request(Action::VOLUME_DOWN,3));
-  CHECK(external.desired_volume==46);
+  CHECK(external.desired_volume==50-2*S);
   CHECK(external.resolve(command.token,VolumeResolution::CONFIRMED));
   external.publish(ready(60),4);
   CHECK(external.latest.volume==60&&!external.volume_outstanding);
@@ -242,64 +250,64 @@ bool in_flight_reversal_and_external_authority() {
 bool confirmed_result_does_not_discard_newer_accumulated_target() {
   Channel slow;slow.publish(ready(53),1);
   std::uint64_t now=2;
-  for(unsigned i=0;i<10;++i) {
+  for(unsigned i=0;i<5;++i) {
     const auto before=slow.latest.volume;
     CHECK(slow.request(Action::VOLUME_DOWN,now++));
-    Intent command;CHECK(slow.pop(command)&&command.volume==before-2);
+    Intent command;CHECK(slow.pop(command)&&command.volume==before-S);
     CHECK(slow.resolve(command.token,VolumeResolution::CONFIRMED));
     slow.publish(ready(before),now++);
-    slow.publish(ready(static_cast<std::uint8_t>(before-2)),now++);
+    slow.publish(ready(static_cast<std::uint8_t>(before-S)),now++);
     CHECK(!slow.volume_outstanding&&!slow.desired_volume_valid);
   }
-  CHECK(slow.volume_accepted==10&&slow.latest.volume==33);
+  CHECK(slow.volume_accepted==5&&slow.latest.volume==53-5*S);
 
   Channel c;c.publish(ready(53),1);
   CHECK(c.request(Action::VOLUME_DOWN,2));
-  Intent first;CHECK(c.pop(first)&&first.volume==51);
-  for(unsigned i=0;i<4;++i)CHECK(c.request(Action::VOLUME_DOWN,3+i));
-  CHECK(c.desired_volume==43&&c.volume_accepted==5);
+  Intent first;CHECK(c.pop(first)&&first.volume==53-S);
+  for(unsigned i=0;i<2;++i)CHECK(c.request(Action::VOLUME_DOWN,3+i));
+  CHECK(c.desired_volume==53-3*S&&c.volume_accepted==3);
   CHECK(c.resolve(first.token,VolumeResolution::CONFIRMED));
   // The runtime republishes its unchanged pre-command observation until the
   // next acquisition. It must not erase the newer locally accumulated target.
   c.publish(ready(53),7);
-  CHECK(c.volume_outstanding&&c.desired_volume==43);
-  c.publish(ready(51),8);
-  Intent second;CHECK(c.pop(second)&&second.volume==43);
-  for(unsigned i=0;i<5;++i)CHECK(c.request(Action::VOLUME_DOWN,9+i));
-  CHECK(c.desired_volume==33&&c.volume_accepted==10);
+  CHECK(c.volume_outstanding&&c.desired_volume==53-3*S);
+  c.publish(ready(53-S),8);
+  Intent second;CHECK(c.pop(second)&&second.volume==53-3*S);
+  for(unsigned i=0;i<2;++i)CHECK(c.request(Action::VOLUME_DOWN,9+i));
+  CHECK(c.desired_volume==53-5*S&&c.volume_accepted==5);
   CHECK(c.resolve(second.token,VolumeResolution::CONFIRMED));
-  c.publish(ready(51),14);
-  CHECK(c.volume_outstanding&&c.desired_volume==33);
-  c.publish(ready(43),15);
-  Intent final;CHECK(c.pop(final)&&final.volume==33);
+  c.publish(ready(53-S),14);
+  CHECK(c.volume_outstanding&&c.desired_volume==53-5*S);
+  c.publish(ready(53-3*S),15);
+  Intent final;CHECK(c.pop(final)&&final.volume==53-5*S);
   CHECK(c.resolve(final.token,VolumeResolution::CONFIRMED));
-  c.publish(ready(43),16);
-  CHECK(c.volume_outstanding&&c.desired_volume==33);
-  c.publish(ready(33),17);
-  CHECK(!c.volume_outstanding&&!c.desired_volume_valid&&c.latest.volume==33);
+  c.publish(ready(53-3*S),16);
+  CHECK(c.volume_outstanding&&c.desired_volume==53-5*S);
+  c.publish(ready(53-5*S),17);
+  CHECK(!c.volume_outstanding&&!c.desired_volume_valid&&c.latest.volume==53-5*S);
   CHECK(c.volume_accepted==slow.volume_accepted&&
         c.latest.volume==slow.latest.volume);
 
   Channel reversal;reversal.publish(ready(53),1);
   CHECK(reversal.request(Action::VOLUME_DOWN,2));
-  Intent down;CHECK(reversal.pop(down)&&down.volume==51);
+  Intent down;CHECK(reversal.pop(down)&&down.volume==53-S);
   CHECK(reversal.request(Action::VOLUME_DOWN,3));
   CHECK(reversal.request(Action::VOLUME_DOWN,4));
   CHECK(reversal.request(Action::VOLUME_UP,5));
   CHECK(reversal.request(Action::VOLUME_UP,6));
-  CHECK(reversal.desired_volume==51&&reversal.volume_accepted==5);
+  CHECK(reversal.desired_volume==53-S&&reversal.volume_accepted==5);
   CHECK(reversal.resolve(down.token,VolumeResolution::CONFIRMED));
   reversal.publish(ready(53),7);
-  CHECK(reversal.volume_outstanding&&reversal.desired_volume==51);
-  reversal.publish(ready(51),8);
+  CHECK(reversal.volume_outstanding&&reversal.desired_volume==53-S);
+  reversal.publish(ready(53-S),8);
   CHECK(!reversal.volume_outstanding&&!reversal.desired_volume_valid&&
-        reversal.latest.volume==51);
+        reversal.latest.volume==53-S);
   return true;
 }
 
 bool uncertain_and_invalidation_cancel_safely() {
   Channel c;c.publish(ready(60));
-  for(unsigned i=0;i<30;++i)
+  for(unsigned i=0;i<60/S;++i)
     CHECK(c.request(Action::VOLUME_DOWN));
   CHECK(!c.request(Action::VOLUME_DOWN));
   CHECK(c.last_volume_admission==VolumeAdmission::AT_MINIMUM);
@@ -319,41 +327,41 @@ bool d009_capability_revision_does_not_drop_accumulated_target() {
   CHECK(queued.request(Action::VOLUME_DOWN,2));
   auto queued_revision=ready(53);queued_revision.capability_revision=2;
   queued.publish(queued_revision,3);
-  Intent refreshed;CHECK(queued.pop(refreshed)&&refreshed.volume==51&&
+  Intent refreshed;CHECK(queued.pop(refreshed)&&refreshed.volume==53-S&&
                          refreshed.capability_revision==2);
 
   Channel c;c.publish(ready(53),1);
   CHECK(c.request(Action::VOLUME_DOWN,2));
-  Intent first;CHECK(c.pop(first)&&first.volume==51);
-  for(unsigned i=0;i<9;++i)CHECK(c.request(Action::VOLUME_DOWN,3+i));
-  CHECK(c.desired_volume==33&&c.volume_accepted==10&&c.count==0);
+  Intent first;CHECK(c.pop(first)&&first.volume==53-S);
+  for(unsigned i=0;i<4;++i)CHECK(c.request(Action::VOLUME_DOWN,3+i));
+  CHECK(c.desired_volume==53-5*S&&c.volume_accepted==5&&c.count==0);
 
   // A D-009 playback-context availability update advances the target-wide
   // capability revision while volume authority remains valid.
   auto revised=ready(53);revised.capability_revision=2;c.publish(revised,12);
-  CHECK(c.volume_outstanding&&c.desired_volume_valid&&c.desired_volume==33);
+  CHECK(c.volume_outstanding&&c.desired_volume_valid&&c.desired_volume==53-5*S);
   CHECK(c.resolve(first.token,VolumeResolution::CONFIRMED));
-  revised.volume=51;c.publish(revised,13);
-  Intent successor;CHECK(c.pop(successor)&&successor.volume==33&&
+  revised.volume=53-S;c.publish(revised,13);
+  Intent successor;CHECK(c.pop(successor)&&successor.volume==53-5*S&&
                          successor.capability_revision==2);
   CHECK(c.resolve(successor.token,VolumeResolution::CONFIRMED));
-  revised.volume=33;c.publish(revised,14);
-  CHECK(!c.volume_outstanding&&!c.desired_volume_valid&&c.latest.volume==33);
+  revised.volume=53-5*S;c.publish(revised,14);
+  CHECK(!c.volume_outstanding&&!c.desired_volume_valid&&c.latest.volume==53-5*S);
 
   Channel reversal;reversal.publish(ready(50),1);
   CHECK(reversal.request(Action::VOLUME_DOWN,2));
-  Intent down;CHECK(reversal.pop(down)&&down.volume==48);
+  Intent down;CHECK(reversal.pop(down)&&down.volume==50-S);
   CHECK(reversal.request(Action::VOLUME_DOWN,3));
   CHECK(reversal.request(Action::VOLUME_DOWN,4));
   CHECK(reversal.request(Action::VOLUME_UP,5));
   CHECK(reversal.request(Action::VOLUME_UP,6));
   auto changed=ready(50);changed.capability_revision=2;
   reversal.publish(changed,7);
-  CHECK(reversal.desired_volume==48&&reversal.volume_outstanding);
+  CHECK(reversal.desired_volume==50-S&&reversal.volume_outstanding);
   CHECK(reversal.resolve(down.token,VolumeResolution::CONFIRMED));
-  changed.volume=48;reversal.publish(changed,8);
+  changed.volume=50-S;reversal.publish(changed,8);
   CHECK(!reversal.volume_outstanding&&!reversal.desired_volume_valid&&
-        reversal.latest.volume==48);
+        reversal.latest.volume==50-S);
   return true;
 }
 bool diagnostic_counters_classify_pipeline() {
@@ -363,7 +371,7 @@ bool diagnostic_counters_classify_pipeline() {
   Intent first;CHECK(c.pop(first)&&c.volume_queued==1);
   CHECK(c.resolve(first.token,VolumeResolution::CONFIRMED));
   CHECK(c.volume_completed==1&&c.volume_failed==0);
-  auto applied=ready(48);c.publish(applied,3);
+  auto applied=ready(50-S);c.publish(applied,3);
   CHECK(c.authoritative_updates==2&&!c.volume_outstanding);
 
   CHECK(c.request(Action::VOLUME_DOWN,4));
@@ -399,22 +407,75 @@ bool diagnostic_counters_classify_pipeline() {
   CHECK(external.volume_cancelled==1&&external.cancel_divergence==1);
   return true;
 }
+
+bool step_ten_bounds_and_repeats() {
+  // Single steps next to the limits: the result is clamped, never wrapped.
+  struct Case { std::uint8_t start; Action action; bool accepted; std::uint8_t expect; };
+  const Case cases[] = {
+      {95, Action::VOLUME_UP, true, 100},  {91, Action::VOLUME_UP, true, 100},
+      {90, Action::VOLUME_UP, true, 100},  {89, Action::VOLUME_UP, true, 99},
+      {50, Action::VOLUME_UP, true, 60},   {100, Action::VOLUME_UP, false, 0},
+      {5, Action::VOLUME_DOWN, true, 0},   {9, Action::VOLUME_DOWN, true, 0},
+      {10, Action::VOLUME_DOWN, true, 0},  {11, Action::VOLUME_DOWN, true, 1},
+      {50, Action::VOLUME_DOWN, true, 40}, {0, Action::VOLUME_DOWN, false, 0}};
+  for (const auto &item : cases) {
+    Channel c; c.publish(ready(item.start));
+    CHECK(c.request(item.action) == item.accepted);
+    if (item.accepted) {
+      CHECK(c.desired_volume == item.expect);
+      Intent command; CHECK(c.pop(command) && command.volume == item.expect);
+    } else {
+      CHECK(c.last_volume_admission ==
+            (item.action == Action::VOLUME_UP ? VolumeAdmission::AT_MAXIMUM : VolumeAdmission::AT_MINIMUM));
+    }
+  }
+  // Repeated steps walk the whole range in ten steps, then stop at the limit.
+  Channel up; up.publish(ready(0));
+  for (unsigned i = 1; i <= 10; ++i) {
+    CHECK(up.request(Action::VOLUME_UP));
+    CHECK(up.desired_volume == 10 * i);
+  }
+  CHECK(!up.request(Action::VOLUME_UP) && up.desired_volume == 100);
+  Channel down; down.publish(ready(100));
+  for (unsigned i = 1; i <= 10; ++i) {
+    CHECK(down.request(Action::VOLUME_DOWN));
+    CHECK(down.desired_volume == 100 - 10 * i);
+  }
+  CHECK(!down.request(Action::VOLUME_DOWN) && down.desired_volume == 0);
+  // The provisional indication follows the clamped target.
+  Channel view; view.publish(ready(95));
+  CHECK(view.request(Action::VOLUME_UP));
+  auto shown = view.view();
+  CHECK(shown.volume == 95 && shown.desired_volume_known && shown.desired_volume == 100 && shown.volume_pending);
+  // Rapid reversal after a clamp: 95 -> 100 -> 90 (a step from 100, not from 95).
+  CHECK(view.request(Action::VOLUME_DOWN));
+  CHECK(view.desired_volume == 90);
+  Intent command; CHECK(view.pop(command) && command.volume == 90);
+  // Mixed rapid sequence accumulates exact multiples of ten.
+  Channel mixed; mixed.publish(ready(45));
+  CHECK(mixed.request(Action::VOLUME_UP)); CHECK(mixed.request(Action::VOLUME_UP));
+  CHECK(mixed.request(Action::VOLUME_UP)); CHECK(mixed.request(Action::VOLUME_DOWN));
+  CHECK(mixed.desired_volume == 65 && mixed.volume_accepted == 4 && mixed.count == 1);
+  CHECK(mixed.pop(command) && command.volume == 65);
+  return true;
+}
 }
 
 int main() {
   const bool results[] = {exact_reasons(), decision_is_unchanged_and_counted(),
                           exact_resolution_and_lifecycle_fencing(),
                           rapid_accumulation_reversal_and_bounds(),
-                          fixed_two_point_examples(),
+                          fixed_step_examples(),
                           uncertain_and_invalidation_cancel_safely(),
                           bounded_latency_model_and_provisional_view(),
                           external_change_and_invalidation_do_not_replay(),
                           in_flight_reversal_and_external_authority(),
                           confirmed_result_does_not_discard_newer_accumulated_target(),
                           d009_capability_revision_does_not_drop_accumulated_target(),
-                          diagnostic_counters_classify_pipeline()};
+                          diagnostic_counters_classify_pipeline(),
+                          step_ten_bounds_and_repeats()};
   unsigned pass = 0; for (bool result : results) pass += result;
   std::printf("VOLUME ADMISSION SUMMARY PASS=%u FAIL=%u assertions=%u\n",
-              pass, 12 - pass, assertions);
-  return pass == 12 ? 0 : 1;
+              pass, 13 - pass, assertions);
+  return pass == 13 ? 0 : 1;
 }

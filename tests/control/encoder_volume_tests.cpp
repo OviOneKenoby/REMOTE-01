@@ -6,6 +6,9 @@ using namespace control_home;
 using namespace control;
 namespace {
 unsigned assertions = 0;
+// The step comes from the channel; every detent moves the volume by this much.
+constexpr unsigned S = Channel::volume_step;
+static_assert(S == 10, "the volume step is 10 %");
 #define CHECK(x) do { ++assertions; if (!(x)) { std::printf("FAIL line=%d %s\n", __LINE__, #x); return false; } } while (0)
 struct Fixture {
   Store store; MockJournal journal; Core core; MockAdapter mock;
@@ -52,17 +55,22 @@ bool ready_and_bounds() {
   s.session = s.capability_revision = 1; s.volume_known = s.volume_set = true;
   s.volume = 68; c.publish(s);
   CHECK(c.request(Action::VOLUME_UP));
-  Intent i; CHECK(c.pop(i) && i.volume == 70);
+  Intent i; CHECK(c.pop(i) && i.volume == 68 + S);
   CHECK(c.request(Action::VOLUME_UP));
-  s.volume = 70; c.publish(s);
-  CHECK(c.pop(i) && i.volume == 72);
-  s.volume = 72; c.publish(s);
-  CHECK(c.request(Action::VOLUME_DOWN)); CHECK(c.pop(i) && i.volume == 70);
+  s.volume = 68 + S; c.publish(s);
+  CHECK(c.pop(i) && i.volume == 68 + 2 * S);
+  s.volume = 68 + 2 * S; c.publish(s);
+  CHECK(c.request(Action::VOLUME_DOWN)); CHECK(c.pop(i) && i.volume == 68 + S);
   s.connection = Connection::UNAVAILABLE; c.publish(s);
   CHECK(!c.request(Action::VOLUME_DOWN));
   s.connection = Connection::CONNECTED; s.session = 2; s.volume = 0; c.publish(s);
   CHECK(!c.request(Action::VOLUME_DOWN));
   s.volume = 100; c.publish(s); CHECK(!c.request(Action::VOLUME_UP));
+  // One detent next to a limit clamps instead of wrapping.
+  Channel near_top; s.volume = 95; near_top.publish(s);
+  CHECK(near_top.request(Action::VOLUME_UP)); CHECK(near_top.pop(i) && i.volume == 100);
+  Channel near_bottom; s.volume = 5; near_bottom.publish(s);
+  CHECK(near_bottom.request(Action::VOLUME_DOWN)); CHECK(near_bottom.pop(i) && i.volume == 0);
   return true;
 }
 bool core_volume() {
@@ -183,55 +191,55 @@ bool failure_sources_are_distinct() {
 bool transport_busy_retains_coalesced_target() {
   Channel c; Snapshot s; s.connection = Connection::CONNECTED;
   s.session = s.capability_revision = 1; s.volume_known = s.volume_set = true;
-  s.volume = 70; c.publish(s);
+  s.volume = 20; c.publish(s);
 
-  // The first detent crosses the owner boundary. Nine more arrive while its
+  // The first detent crosses the owner boundary. Five more arrive while its
   // correlated result and authoritative snapshot are still outstanding.
   CHECK(c.request(Action::VOLUME_UP, 1));
-  Intent first; CHECK(c.pop(first, true) && first.volume == 72);
-  for (unsigned n = 0; n < 9; ++n)
+  Intent first; CHECK(c.pop(first, true) && first.volume == 20 + S);
+  for (unsigned n = 0; n < 5; ++n)
     CHECK(c.request(Action::VOLUME_UP, 2 + n));
   CHECK(c.resolve(first.token, VolumeResolution::CONFIRMED));
-  s.volume = 72; c.publish(s, 20);
+  s.volume = 20 + S; c.publish(s, 20);
 
   // An RTCP metadata/snapshot exchange may own the record lane here. The
   // successor remains queued, rather than becoming a definite failure.
   Intent successor;
   CHECK(!c.pop(successor, false));
-  CHECK(c.count == 1 && c.volume_failed == 0 && c.view().desired_volume == 90);
-  CHECK(c.pop(successor, true) && successor.volume == 90);
+  CHECK(c.count == 1 && c.volume_failed == 0 && c.view().desired_volume == 20 + 6 * S);
+  CHECK(c.pop(successor, true) && successor.volume == 20 + 6 * S);
   CHECK(c.resolve(successor.token, VolumeResolution::CONFIRMED));
-  s.volume = 90; c.publish(s, 30);
-  CHECK(c.view().volume == 90 && !c.view().volume_pending);
+  s.volume = 20 + 6 * S; c.publish(s, 30);
+  CHECK(c.view().volume == 20 + 6 * S && !c.view().volume_pending);
   CHECK(c.volume_completed == 2 && c.volume_failed == 0);
 
   Channel d; s.volume = 80; d.publish(s);
   CHECK(d.request(Action::VOLUME_DOWN, 31));
-  CHECK(d.pop(first, true) && first.volume == 78);
-  for (unsigned n = 0; n < 9; ++n)
+  CHECK(d.pop(first, true) && first.volume == 80 - S);
+  for (unsigned n = 0; n < 5; ++n)
     CHECK(d.request(Action::VOLUME_DOWN, 32 + n));
   CHECK(d.resolve(first.token, VolumeResolution::CONFIRMED));
-  s.volume = 78; d.publish(s, 42);
+  s.volume = 80 - S; d.publish(s, 42);
   CHECK(!d.pop(successor, false));
-  CHECK(d.pop(successor, true) && successor.volume == 60);
+  CHECK(d.pop(successor, true) && successor.volume == 80 - 6 * S);
   CHECK(d.resolve(successor.token, VolumeResolution::CONFIRMED));
-  s.volume = 60; d.publish(s, 50);
-  CHECK(d.view().volume == 60 && d.volume_completed == 2 &&
+  s.volume = 80 - 6 * S; d.publish(s, 50);
+  CHECK(d.view().volume == 80 - 6 * S && d.volume_completed == 2 &&
         d.volume_failed == 0);
 
   // Rapid reversal preserves the algebraic target while the lane is busy.
-  Channel r; s.volume = 70; r.publish(s);
+  Channel r; s.volume = 20; r.publish(s);
   CHECK(r.request(Action::VOLUME_UP, 60));
-  CHECK(r.pop(first, true) && first.volume == 72);
-  for (unsigned n = 0; n < 4; ++n) CHECK(r.request(Action::VOLUME_UP, 61 + n));
-  for (unsigned n = 0; n < 2; ++n) CHECK(r.request(Action::VOLUME_DOWN, 65 + n));
+  CHECK(r.pop(first, true) && first.volume == 20 + S);
+  for (unsigned n = 0; n < 3; ++n) CHECK(r.request(Action::VOLUME_UP, 61 + n));
+  for (unsigned n = 0; n < 1; ++n) CHECK(r.request(Action::VOLUME_DOWN, 65 + n));
   CHECK(r.resolve(first.token, VolumeResolution::CONFIRMED));
-  s.volume = 72; r.publish(s, 70);
+  s.volume = 20 + S; r.publish(s, 70);
   CHECK(!r.pop(successor, false));
-  CHECK(r.pop(successor, true) && successor.volume == 76);
+  CHECK(r.pop(successor, true) && successor.volume == 20 + 3 * S);
   CHECK(r.resolve(successor.token, VolumeResolution::CONFIRMED));
-  s.volume = 76; r.publish(s, 80);
-  CHECK(r.view().volume == 76 && r.volume_failed == 0);
+  s.volume = 20 + 3 * S; r.publish(s, 80);
+  CHECK(r.view().volume == 20 + 3 * S && r.volume_failed == 0);
   return true;
 }
 }

@@ -67,7 +67,7 @@ static_assert(std::is_trivially_copyable_v<Snapshot>);
 // Caller serializes access. ESP implementation uses a short critical section.
 struct Channel {
   static constexpr unsigned capacity = 8;
-  static constexpr std::uint8_t volume_step = 2;
+  static constexpr std::uint8_t volume_step = 10;
   std::array<Intent, capacity> queue{};
   unsigned head = 0, count = 0;
   std::uint64_t issued = 0, generation = 0, rejected = 0;
