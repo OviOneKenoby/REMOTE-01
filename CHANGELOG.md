@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-11-07 - First public beta state
+
+Status: beta test, work in progress, much still to do. Tested only by the author
+on one REMOTE with one TUNER (v1.1.12); no wider validation.
+
+- `main` now contains the source of build `ad390a4`, the build installed on the
+  author's REMOTE (merge of commit `ad390a46a47f3898198eb594329d6be25a14d0dd`).
+  Apart from documentation, the code is identical to that commit. It adds the
+  RTCP close-correlation and first-disconnect capture and moves the
+  diagnostics scratch buffers off the HTTP task stack. The changelog of the
+  branch `diagnostics/remote-rtcp-first-failure` records its hardware result as
+  "SOFTWARE PASS; HARDWARE PASS (LIMITED)"; later documentation commits of that
+  branch are not in `main`.
+- Licence: the project's own files are now under the GNU General Public License,
+  version 3 (`LICENSE`); before, the repository carried the Apache License 2.0
+  text of the Waveshare example repository. Files from that example, vendored
+  libraries and build-time dependencies keep their own licences and are listed
+  in `THIRD_PARTY_NOTICES.md`. Not verified: the terms of eleven `ui_bsp` files
+  headed "NXP Proprietary", the SIL Open Font License text for the generated
+  fonts, the terms of `canon.pcm` and of the MultiButton files, and the licence
+  of `espressif/mdns` 1.14.0.
+- Documentation lines that named the author's build machine folders and the LAN
+  addresses of the author's two devices now use placeholders. The earlier
+  history is unchanged.
+- README: "Beta status" and "Known issues" sections added.
+- Not fixed: see "Known issues" in the README.
+
 ## 2026-11-06 - Retain the first RTCP disconnect of an established READY session
 
 Status: **SOFTWARE PASS - HARDWARE NOT VALIDATED.** Diagnostic-only. Build
