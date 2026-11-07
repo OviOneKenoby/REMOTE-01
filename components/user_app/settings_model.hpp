@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <cstdio>
 
+#include "power_management/model.hpp"
+
 namespace ui_settings {
 
 // Backlight: the brightness slider covers 0..255 and the LEDC duty written is
@@ -19,18 +21,41 @@ constexpr unsigned brightness_percent(std::uint8_t slider) {
   return (static_cast<unsigned>(slider) * 100U + 127U) / 255U;
 }
 
-struct TimeoutChoice {
-  unsigned ms;
-  const char *label;
-};
-// Same values as power_management::display_idle_choices.
-inline constexpr std::array<TimeoutChoice, 5> timeout_choices{{
-    {15000, "15 s"}, {30000, "30 s"}, {60000, "1 min"}, {120000, "2 min"}, {300000, "5 min"}}};
+// The two delay rows share the value lists of the power model (single source).
+enum class Row { DISPLAY, SYSTEM };
 
-constexpr int timeout_index(unsigned ms) {
-  for (std::size_t i = 0; i < timeout_choices.size(); ++i)
-    if (timeout_choices[i].ms == ms) return static_cast<int>(i);
+inline std::size_t value_count(Row row) {
+  return row == Row::DISPLAY ? power_management::display_idle_choices.size()
+                             : power_management::system_idle_choices.size();
+}
+inline unsigned value_at(Row row, std::size_t index) {
+  return static_cast<unsigned>(row == Row::DISPLAY ? power_management::display_idle_choices[index]
+                                                   : power_management::system_idle_choices[index]);
+}
+// Position of ms in the row's list, or -1.
+inline int value_index(Row row, unsigned ms) {
+  for (std::size_t i = 0; i < value_count(row); ++i)
+    if (value_at(row, i) == ms) return static_cast<int>(i);
   return -1;
+}
+// Value after one step (dir = +1 / -1) from the current pair, or 0 when the step
+// is not available: the end of the list, or the display timeout / sleep delay
+// invariant (sleep strictly greater) would be broken. The other row is never
+// adjusted; an unavailable step is shown disabled instead.
+inline unsigned step_value(Row row, unsigned display_ms, unsigned system_ms, int dir) {
+  const int index = value_index(row, row == Row::DISPLAY ? display_ms : system_ms);
+  const int next = index + (dir > 0 ? 1 : -1);
+  if (index < 0 || next < 0 || next >= static_cast<int>(value_count(row))) return 0;
+  const unsigned value = value_at(row, static_cast<std::size_t>(next));
+  const bool ok = row == Row::DISPLAY ? power_management::sleep_settings_valid(value, system_ms)
+                                      : power_management::sleep_settings_valid(display_ms, value);
+  return ok ? value : 0;
+}
+// "15 s", "30 s", "1 min", ... "30 min".
+inline void format_duration(char *out, std::size_t n, unsigned ms) {
+  if (!out || !n) return;
+  if (ms < 60000) std::snprintf(out, n, "%u s", ms / 1000);
+  else std::snprintf(out, n, "%u min", ms / 60000);
 }
 
 // Text for rtcp_client::CloseReason (numeric value as carried by

@@ -1373,43 +1373,68 @@ static void ota_overlay_create()
 	lv_obj_add_flag(ota.panel, LV_OBJ_FLAG_HIDDEN);
 }
 
-// ---- Settings/info page (carousel page 1) ----------------------------------
-// Reuses the factory brightness slider (generated, element 1) and adds a
-// display-timeout selector and read-only status rows. All values already exist
-// elsewhere in the firmware; nothing is stored (RAM only, defaults at boot).
+// ---- SETTINGS (carousel page 1) and INFO (page 2) --------------------------
+// SETTINGS reuses the factory brightness slider (generated, element 1) and adds
+// two "- value +" rows: screen-off timeout and system-sleep delay. INFO shows
+// read-only values that already exist elsewhere in the firmware. Nothing is
+// stored (RAM only, defaults at boot: 50 % / 30 s / 5 min).
+struct DelayRow {
+	ui_settings::Row row = ui_settings::Row::DISPLAY;
+	lv_obj_t *minus = nullptr, *plus = nullptr, *value = nullptr;
+	// Last drawn state, so styles are only touched when something changed.
+	unsigned shown_ms = 0;
+	int shown_minus = -1, shown_plus = -1;
+};
 struct SettingsWidgets {
 	lv_obj_t *page = nullptr, *percent = nullptr;
-	lv_obj_t *timeout_button[ui_settings::timeout_choices.size()]{};
-	lv_obj_t *timeout_label[ui_settings::timeout_choices.size()]{};
+	DelayRow delay[2];
+	lv_timer_t *timer = nullptr;
+} settings;
+struct InfoWidgets {
+	lv_obj_t *page = nullptr;
 	lv_obj_t *connection = nullptr, *battery = nullptr, *firmware = nullptr,
 	         *uptime = nullptr, *disconnect = nullptr;
-	lv_timer_t *timer = nullptr;
-	int shown_timeout = -2;
-} settings;
+} info_page;
 
-static void settings_show_timeout(void)
+static void settings_button_style(lv_obj_t *button, bool enabled)
 {
-	const int selected = ui_settings::timeout_index(power_management::display_idle_ms());
-	if (selected == settings.shown_timeout) return;
-	settings.shown_timeout = selected;
-	for (std::size_t i = 0; i < ui_settings::timeout_choices.size(); ++i) {
-		const bool on = int(i) == selected;
-		lv_obj_set_style_bg_color(settings.timeout_button[i],
-		                          on ? lv_color_hex(0xc2ff00) : lv_color_hex(0x1c292e),
-		                          LV_PART_MAIN);
-		lv_obj_set_style_text_color(settings.timeout_label[i],
-		                            on ? lv_color_hex(0x11191d) : lv_color_hex(0xf3f5f2),
-		                            LV_PART_MAIN);
+	// A step the display/sleep rule rejects stays visible but dimmed and inert.
+	lv_obj_set_style_bg_color(button, enabled ? lv_color_hex(0x1c292e) : lv_color_hex(0x151e22), LV_PART_MAIN);
+	lv_obj_set_style_text_color(lv_obj_get_child(button, 0), enabled ? lv_color_hex(0xc2ff00) : lv_color_hex(0x3a4a4e), LV_PART_MAIN);
+	lv_obj_set_style_border_width(button, enabled ? 1 : 0, LV_PART_MAIN);
+}
+
+static void settings_show_rows(void)
+{
+	const unsigned display_ms = power_management::display_idle_ms();
+	const unsigned system_ms = power_management::system_idle_ms();
+	for (auto &row : settings.delay) {
+		const unsigned ms = row.row == ui_settings::Row::DISPLAY ? display_ms : system_ms;
+		const int minus = ui_settings::step_value(row.row, display_ms, system_ms, -1) != 0;
+		const int plus = ui_settings::step_value(row.row, display_ms, system_ms, +1) != 0;
+		if (ms != row.shown_ms) {
+			char text[12];
+			ui_settings::format_duration(text, sizeof text, ms);
+			home_text(row.value, text);
+			row.shown_ms = ms;
+		}
+		if (minus != row.shown_minus) { settings_button_style(row.minus, minus); row.shown_minus = minus; }
+		if (plus != row.shown_plus) { settings_button_style(row.plus, plus); row.shown_plus = plus; }
 	}
 }
 
-static void settings_timeout_event(lv_event_t *event)
+static void settings_step_event(lv_event_t *event)
 {
 	if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
-	const auto index = std::size_t(reinterpret_cast<std::uintptr_t>(lv_event_get_user_data(event)));
-	if (index >= ui_settings::timeout_choices.size()) return;
-	(void)power_management::set_display_idle_ms(ui_settings::timeout_choices[index].ms);
-	settings_show_timeout();
+	const auto code = std::size_t(reinterpret_cast<std::uintptr_t>(lv_event_get_user_data(event)));
+	const auto row = (code >> 1) ? ui_settings::Row::SYSTEM : ui_settings::Row::DISPLAY;
+	const int dir = (code & 1) ? +1 : -1;
+	const unsigned next = ui_settings::step_value(row, power_management::display_idle_ms(),
+	                                              power_management::system_idle_ms(), dir);
+	if (!next) return; // End of list or rejected by the rule: nothing changes.
+	(void)(row == ui_settings::Row::DISPLAY ? power_management::set_display_idle_ms(next)
+	                                        : power_management::set_system_idle_ms(next));
+	settings_show_rows();
 }
 
 static void settings_slider_event(lv_event_t *event)
@@ -1423,41 +1448,74 @@ static void settings_slider_event(lv_event_t *event)
 
 static void settings_refresh(lv_timer_t *)
 {
-	// Nothing to do while another page is shown (the display may be off).
-	if (lv_carousel_get_element_act(src_ui.screen_carousel_1) != settings.page) return;
-	settings_show_timeout();
-	home_text(settings.connection, tuner_control.state.connected ? "Connected" : "Not connected");
-	char voltage[6];
-	battery_voltage_text(voltage);
-	char battery[16];
-	std::snprintf(battery, sizeof battery, "%s%s", voltage,
-	              power_management::external_plugged_in(power_management::external_view()) ? "  USB" : "");
-	home_text(settings.battery, battery);
-	char uptime[24];
-	ui_settings::format_uptime(uptime, sizeof uptime, std::uint64_t(esp_timer_get_time() / 1000));
-	home_text(settings.uptime, uptime);
-	home_text(settings.disconnect,
-	          ui_settings::close_reason_text(tuner_control.state.rtcp_close_reason));
+	// Only the page on screen is updated (the display may be off).
+	lv_obj_t *active = lv_carousel_get_element_act(src_ui.screen_carousel_1);
+	if (active == settings.page) {
+		settings_show_rows();
+	} else if (active == info_page.page) {
+		home_text(info_page.connection, tuner_control.state.connected ? "Connected" : "Not connected");
+		char voltage[6];
+		battery_voltage_text(voltage);
+		char battery[16];
+		std::snprintf(battery, sizeof battery, "%s%s", voltage,
+		              power_management::external_plugged_in(power_management::external_view()) ? "  USB" : "");
+		home_text(info_page.battery, battery);
+		char uptime[24];
+		ui_settings::format_uptime(uptime, sizeof uptime, std::uint64_t(esp_timer_get_time() / 1000));
+		home_text(info_page.uptime, uptime);
+		home_text(info_page.disconnect,
+		          ui_settings::close_reason_text(tuner_control.state.rtcp_close_reason));
+	}
 }
 
-static lv_obj_t *settings_row(lv_obj_t *page, const char *caption, lv_coord_t y)
+static void page_style(lv_obj_t *page)
+{
+	lv_obj_set_style_bg_color(page, lv_color_hex(0x11191d), LV_PART_MAIN);
+	lv_obj_set_style_bg_opa(page, LV_OPA_COVER, LV_PART_MAIN);
+	lv_obj_set_style_border_width(page, 0, LV_PART_MAIN);
+	lv_obj_set_style_pad_all(page, 0, LV_PART_MAIN);
+}
+
+// One "- value +" row: 44x44 buttons at x12 and x116, value centred between.
+static void settings_delay_row(lv_obj_t *page, std::size_t index, ui_settings::Row kind,
+                               const char *caption, lv_coord_t caption_y, lv_coord_t row_y)
+{
+	const lv_color_t text = lv_color_hex(0xf3f5f2);
+	remote01_label(page, caption, &lv_font_montserrat_12, lv_color_hex(0x91a3a6), 12, caption_y);
+	DelayRow &row = settings.delay[index];
+	row.row = kind;
+	const struct { lv_obj_t **button; lv_coord_t x; const char *symbol; int dir; } buttons[] = {
+		{&row.minus, 12, LV_SYMBOL_MINUS, -1}, {&row.plus, 116, LV_SYMBOL_PLUS, +1}};
+	for (const auto &spec : buttons) {
+		lv_obj_t *button = *spec.button = remote01_panel(page, spec.x, row_y, 44, 44, lv_color_hex(0x1c292e), 6);
+		lv_obj_add_flag(button, LV_OBJ_FLAG_CLICKABLE);
+		lv_obj_set_style_border_color(button, lv_color_hex(0xc2ff00), LV_PART_MAIN);
+		lv_obj_set_style_border_opa(button, LV_OPA_COVER, LV_PART_MAIN);
+		remote01_single_line(button, spec.symbol, &lv_font_montserrat_16, lv_color_hex(0xc2ff00),
+		                     0, (44 - lv_font_montserrat_16.line_height) / 2, 44, LV_LABEL_LONG_CLIP,
+		                     LV_TEXT_ALIGN_CENTER);
+		lv_obj_add_event_cb(button, settings_step_event, LV_EVENT_CLICKED,
+		                    reinterpret_cast<void *>(std::uintptr_t(index * 2 + (spec.dir > 0 ? 1 : 0))));
+	}
+	row.value = remote01_single_line(page, "--", &lv_font_montserrat_16, text, 56,
+	                                 row_y + (44 - lv_font_montserrat_16.line_height) / 2, 60,
+	                                 LV_LABEL_LONG_CLIP, LV_TEXT_ALIGN_CENTER);
+}
+
+static lv_obj_t *info_row(lv_obj_t *page, const char *caption, lv_coord_t y)
 {
 	remote01_label(page, caption, &lv_font_montserrat_12, lv_color_hex(0x91a3a6), 12, y);
 	return remote01_single_line(page, "--", &lv_font_montserrat_14, lv_color_hex(0xf3f5f2),
-	                            12, y + 15, 148, LV_LABEL_LONG_CLIP, LV_TEXT_ALIGN_LEFT);
+	                            12, y + 16, 148, LV_LABEL_LONG_CLIP, LV_TEXT_ALIGN_LEFT);
 }
 
 static void settings_page_create(void)
 {
-	const lv_color_t background = lv_color_hex(0x11191d);
 	const lv_color_t text = lv_color_hex(0xf3f5f2);
 	const lv_color_t muted = lv_color_hex(0x91a3a6);
 	const lv_color_t track = lv_color_hex(0x344247);
 	lv_obj_t *page = settings.page = src_ui.screen_carousel_1_element_2;
-	lv_obj_set_style_bg_color(page, background, LV_PART_MAIN);
-	lv_obj_set_style_bg_opa(page, LV_OPA_COVER, LV_PART_MAIN);
-	lv_obj_set_style_border_width(page, 0, LV_PART_MAIN);
-	lv_obj_set_style_pad_all(page, 0, LV_PART_MAIN);
+	page_style(page);
 
 	remote01_label(page, "SETTINGS", &lv_font_montserrat_12, text, 12, 10);
 	remote01_panel(page, 12, 32, 148, 1, track, 0);
@@ -1473,42 +1531,40 @@ static void settings_page_create(void)
 	lv_obj_set_size(caption, 90, lv_font_montserrat_12.line_height);
 	settings.percent = remote01_single_line(page, "50%", &lv_font_montserrat_14, text, 102, 44, 58,
 	                                        LV_LABEL_LONG_CLIP, LV_TEXT_ALIGN_RIGHT);
-	lv_obj_set_pos(src_ui.screen_slider_1, 12, 76);
+	lv_obj_set_pos(src_ui.screen_slider_1, 12, 80);
 	lv_obj_set_size(src_ui.screen_slider_1, 148, 20);
 	lv_obj_set_ext_click_area(src_ui.screen_slider_1, 14); // about 48 px tall touch area
 	lv_obj_add_event_cb(src_ui.screen_slider_1, settings_slider_event, LV_EVENT_VALUE_CHANGED, nullptr);
 
-	// Screen-off timeout: five buttons, the current one filled.
-	remote01_panel(page, 12, 112, 148, 1, track, 0);
-	remote01_label(page, "SCREEN OFF AFTER", &lv_font_montserrat_12, muted, 12, 124);
-	for (std::size_t i = 0; i < ui_settings::timeout_choices.size(); ++i) {
-		lv_obj_t *button = settings.timeout_button[i] =
-			remote01_panel(page, 12, lv_coord_t(146 + 50 * int(i)), 148, 44, lv_color_hex(0x1c292e), 6);
-		lv_obj_add_flag(button, LV_OBJ_FLAG_CLICKABLE);
-		settings.timeout_label[i] = remote01_single_line(
-			button, ui_settings::timeout_choices[i].label, &lv_font_montserrat_16, text,
-			0, (44 - lv_font_montserrat_16.line_height) / 2, 148, LV_LABEL_LONG_CLIP,
-			LV_TEXT_ALIGN_CENTER);
-		lv_obj_add_event_cb(button, settings_timeout_event, LV_EVENT_CLICKED,
-		                    reinterpret_cast<void *>(std::uintptr_t(i)));
-	}
-
-	// Read-only information.
-	remote01_panel(page, 12, 402, 148, 1, track, 0);
-	remote01_label(page, "INFO", &lv_font_montserrat_12, muted, 12, 414);
-	settings.connection = settings_row(page, "TUNER LINK", 436);
-	settings.battery = settings_row(page, "BATTERY", 474);
-	settings.firmware = settings_row(page, "FIRMWARE", 512);
-	settings.uptime = settings_row(page, "UPTIME", 550);
-	settings.disconnect = settings_row(page, "LAST DISCONNECT", 588);
-	const auto *description = esp_app_get_description();
-	home_text(settings.firmware, description && description->version[0] ? description->version : "unknown");
+	remote01_panel(page, 12, 124, 148, 1, track, 0);
+	settings_delay_row(page, 0, ui_settings::Row::DISPLAY, "SCREEN OFF AFTER", 138, 162);
+	settings_delay_row(page, 1, ui_settings::Row::SYSTEM, "SYSTEM SLEEP AFTER", 232, 256);
+	remote01_panel(page, 12, 324, 148, 1, track, 0);
+	lv_obj_t *hint = remote01_label(page, "Sleep must be longer than screen off. A dimmed button is not allowed now: change the other value first.",
+	                                &lv_font_montserrat_12, muted, 12, 336);
+	lv_label_set_long_mode(hint, LV_LABEL_LONG_WRAP);
+	lv_obj_set_size(hint, 148, LV_SIZE_CONTENT);
 
 	// Boot value: 50 % of the slider scale, every boot (not stored).
 	lv_slider_set_value(src_ui.screen_slider_1, ui_settings::brightness_boot, LV_ANIM_OFF);
 	lv_event_send(src_ui.screen_slider_1, LV_EVENT_VALUE_CHANGED, nullptr);
-	settings_show_timeout();
+	settings_show_rows();
 	settings.timer = lv_timer_create(settings_refresh, 250, nullptr);
+}
+
+static void info_page_create(void)
+{
+	lv_obj_t *page = info_page.page = lv_carousel_add_element(src_ui.screen_carousel_1, 2);
+	page_style(page);
+	remote01_label(page, "INFO", &lv_font_montserrat_12, lv_color_hex(0xf3f5f2), 12, 10);
+	remote01_panel(page, 12, 32, 148, 1, lv_color_hex(0x344247), 0);
+	info_page.connection = info_row(page, "TUNER LINK", 60);
+	info_page.battery = info_row(page, "BATTERY", 124);
+	info_page.firmware = info_row(page, "FIRMWARE", 188);
+	info_page.uptime = info_row(page, "UPTIME", 252);
+	info_page.disconnect = info_row(page, "LAST DISCONNECT", 316);
+	const auto *description = esp_app_get_description();
+	home_text(info_page.firmware, description && description->version[0] ? description->version : "unknown");
 }
 
 static void lvgl_obj_event_callback(lv_event_t *event)
@@ -1527,6 +1583,7 @@ void user_app_init(void)
 	tuner_control_create();
 	ota_overlay_create();
 	settings_page_create();
+	info_page_create();
 	lv_obj_set_element_id(src_ui.screen_carousel_1, 0, LV_ANIM_OFF);
 	// Every boot starts at 50 % brightness (slider 128 of 255, LEDC duty 127).
 	lcd_bl_pwm_bsp_init(ui_settings::brightness_pwm(ui_settings::brightness_boot));

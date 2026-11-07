@@ -1,4 +1,4 @@
-"""Source contract: HOME is carousel page 0, the factory demo page is gone."""
+"""Source contract: HOME is carousel page 0 (then SETTINGS 1, INFO 2), the factory demo page is gone."""
 import re
 from pathlib import Path
 
@@ -12,7 +12,9 @@ checks = {
     "two_generated_elements": len(re.findall(r"lv_carousel_add_element\(", generated)) == 2
     and "lv_carousel_add_element(ui->screen_carousel_1, 0)" in generated
     and "lv_carousel_add_element(ui->screen_carousel_1, 1)" in generated,
-    "no_third_element_in_app": "lv_carousel_add_element(" not in ui,
+    # The third page (INFO, id 2) is the only element the app adds.
+    "info_is_the_only_added_element": ui.count("lv_carousel_add_element(") == 1
+    and "lv_carousel_add_element(src_ui.screen_carousel_1, 2)" in ui,
     "home_is_element_0": "lv_obj_t *page = src_ui.screen_carousel_1_element_1;" in ui,
     "boots_on_home_without_animation": "lv_obj_set_element_id(src_ui.screen_carousel_1, 0, LV_ANIM_OFF);" in ui,
     # Demo objects are removed from the generated UI and from the struct.
