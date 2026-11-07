@@ -1012,7 +1012,6 @@ static void home_refresh(lv_timer_t *)
 	(void)network_manager::read_status(network); // Never wait for NETWORK/HTTP.
 	const auto ip = network_manager::ip_text(network);
 	home_text(home.ip, ip.text);
-	home_text(src_ui.screen_label_21, ip.text); // Factory page0's existing blank row.
 	const auto battery = power_management::battery_view();
 	char voltage[6];
 	if (battery.simulated) std::snprintf(voltage, sizeof voltage, "SIM");
@@ -1073,7 +1072,6 @@ static void home_delete(lv_event_t *)
 }
 
 static void remote01_mockup_create(void);
-static void example_color_task(void *arg);
 static void lvgl_obj_event_callback(lv_event_t *event);
 
 static lv_obj_t *remote01_label(lv_obj_t *parent, const char *text, const lv_font_t *font,
@@ -1251,7 +1249,8 @@ static void remote01_mockup_create(void)
 	const lv_color_t muted = lv_color_hex(0x91a3a6);
 	const lv_color_t accent = lv_color_hex(0xc2ff00);
 	const lv_color_t track = lv_color_hex(0x344247);
-	lv_obj_t *page = lv_carousel_add_element(src_ui.screen_carousel_1, 2);
+	// HOME is carousel page 0 (the factory demo page no longer exists).
+	lv_obj_t *page = src_ui.screen_carousel_1_element_1;
 	home.page = page;
 	lv_obj_set_style_bg_color(page, background, LV_PART_MAIN);
 	lv_obj_set_style_bg_opa(page, LV_OPA_COVER, LV_PART_MAIN);
@@ -1366,35 +1365,6 @@ static void ota_overlay_create()
 	lv_obj_add_flag(ota.panel, LV_OBJ_FLAG_HIDDEN);
 }
 
-static void example_color_task(void *arg)
-{
-	lv_ui *ui = (lv_ui *)arg;
-	lv_obj_clear_flag(ui->screen_carousel_1, LV_OBJ_FLAG_SCROLLABLE);
-
-	lv_obj_clear_flag(ui->screen_cont_1, LV_OBJ_FLAG_HIDDEN);
-	lv_obj_add_flag(ui->screen_cont_2, LV_OBJ_FLAG_HIDDEN);
-	lv_obj_add_flag(ui->screen_cont_3, LV_OBJ_FLAG_HIDDEN);
-
-	lv_obj_clear_flag(ui->screen_img_1, LV_OBJ_FLAG_HIDDEN);
-	lv_obj_add_flag(ui->screen_img_2, LV_OBJ_FLAG_HIDDEN);
-	lv_obj_add_flag(ui->screen_img_3, LV_OBJ_FLAG_HIDDEN);
-	vTaskDelay(pdMS_TO_TICKS(1500));
-	lv_obj_clear_flag(ui->screen_img_2, LV_OBJ_FLAG_HIDDEN);
-	lv_obj_add_flag(ui->screen_img_1, LV_OBJ_FLAG_HIDDEN);
-	lv_obj_add_flag(ui->screen_img_3, LV_OBJ_FLAG_HIDDEN);
-	vTaskDelay(pdMS_TO_TICKS(1500));
-	lv_obj_clear_flag(ui->screen_img_3, LV_OBJ_FLAG_HIDDEN);
-	lv_obj_add_flag(ui->screen_img_2, LV_OBJ_FLAG_HIDDEN);
-	lv_obj_add_flag(ui->screen_img_1, LV_OBJ_FLAG_HIDDEN);
-	vTaskDelay(pdMS_TO_TICKS(1500));
-
-	lv_obj_clear_flag(ui->screen_cont_2, LV_OBJ_FLAG_HIDDEN);
-	lv_obj_add_flag(ui->screen_cont_1, LV_OBJ_FLAG_HIDDEN);
-	lv_obj_add_flag(ui->screen_cont_3, LV_OBJ_FLAG_HIDDEN);
-	lv_obj_add_flag(ui->screen_carousel_1, LV_OBJ_FLAG_SCROLLABLE);
-	vTaskDelete(NULL);
-}
-
 static void lvgl_obj_event_callback(lv_event_t *event)
 {
 	if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
@@ -1407,11 +1377,6 @@ void user_app_init(void)
 {
 	ota_service::set_activity_callback(power_management::activity);
 	setup_ui(&src_ui);
-	// Existing blank factory status row, no added container or touch target.
-	lv_obj_set_style_text_font(src_ui.screen_label_21, &lv_font_montserrat_12, LV_PART_MAIN);
-	lv_label_set_long_mode(src_ui.screen_label_21, LV_LABEL_LONG_CLIP);
-	lv_obj_set_size(src_ui.screen_label_21, 162, lv_font_montserrat_12.line_height);
-	lv_label_set_text(src_ui.screen_label_21, "--");
 	remote01_mockup_create();
 	tuner_control_create();
 	ota_overlay_create();
@@ -1434,5 +1399,4 @@ void user_app_init(void)
 	buttons.intr_type = GPIO_INTR_DISABLE;
 	ESP_ERROR_CHECK(gpio_config(&buttons));
 	(void)xTaskCreate(encoder_task, "encoder_input", 3072, nullptr, 2, nullptr);
-	xTaskCreate(example_color_task, "example_color_task", 4096, &src_ui, 2, NULL);
 }

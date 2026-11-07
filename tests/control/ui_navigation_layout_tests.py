@@ -27,7 +27,7 @@ button_y = constant("kTopNavigationY")
 
 checks = {
     "portrait_geometry_is_hardware_configured": (
-        "lv_obj_set_size(ui->screen_cont_2, 172, 640);" in generated
+        "lv_obj_set_size(ui->screen_carousel_1, 172, 640);" in generated
     ),
     "shared_view_matches_display": (
         "tuner_control.view = remote01_panel(src_ui.screen, 0, 0, 172, 640," in source

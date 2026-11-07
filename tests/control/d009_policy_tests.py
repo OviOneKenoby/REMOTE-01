@@ -11,7 +11,7 @@ checks = {
     "snapshot_then_now_playing": "now_playing_due_=!btx_state_due_&&capabilities_.now_playing" in client and "now_playing_.btx_source==std::uint8_t(wire::BtxSource::radio)" in client,
     "one_in_flight": "pending_request_||awaiting_" in client,
     "no_buffer_growth": "std::array<std::uint8_t,556>rx_{},tx_{}" in (root / "components/rtcp_client/include/rtcp_client/client.hpp").read_text(encoding="utf-8"),
-    "fixed_home_page": "lv_carousel_add_element(src_ui.screen_carousel_1, 2)" in ui,
+    "fixed_home_page": "lv_obj_t *page = src_ui.screen_carousel_1_element_1;" in ui,
     "existing_controls": "static_cast<control_home::Action>" in ui and "playback_symbols" in ui,
     "existing_text_widgets": "home_scrolling_text(home.title" in ui and "home_scrolling_text(home.subtitle" in ui,
     "station_large_streamtitle_small": 'home_scrolling_text(home.title, s.subtitle[0] ? s.subtitle : "--"' in ui and 'home_scrolling_text(home.subtitle, s.title[0] ? s.title : "--"' in ui,
