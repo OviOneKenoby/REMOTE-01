@@ -22,6 +22,7 @@
 #include "esp_app_desc.h"
 #include "esp_heap_caps.h"
 #include "esp_timer.h"
+#include "esp_log.h"
 #include <atomic>
 #include <algorithm>
 #include <cstdio>
@@ -1575,6 +1576,16 @@ static void lvgl_obj_event_callback(lv_event_t *event)
 	}
 }
 
+static void boot_memory_log(void *)
+{
+	// Log time is about 1.2 s ahead of esp_timer time: this fires at about 11.9 s of log time.
+	ESP_LOGI("BOOT_MEM", "t=%llu ms INT free=%u largest=%u PSRAM free=%u",
+	         (unsigned long long)(esp_timer_get_time() / 1000),
+	         (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+	         (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+	         (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+}
+
 void user_app_init(void)
 {
 	ota_service::set_activity_callback(power_management::activity);
@@ -1604,4 +1615,12 @@ void user_app_init(void)
 	buttons.intr_type = GPIO_INTR_DISABLE;
 	ESP_ERROR_CHECK(gpio_config(&buttons));
 	(void)xTaskCreate(encoder_task, "encoder_input", 3072, nullptr, 2, nullptr);
+	{
+		static esp_timer_handle_t boot_memory_timer = nullptr;
+		esp_timer_create_args_t args = {};
+		args.callback = boot_memory_log;
+		args.name = "boot_mem";
+		if (esp_timer_create(&args, &boot_memory_timer) == ESP_OK)
+			(void)esp_timer_start_once(boot_memory_timer, 10700ULL * 1000ULL);
+	}
 }

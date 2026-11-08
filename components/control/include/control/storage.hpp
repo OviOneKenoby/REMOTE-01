@@ -8,6 +8,10 @@
 #include <string_view>
 #include <utility>
 
+#if defined(ESP_PLATFORM)
+#include "esp_heap_caps.h"
+#endif
+
 namespace control {
 // One serialized owner. This allocator is deliberately independent of RTOS/UI.
 // All owning allocations in this module pass through this bounded budget.
@@ -26,8 +30,18 @@ struct Memory {
         observer(nullptr, n, true);
       return nullptr;
     }
+#if defined(ESP_PLATFORM)
+    // Core data is plain data: keep it out of the scarce internal RAM. Falls
+    // back to the default heap if PSRAM cannot serve the request.
+    void *raw = heap_caps_malloc(n + sizeof(std::max_align_t),
+                                 MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!raw)
+      raw = std::malloc(n + sizeof(std::max_align_t));
+    auto *p = static_cast<std::size_t *>(raw);
+#else
     auto *p =
         static_cast<std::size_t *>(std::malloc(n + sizeof(std::max_align_t)));
+#endif
     if (!p) {
       if (observer)
         observer(nullptr, n, true);
@@ -49,7 +63,11 @@ struct Memory {
     if (observer)
       observer(p, *base, false);
     used -= *base;
+#if defined(ESP_PLATFORM)
+    heap_caps_free(base);
+#else
     std::free(base);
+#endif
   }
 };
 inline bool utf8(std::string_view s) {
