@@ -13,8 +13,10 @@
 #include "control_home/full_control_navigation.hpp"
 #include "power_management/api.hpp"
 #include "network_manager/presentation.hpp"
+#include "network_manager/api.hpp"
 #include "encoder_volume.hpp"
 #include "settings_model.hpp"
+#include "factory_reset_model.hpp"
 #include "button_inputs.hpp"
 #include "diagnostics/api.hpp"
 #include "ota_service/api.hpp"
@@ -1553,6 +1555,197 @@ static void settings_page_create(void)
 	settings.timer = lv_timer_create(settings_refresh, 250, nullptr);
 }
 
+// ---- FACTORY RESET (INFO page, long hold + confirmation) --------------------
+// Erases only the Wi-Fi credentials through the existing network_manager
+// settings API (ARM_WIFI_RESET, then CONFIRM_WIFI_RESET with the published
+// ticket), then restarts through the NETWORK owner. The RTCP pairing in the
+// remote_ctl partition is kept (it cannot be re-created on the device).
+struct FactoryResetWidgets {
+	lv_obj_t *button = nullptr, *bar = nullptr, *button_label = nullptr, *hint = nullptr;
+	lv_obj_t *backdrop = nullptr, *card = nullptr, *title = nullptr, *text = nullptr, *note = nullptr;
+	lv_obj_t *cancel = nullptr, *confirm = nullptr;
+	lv_timer_t *timer = nullptr;
+	factory_reset::Machine machine;
+	factory_reset::State shown = factory_reset::State::IDLE;
+	bool shown_erased = false, shown_blocked = false;
+	int shown_progress = -1;
+} fr;
+
+static factory_reset::Inputs factory_reset_inputs(void)
+{
+	factory_reset::Inputs in;
+	in.blocked = ota_service::busy() ||
+	             power_management::owner_request() != power_management::Request::NONE;
+	in.commands_allowed = power_management::commands_allowed();
+	network_manager::SettingsView sv{};
+	if (network_manager::read_settings(sv)) {
+		in.view.generation = sv.generation;
+		in.view.ticket = sv.confirmation;
+		in.view.result = static_cast<factory_reset::Result>(unsigned(sv.result));
+	}
+	return in;
+}
+
+static void factory_reset_button_event(lv_event_t *event)
+{
+	const auto code = lv_event_get_code(event);
+	if (code == LV_EVENT_PRESSED)
+		fr.machine.press(lv_tick_get(), factory_reset_inputs());
+	else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST)
+		fr.machine.release();
+}
+
+static void factory_reset_cancel_event(lv_event_t *event)
+{
+	if (lv_event_get_code(event) == LV_EVENT_CLICKED) fr.machine.cancel();
+}
+
+static void factory_reset_confirm_event(lv_event_t *event)
+{
+	if (lv_event_get_code(event) == LV_EVENT_CLICKED)
+		fr.machine.confirm(lv_tick_get(), factory_reset_inputs());
+}
+
+static void factory_reset_backdrop_event(lv_event_t *event)
+{
+	if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+	if (fr.machine.state == factory_reset::State::ERROR) fr.machine.dismiss_error();
+	else fr.machine.outside_touch();
+}
+
+static void factory_reset_render(const factory_reset::Inputs &in)
+{
+	using factory_reset::State;
+	const State state = fr.machine.state;
+	const int progress = int(fr.machine.progress_permille(lv_tick_get()));
+	if (progress != fr.shown_progress) {
+		fr.shown_progress = progress;
+		lv_obj_set_width(fr.bar, lv_coord_t(progress * 148 / 1000));
+		home_text(fr.button_label, progress > 0 ? "KEEP HOLDING" : "FACTORY RESET");
+	}
+	if (in.blocked != fr.shown_blocked) {
+		fr.shown_blocked = in.blocked;
+		lv_obj_set_style_bg_color(fr.button, in.blocked ? lv_color_hex(0x151e22) : lv_color_hex(0x1c292e), LV_PART_MAIN);
+		lv_obj_set_style_text_color(fr.button_label, in.blocked ? lv_color_hex(0x3a4a4e) : lv_color_hex(0xf3f5f2), LV_PART_MAIN);
+		home_text(fr.hint, in.blocked ? "Busy: update running" : "Hold 2 s. Erases Wi-Fi setup.");
+	}
+	if (state == fr.shown && fr.machine.erased == fr.shown_erased) return;
+	fr.shown = state;
+	fr.shown_erased = fr.machine.erased;
+	const bool open = fr.machine.modal_open();
+	if (open) {
+		lv_obj_clear_flag(fr.backdrop, LV_OBJ_FLAG_HIDDEN);
+		lv_obj_clear_flag(fr.card, LV_OBJ_FLAG_HIDDEN);
+		lv_obj_move_foreground(fr.backdrop);
+		lv_obj_move_foreground(fr.card);
+	} else {
+		lv_obj_add_flag(fr.backdrop, LV_OBJ_FLAG_HIDDEN);
+		lv_obj_add_flag(fr.card, LV_OBJ_FLAG_HIDDEN);
+	}
+	const bool choose = state == State::MODAL;
+	if (choose) { lv_obj_clear_flag(fr.cancel, LV_OBJ_FLAG_HIDDEN); lv_obj_clear_flag(fr.confirm, LV_OBJ_FLAG_HIDDEN); }
+	else { lv_obj_add_flag(fr.cancel, LV_OBJ_FLAG_HIDDEN); lv_obj_add_flag(fr.confirm, LV_OBJ_FLAG_HIDDEN); }
+	switch (state) {
+	case State::MODAL:
+		home_text(fr.text, "Erase all REMOTE settings and restart?");
+		home_text(fr.note, "Wi-Fi setup starts again.");
+		break;
+	case State::ARMING:
+	case State::CONFIRMING:
+		home_text(fr.text, "Erasing...");
+		home_text(fr.note, "");
+		break;
+	case State::RESTARTING:
+		home_text(fr.text, "Restarting...");
+		home_text(fr.note, "");
+		break;
+	case State::ERROR:
+		home_text(fr.text, fr.machine.erased ? "Settings erased, restart failed." : "Error: nothing was erased.");
+		home_text(fr.note, "Tap to close.");
+		break;
+	default:
+		break;
+	}
+}
+
+static void factory_reset_tick(lv_timer_t *)
+{
+	const auto in = factory_reset_inputs();
+	const auto action = fr.machine.tick(lv_tick_get(), in);
+	switch (action) {
+	case factory_reset::Action::REQUEST_ARM:
+		(void)network_manager::settings_request(network_manager::SettingsAction::ARM_WIFI_RESET, in.view.generation);
+		break;
+	case factory_reset::Action::REQUEST_CONFIRM:
+		(void)network_manager::settings_request(network_manager::SettingsAction::CONFIRM_WIFI_RESET,
+		                                        fr.machine.generation, fr.machine.ticket);
+		break;
+	case factory_reset::Action::REQUEST_RESTART:
+		if (!network_manager::request_restart()) fr.machine.restart_failed(lv_tick_get());
+		break;
+	default:
+		break;
+	}
+	factory_reset_render(in);
+}
+
+static void factory_reset_create(lv_obj_t *page)
+{
+	// Button: 148 x 48 at y 392 (the INFO rows end at y 348), hint below.
+	fr.button = remote01_panel(page, 12, 392, 148, 48, lv_color_hex(0x1c292e), 6);
+	lv_obj_add_flag(fr.button, LV_OBJ_FLAG_CLICKABLE);
+	lv_obj_set_style_border_color(fr.button, lv_color_hex(0xff6c00), LV_PART_MAIN);
+	lv_obj_set_style_border_width(fr.button, 1, LV_PART_MAIN);
+	lv_obj_set_style_border_opa(fr.button, LV_OPA_COVER, LV_PART_MAIN);
+	fr.bar = remote01_panel(fr.button, 0, 0, 0, 48, lv_color_hex(0xff6c00), 6); // hold progress
+	lv_obj_set_style_bg_opa(fr.bar, LV_OPA_50, LV_PART_MAIN);
+	fr.button_label = remote01_single_line(fr.button, "FACTORY RESET", &lv_font_montserrat_14,
+	                                      lv_color_hex(0xf3f5f2), 0, (48 - lv_font_montserrat_14.line_height) / 2, 148,
+	                                      LV_LABEL_LONG_CLIP, LV_TEXT_ALIGN_CENTER);
+	fr.hint = remote01_single_line(page, "Hold 2 s. Erases Wi-Fi setup.", &lv_font_montserrat_12,
+	                              lv_color_hex(0x91a3a6), 12, 448, 148, LV_LABEL_LONG_CLIP, LV_TEXT_ALIGN_LEFT);
+	lv_obj_add_event_cb(fr.button, factory_reset_button_event, LV_EVENT_ALL, nullptr);
+
+	// Modal on the top layer: a full-screen backdrop that swallows touches (tap = cancel)
+	// and a card with the question. CANCEL comes first and has the accent border.
+	fr.backdrop = lv_obj_create(lv_layer_top());
+	lv_obj_remove_style_all(fr.backdrop);
+	lv_obj_set_pos(fr.backdrop, 0, 0);
+	lv_obj_set_size(fr.backdrop, 172, 640);
+	lv_obj_set_style_bg_color(fr.backdrop, lv_color_hex(0x000000), LV_PART_MAIN);
+	lv_obj_set_style_bg_opa(fr.backdrop, LV_OPA_70, LV_PART_MAIN);
+	lv_obj_clear_flag(fr.backdrop, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_add_flag(fr.backdrop, LV_OBJ_FLAG_CLICKABLE);
+	lv_obj_add_event_cb(fr.backdrop, factory_reset_backdrop_event, LV_EVENT_CLICKED, nullptr);
+	lv_obj_add_flag(fr.backdrop, LV_OBJ_FLAG_HIDDEN);
+
+	fr.card = remote01_panel(lv_layer_top(), 6, 150, 160, 264, lv_color_hex(0x1c292e), 6);
+	lv_obj_add_flag(fr.card, LV_OBJ_FLAG_CLICKABLE); // taps on the card are not "outside"
+	fr.title = remote01_single_line(fr.card, "FACTORY RESET", &lv_font_montserrat_14, lv_color_hex(0xff6c00),
+	                               10, 10, 140, LV_LABEL_LONG_CLIP, LV_TEXT_ALIGN_LEFT);
+	fr.text = remote01_label(fr.card, "", &lv_font_montserrat_14, lv_color_hex(0xf3f5f2), 10, 40);
+	lv_label_set_long_mode(fr.text, LV_LABEL_LONG_WRAP);
+	lv_obj_set_size(fr.text, 140, LV_SIZE_CONTENT);
+	fr.note = remote01_label(fr.card, "", &lv_font_montserrat_12, lv_color_hex(0x91a3a6), 10, 112);
+	lv_label_set_long_mode(fr.note, LV_LABEL_LONG_WRAP);
+	lv_obj_set_size(fr.note, 140, LV_SIZE_CONTENT);
+	fr.cancel = remote01_panel(fr.card, 10, 156, 140, 44, lv_color_hex(0x1c292e), 6);
+	lv_obj_add_flag(fr.cancel, LV_OBJ_FLAG_CLICKABLE);
+	lv_obj_set_style_border_color(fr.cancel, lv_color_hex(0xc2ff00), LV_PART_MAIN);
+	lv_obj_set_style_border_width(fr.cancel, 2, LV_PART_MAIN);
+	lv_obj_set_style_border_opa(fr.cancel, LV_OPA_COVER, LV_PART_MAIN);
+	remote01_single_line(fr.cancel, "CANCEL", &lv_font_montserrat_16, lv_color_hex(0xc2ff00), 0,
+	                     (44 - lv_font_montserrat_16.line_height) / 2, 140, LV_LABEL_LONG_CLIP, LV_TEXT_ALIGN_CENTER);
+	lv_obj_add_event_cb(fr.cancel, factory_reset_cancel_event, LV_EVENT_CLICKED, nullptr);
+	fr.confirm = remote01_panel(fr.card, 10, 208, 140, 44, lv_color_hex(0x5a1d1d), 6);
+	lv_obj_add_flag(fr.confirm, LV_OBJ_FLAG_CLICKABLE);
+	remote01_single_line(fr.confirm, "CONFIRM", &lv_font_montserrat_16, lv_color_hex(0xf3f5f2), 0,
+	                     (44 - lv_font_montserrat_16.line_height) / 2, 140, LV_LABEL_LONG_CLIP, LV_TEXT_ALIGN_CENTER);
+	lv_obj_add_event_cb(fr.confirm, factory_reset_confirm_event, LV_EVENT_CLICKED, nullptr);
+	lv_obj_add_flag(fr.card, LV_OBJ_FLAG_HIDDEN);
+	fr.timer = lv_timer_create(factory_reset_tick, 50, nullptr);
+}
+
 static void info_page_create(void)
 {
 	lv_obj_t *page = info_page.page = lv_carousel_add_element(src_ui.screen_carousel_1, 2);
@@ -1566,6 +1759,7 @@ static void info_page_create(void)
 	info_page.disconnect = info_row(page, "LAST DISCONNECT", 316);
 	const auto *description = esp_app_get_description();
 	home_text(info_page.firmware, description && description->version[0] ? description->version : "unknown");
+	factory_reset_create(page);
 }
 
 static void lvgl_obj_event_callback(lv_event_t *event)

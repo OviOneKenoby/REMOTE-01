@@ -27,6 +27,9 @@ bool settings_request(SettingsAction, unsigned generation, std::uint64_t confirm
 // Enqueue only; acceptance/result is owner-published. FACTORY_RESET is refused.
 bool development_key(unsigned char);
 bool development_command(unsigned char);
+// Request a software restart through the NETWORK owner (same esp_restart path as the
+// local reboot request and the OTA reboot). Enqueue only; false if it cannot be queued.
+bool request_restart();
 bool web_view(WebView &);
 bool local_setup(LocalSetup &);
 bool submit(const Credentials &, unsigned generation);

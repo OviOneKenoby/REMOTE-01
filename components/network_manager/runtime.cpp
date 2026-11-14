@@ -470,6 +470,10 @@ bool development_command(unsigned char c) {
   if (sleep_channel.busy() || !development_key(c) || (c=='R' && !owner.load())) return false;
   Message m{}; m.kind = c == 'R' ? Kind::REBOOT : c == 'W' ? Kind::STATUS : c == 'G' ? Kind::ARM_CLEAR : Kind::CONFIRM_CLEAR; return post(m);
 }
+bool request_restart() {
+  if (sleep_channel.busy() || !owner.load()) return false;
+  Message m{}; m.kind = Kind::REBOOT; return post(m);
+}
 unsigned sleep_prepare(){
   if(!owner.load())return 0;
   const auto epoch=sleep_channel.begin();
