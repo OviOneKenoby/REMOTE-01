@@ -36,11 +36,18 @@ REMOTE//01 is a beta test and a work in progress; much is still to be done. It
 has been tested only by the author, on one REMOTE (Waveshare
 ESP32-S3-Touch-LCD-3.49B V2) together with one TUNER (v1.1.12), and has had no
 wider validation. Expect bugs and changes, and do not rely on it for anything
-important. This repository has no firmware release yet; build it yourself with
+important. The pre-release v0.1.0-beta.2 is published on GitHub (a beta test build, see the release notes); you can also build it yourself with
 PlatformIO.
 
 ## Known issues
 
+- After a factory reset (INFO page) the REMOTE restarts in Wi-Fi setup mode. That
+  the REMOTE then finds the TUNER again by itself, using the TUNER pairing that
+  is kept, has not been verified on hardware.
+- After some restarts the REMOTE has not powered back on while running on
+  battery alone; it started once a charger was connected. The cause is unknown.
+  It was observed once by the author and has not been reproduced or isolated.
+- Install firmware updates over the air with the charger connected.
 - The REMOTE needs a TUNER running compatible firmware (TUNER v1.1.12,
   https://github.com/OviOneKenoby/ESP32-WROVER-Internet-radio) on the same local
   network. The two devices talk over the authenticated RTCP/1 link and must be
@@ -90,6 +97,8 @@ The UI sequence is:
 3. INFO: read-only rows for the link to the TUNER, battery (with a USB mark when plugged), firmware version, uptime and the last RTCP disconnect reason.
 
 The Waveshare factory demo page is no longer part of the carousel.
+
+FACTORY RESET (bottom of the INFO page): hold the button for 2 seconds, then confirm in the question that appears (CANCEL is the default; the question also closes by itself after 10 seconds). It erases only the saved Wi-Fi credentials and then restarts the REMOTE, which starts its Wi-Fi setup access point again (see the on-screen WI-FI SETUP card). It does not erase the pairing with the TUNER, which is kept. The screen-off, system-sleep and brightness settings are kept in RAM only and are not affected. The button is disabled while a firmware update is running.
 
 Brightness: the backlight starts at 50% of the slider scale on every boot (slider value 128 of 0-255, LEDC duty 127). The slider range and behaviour are unchanged; the value is not stored. Screen-off timeout: default 30 s. System-sleep delay: default 5 min, counted like the screen-off timeout from the last activity (touch, encoder, buttons or motion). Rule: the sleep delay must be strictly longer than the screen-off timeout. A step that would break the rule is shown dimmed and does nothing, and neither value is changed automatically. With the default 5 min sleep delay a 5 min screen-off is therefore not selectable: raise the sleep delay (for example to 10 min) first. Lowering the sleep delay is likewise blocked at the current screen-off timeout. Both settings are kept in RAM only and return to 30 s / 5 min at every boot, as does the brightness (a stored setting is future work). Volume: each encoder detent or touch step changes the TUNER volume by 10% (it was 2%), clamped to 0-100%.
 

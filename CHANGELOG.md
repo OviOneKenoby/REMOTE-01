@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.1.0-beta.2 (pre-release)
+
+BETA TEST release. Tested by the author on one REMOTE with one TUNER; see
+"Known issues" in the README.
+
+- HOME is the first page of a three-page carousel (HOME, SETTINGS, INFO). The
+  factory demo page is removed. SETTINGS has brightness (50% at boot),
+  screen-off and system-sleep delay selectors; INFO shows link, battery,
+  firmware, uptime and last disconnect. The volume step is 10%.
+- Startup reliability: large one-time allocations of the control core now use
+  external RAM instead of internal RAM, leaving more internal RAM free for the
+  Wi-Fi, diagnostics and mDNS services at startup.
+- INFO page: FACTORY RESET button (hold 2 s, then confirm). It erases the saved
+  Wi-Fi credentials only and restarts the REMOTE into Wi-Fi setup; the TUNER
+  pairing is kept.
+- Known issues: re-pairing with the TUNER after a factory reset has not been
+  verified on hardware; after some restarts the REMOTE did not power back on
+  from the battery alone until a charger was connected (cause unknown, seen
+  once). Install updates over the air with the charger connected.
+
 ## 2026-11-07 - Beta test change: selectable system-sleep delay, SETTINGS and INFO pages
 
 Status: BETA TEST build change on branch `feature/remote-ui-home-first-settings`
