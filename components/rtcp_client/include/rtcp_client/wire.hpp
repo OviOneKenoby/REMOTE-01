@@ -143,5 +143,9 @@ bool parse(std::span<const std::uint8_t>,BrowserPage&);
 bool parse(std::span<const std::uint8_t>,Snapshot&);bool parse(std::span<const std::uint8_t>,Result&);
 bool parse(std::span<const std::uint8_t>,NowPlaying&);
 bool parse_btx_state(std::span<const std::uint8_t>,NowPlaying&);
+// A BTX state record for the radio source carries no metadata. It updates only the
+// BTX fields and must not erase the D-009 radio metadata already held in `current`;
+// any other source replaces the whole record.
+void apply_btx_state(NowPlaying&current,const NowPlaying&btx);
 bool permitted(const BtxCapabilities&,const NowPlaying&);
 }

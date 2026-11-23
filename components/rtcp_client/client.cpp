@@ -52,7 +52,7 @@ case Awaited::menu_state:if(wire::parse(span,menu_state_))e=Event::menu_state;br
 case Awaited::catalog:if(wire::parse(span,catalog_page_))e=Event::catalog;break;
 case Awaited::browser:if(wire::parse(span,browser_page_))e=Event::browser;break;
 case Awaited::now_playing:if(wire::parse(span,now_playing_))e=Event::now_playing;break;
-  case Awaited::btx_state:if(wire::parse_btx_state(span,now_playing_)&&wire::permitted(btx_capabilities_,now_playing_)){e=Event::btx_state;now_playing_due_=now_playing_.btx_source==std::uint8_t(wire::BtxSource::radio)&&capabilities_.now_playing;}break;
+  case Awaited::btx_state:{wire::NowPlaying btx{};if(wire::parse_btx_state(span,btx)&&wire::permitted(btx_capabilities_,btx)){wire::apply_btx_state(now_playing_,btx);e=Event::btx_state;now_playing_due_=now_playing_.btx_source==std::uint8_t(wire::BtxSource::radio)&&capabilities_.now_playing;}break;}
 case Awaited::result:if(wire::parse(span,result_)&&result_.request==pending_request_){pending_request_=0;pending_request_type_=0;snapshot_at_=0;source_state_due_=full_control_capabilities_.source_switch();menu_state_due_=full_control_capabilities_.menu_projection();e=Event::result;}break;
 case Awaited::none:break;
 }

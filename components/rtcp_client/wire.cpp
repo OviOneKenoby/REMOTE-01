@@ -264,6 +264,11 @@ bool parse_btx_state(std::span<const std::uint8_t>p,NowPlaying&o){
   if(value.title_size){if(!text(p.data()+at,value.title_size))return false;std::memcpy(value.title.data(),p.data()+at,value.title_size);}
   o=value;return true;
 }
+void apply_btx_state(NowPlaying&current,const NowPlaying&btx){
+  if(btx.btx_source!=std::uint8_t(BtxSource::radio)){current=btx;return;}
+  current.btx_source=btx.btx_source;current.btx_connection=btx.btx_connection;
+  current.btx_playback=btx.btx_playback;current.btx_flags=btx.btx_flags;
+}
 bool permitted(const BtxCapabilities&c,const NowPlaying&v){
   if(!c.negotiated||!(c.features&1)||v.artist_size>c.max_artist||
      v.title_size>c.max_title)return false;

@@ -111,7 +111,25 @@ bool ordering_and_storage(){
 }
 }
 
-int main(){TEST(capability_and_requests);TEST(negotiation_lifecycle);TEST(command_vector);TEST(empty_and_maximum_state);
+bool radio_btx_state_keeps_d009_metadata(){
+  using namespace rtcp_client::wire;
+  NowPlaying radio{};radio.station_size=3;std::memcpy(radio.station.data(),"Stn",3);
+  radio.combined_size=9;std::memcpy(radio.combined.data(),"Art - Ttl",9);
+  radio.sequence=5;radio.media_generation=7;radio.metadata_revision=41;
+  NowPlaying btx{};btx.btx_source=std::uint8_t(BtxSource::radio);btx.sequence=9;
+  btx.media_generation=8;btx.metadata_revision=43;btx.btx_connection=0;
+  apply_btx_state(radio,btx);
+  CHECK(radio.btx_source==std::uint8_t(BtxSource::radio));
+  CHECK(radio.combined_size==9&&std::strcmp(radio.combined.data(),"Art - Ttl")==0);
+  CHECK(radio.station_size==3&&radio.metadata_revision==41&&radio.media_generation==7&&radio.sequence==5);
+  NowPlaying bt{};bt.btx_source=std::uint8_t(BtxSource::bluetooth);bt.btx_connection=3;
+  bt.artist_size=1;bt.artist[0]='A';bt.metadata_revision=50;
+  apply_btx_state(radio,bt);
+  CHECK(radio.btx_source==std::uint8_t(BtxSource::bluetooth)&&radio.artist_size==1&&radio.combined_size==0&&radio.metadata_revision==50);
+  return true;
+}
+
+int main(){TEST(capability_and_requests);TEST(radio_btx_state_keeps_d009_metadata);TEST(negotiation_lifecycle);TEST(command_vector);TEST(empty_and_maximum_state);
   TEST(invalid_state);TEST(presentation_states);TEST(ordering_and_storage);
   std::printf("RTCP_BTX: PASS=%u FAIL=%u assertions=%u snapshot_bytes=%u\n",passed,failed,assertions,unsigned(sizeof(control_home::Snapshot)));
   return failed?1:0;}
