@@ -710,11 +710,30 @@ static void home_artwork_refresh()
 		if (artwork::online::make_identity(metadata, artwork_ui->request_generation,
 		                                  next)) {
 			if (!artwork::online::same_media(next, artwork_ui->identity)) {
+				ESP_LOGI("ARTWORK_UI",
+				         "identity_submit source=%u session=%llu source_gen=%llu media_gen=%llu rev=%llu artist_len=%u title_len=%u station_len=%u",
+				         unsigned(next.source), (unsigned long long)next.session,
+				         (unsigned long long)next.source_generation,
+				         (unsigned long long)next.media_generation,
+				         (unsigned long long)next.metadata_revision,
+				         unsigned(std::strlen(next.artist.data())),
+				         unsigned(std::strlen(next.title.data())),
+				         unsigned(std::strlen(next.station.data())));
 				artwork_ui->identity = next;
 				(void)artwork_surface.render(artwork_model.source, true);
 				(void)artwork::online::submit(artwork_ui->identity);
 			}
 		} else {
+			if (artwork_ui->identity.usable())
+				ESP_LOGI("ARTWORK_UI",
+				         "identity_lost connected=%u source=%u session=%llu media_gen=%llu rev=%llu combined_len=%u artist_len=%u title_len=%u",
+				         unsigned(metadata.connected), unsigned(metadata.source),
+				         (unsigned long long)metadata.session,
+				         (unsigned long long)metadata.media_generation,
+				         (unsigned long long)metadata.metadata_revision,
+				         unsigned(std::strlen(metadata.combined)),
+				         unsigned(std::strlen(metadata.artist)),
+				         unsigned(std::strlen(metadata.title)));
 			artwork_ui->identity = {};
 			artwork::online::cancel();
 			(void)artwork_surface.render(artwork_model.source, true);
