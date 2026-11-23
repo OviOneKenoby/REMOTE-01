@@ -283,6 +283,14 @@ bool still_current(const Identity &identity) {
   return current && allowed();
 }
 
+// Copies text for the serial log with control characters replaced by '.'.
+void log_text(char *out, std::size_t capacity, const char *in) {
+  std::size_t i = 0;
+  for (; in && in[i] && i + 1 < capacity; ++i)
+    out[i] = (static_cast<unsigned char>(in[i]) < 0x20 || in[i] == 0x7f) ? '.' : in[i];
+  out[i] = 0;
+}
+
 // Says why a lookup stopped being current (logged once at the point it is abandoned).
 void log_abandoned(const Identity &identity, const char *stage) {
   portENTER_CRITICAL(&mux);
@@ -321,6 +329,13 @@ bool lookup(const Identity &identity) {
   bool search_ok = false;
   for (unsigned attempt = 0; attempt < search_attempts; ++attempt) {
     if (!wait_for_network_slot(identity)) return false;
+    {
+      char artist[96]{}, title[96]{};
+      log_text(artist, sizeof artist, identity.artist.data());
+      log_text(title, sizeof title, identity.title.data());
+      ESP_LOGI(tag, "search_text source=%u attempt=%u/%u artist=[%s] title=[%s]",
+               unsigned(identity.source), attempt + 1, search_attempts, artist, title);
+    }
     response = {};
     const bool transported = https_get(url, search_limit, response);
     search_ok = transported && response.status == 200 &&

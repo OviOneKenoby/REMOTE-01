@@ -724,16 +724,21 @@ static void home_artwork_refresh()
 				(void)artwork::online::submit(artwork_ui->identity);
 			}
 		} else {
-			if (artwork_ui->identity.usable())
+			if (artwork_ui->identity.usable() || (metadata.combined && metadata.combined[0])) {
+				char shown[96]{};
+				for (std::size_t i = 0; metadata.combined && metadata.combined[i] && i + 1 < sizeof shown; ++i)
+					shown[i] = (static_cast<unsigned char>(metadata.combined[i]) < 0x20 || metadata.combined[i] == 0x7f) ? '.' : metadata.combined[i];
 				ESP_LOGI("ARTWORK_UI",
-				         "identity_lost connected=%u source=%u session=%llu media_gen=%llu rev=%llu combined_len=%u artist_len=%u title_len=%u",
+				         "identity_rejected connected=%u source=%u session=%llu media_gen=%llu rev=%llu combined_len=%u artist_len=%u title_len=%u station=[%s] combined=[%s]",
 				         unsigned(metadata.connected), unsigned(metadata.source),
 				         (unsigned long long)metadata.session,
 				         (unsigned long long)metadata.media_generation,
 				         (unsigned long long)metadata.metadata_revision,
 				         unsigned(std::strlen(metadata.combined)),
 				         unsigned(std::strlen(metadata.artist)),
-				         unsigned(std::strlen(metadata.title)));
+				         unsigned(std::strlen(metadata.title)),
+				         metadata.station ? metadata.station : "", shown);
+			}
 			artwork_ui->identity = {};
 			artwork::online::cancel();
 			(void)artwork_surface.render(artwork_model.source, true);
