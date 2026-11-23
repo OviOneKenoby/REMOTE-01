@@ -89,6 +89,16 @@ bool make_identity(const Metadata &metadata, std::uint64_t generation,
       !copy(out.artist, artist) || !copy(out.title, title) ||
       !normalize(out.artist, out.normalized_artist) ||
       !normalize(out.title, out.normalized_title)) return false;
+  // A radio line whose "artist" is the station's own name is a station
+  // identification / promo line, not a song: compare with the station name the
+  // caller already has (case- and spacing-insensitive).
+  if (metadata.source == Source::radio && metadata.station) {
+    std::array<char, 64> station{};
+    std::array<char, artist_capacity> normalized_station{};
+    if (copy(station, metadata.station) && normalize(station, normalized_station) &&
+        std::strcmp(normalized_station.data(), out.normalized_artist.data()) == 0)
+      return false;
+  }
   out.source = metadata.source;
   out.session = metadata.session;
   out.source_generation = metadata.source_generation;

@@ -97,6 +97,20 @@ esp_err_t http_event(esp_http_client_event_t *event) {
   return ESP_OK;
 }
 
+// Logs the first bytes of a rejected (non-2xx) response body, printable ASCII
+// only, so the reason given by the service is visible in the serial log.
+void log_rejected_body(const HttpSink &sink, int status) {
+  if (status >= 200 && status < 300) return;
+  char text[161]{};
+  const std::size_t count = sink.size < sizeof text - 1 ? sink.size : sizeof text - 1;
+  for (std::size_t i = 0; i < count; ++i) {
+    const unsigned char c = sink.data[i];
+    text[i] = (c >= 0x20 && c < 0x7f) ? char(c) : '.';
+  }
+  ESP_LOGW(tag, "https_rejected_body status=%d bytes=%u shown=%u text=%s", status,
+           unsigned(sink.size), unsigned(count), text);
+}
+
 struct HttpResult { int status = 0; std::size_t size = 0; char type[48]{}; };
 
 bool https_get(const char *initial_url, std::size_t limit, HttpResult &result) {
@@ -182,10 +196,12 @@ bool https_get(const char *initial_url, std::size_t limit, HttpResult &result) {
     std::snprintf(result.type, sizeof result.type, "%s", sink.content_type);
     const bool accepted =
         payload_allowed(status, sink.content_type, sink.size, limit, true);
-    if (!accepted)
+    if (!accepted) {
       ESP_LOGW(tag,
                "https_rejected reason=payload redirect=%u status=%d bytes=%u type=%s",
                redirect, status, unsigned(sink.size), sink.content_type);
+      log_rejected_body(sink, status);
+    }
     return accepted;
   }
   return false;
@@ -267,6 +283,17 @@ bool still_current(const Identity &identity) {
   return current && allowed();
 }
 
+// Says why a lookup stopped being current (logged once at the point it is abandoned).
+void log_abandoned(const Identity &identity, const char *stage) {
+  portENTER_CRITICAL(&mux);
+  const bool ready = request_ready && runtime;
+  const bool same = ready && runtime->requested == identity;
+  portEXIT_CRITICAL(&mux);
+  ESP_LOGW(tag, "lookup_abandoned stage=%s reason=%s source=%u", stage,
+           !ready ? "cancelled" : !same ? "superseded" : "lifecycle",
+           unsigned(identity.source));
+}
+
 bool wait_for_network_slot(const Identity &identity) {
   while (still_current(identity)) {
     const auto now = now_ms();
@@ -276,6 +303,7 @@ bool wait_for_network_slot(const Identity &identity) {
     }
     vTaskDelay(pdMS_TO_TICKS(100));
   }
+  log_abandoned(identity, "wait_slot");
   return false;
 }
 
@@ -313,7 +341,7 @@ bool lookup(const Identity &identity) {
     const unsigned delay_ms = 5000U << attempt;
     for (unsigned waited = 0; waited < delay_ms; waited += 100) {
       vTaskDelay(pdMS_TO_TICKS(100));
-      if (!still_current(identity)) return false;
+      if (!still_current(identity)) { log_abandoned(identity, "search_retry"); return false; }
     }
   }
   Candidate candidates[5]{};

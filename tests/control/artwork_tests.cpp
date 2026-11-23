@@ -61,6 +61,23 @@ int main() {
   assert(!make_identity(radio, 4, radio_identity));
   radio.combined = "No separator";
   assert(!make_identity(radio, 5, radio_identity));
+  // Station-identification / promo lines: the text before the separator is the
+  // station's own name (case- and spacing-insensitive) -> not a song.
+  radio.combined = "West City Radio - Un radio pentru Timisoara";
+  assert(!make_identity(radio, 6, radio_identity));
+  radio.combined = "  WEST  city radio  - Another line";
+  assert(!make_identity(radio, 7, radio_identity));
+  radio.combined = "Daft Punk - Get Lucky"; // real song still accepted
+  assert(make_identity(radio, 8, radio_identity));
+  radio.combined = "West City - Song";       // only an exact station name matches
+  assert(make_identity(radio, 9, radio_identity));
+  Metadata radio_no_station{true, Source::radio, 7, 3, 8, 10,
+                            nullptr, nullptr, nullptr, "West City Radio - Song"};
+  assert(make_identity(radio_no_station, 10, radio_identity)); // no station -> no change
+  Metadata bt_station{true, Source::bluetooth, 7, 3, 8, 9,
+                      "Daft Punk", "Daft Punk", "Get Lucky", nullptr};
+  assert(make_identity(bt_station, 11, identity)); // Bluetooth is not affected
+  radio.combined = "Daft Punk - Get Lucky";
 
   Candidate exact{98, {}, {}, {}};
   std::strcpy(exact.artist.data(), "Daft Punk");
