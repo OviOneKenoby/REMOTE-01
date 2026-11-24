@@ -41,6 +41,24 @@ constexpr bool transient_search_failure(int status) {
   return status == 0 || status == 429 || (status >= 500 && status <= 599);
 }
 
+constexpr unsigned image_attempts = 3;
+enum class ImageFailureAction : std::uint8_t {
+  next_candidate, // this release group has no usable cover: try the next one
+  retry_same,     // transient failure: retry the same candidate after a delay
+  stop_transient, // transient failure, attempts used up: stop, do NOT cache
+  stop_final      // deterministic failure: stop (may be cached)
+};
+// Decides what to do after a failed cover request. `payload_ok` is true when the
+// response was a 200 image/jpeg (so a failure after it is a decode failure).
+constexpr ImageFailureAction image_failure_action(int status, bool payload_ok,
+                                                  unsigned attempt, unsigned attempts) {
+  if (!payload_ok && (status == 404 || status == 410)) return ImageFailureAction::next_candidate;
+  if (!payload_ok && transient_search_failure(status))
+    return attempt + 1 < attempts ? ImageFailureAction::retry_same
+                                  : ImageFailureAction::stop_transient;
+  return ImageFailureAction::stop_final;
+}
+
 struct Identity {
   Source source = Source::neutral;
   std::uint64_t session = 0, source_generation = 0, media_generation = 0,

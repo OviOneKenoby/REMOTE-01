@@ -1,4 +1,5 @@
 #include "artwork/online.hpp"
+#include "artwork/resize.hpp"
 #include "artwork/tls_record_buffer_psram.hpp"
 
 #include "network_manager/api.hpp"
@@ -50,6 +51,7 @@ bool request_ready = false;
 std::atomic_bool completion_ready{false};
 std::uint8_t *encoded = nullptr, *jpeg_pool = nullptr;
 std::uint16_t *decoded = nullptr;
+std::uint16_t *resize_sums = nullptr;
 Diagnostics stats{};
 NetworkEligibilityGate network_gate{};
 std::uint64_t last_network_start_ms = 0;
@@ -240,13 +242,14 @@ bool search_url(const Identity &identity, char *out, std::size_t capacity) {
 }
 
 struct JpegInput { const std::uint8_t *data; std::size_t size, offset; };
-struct JpegOutput { std::uint16_t *pixels; int crop_x, crop_y; };
+struct JpegOutput { resize::Accumulator *accumulator; };
 
 bool decode_jpeg(std::size_t size) {
   JpegInfo info{};
   if (inspect_image({encoded, size}, info) != ImageFormat::baseline_jpeg) return false;
   JDEC decoder{};
-  struct Context { JpegInput input; JpegOutput output; } context{{encoded,size,0},{decoded,0,0}};
+  resize::Accumulator accumulator{resize_sums, 0, 0};
+  struct Context { JpegInput input; JpegOutput output; } context{{encoded,size,0},{&accumulator}};
   auto input_cb = [](JDEC *j, BYTE *buffer, UINT count) -> UINT {
     auto &c = *static_cast<Context *>(j->device);
     const auto available = std::min<std::size_t>(count, c.input.size - c.input.offset);
@@ -258,9 +261,8 @@ bool decode_jpeg(std::size_t size) {
     const auto *rgb = static_cast<const std::uint8_t *>(bitmap);
     const int bw = rect->right - rect->left + 1;
     for (int y=rect->top;y<=rect->bottom;++y) for(int x=rect->left;x<=rect->right;++x){
-      const int i=((y-rect->top)*bw+(x-rect->left))*3,dx=x-c.output.crop_x,dy=y-c.output.crop_y;
-      if(dx>=0&&dx<144&&dy>=0&&dy<144){const auto r=rgb[i],g=rgb[i+1],b=rgb[i+2];
-        c.output.pixels[dy*144+dx]=lv_color_make(r,g,b).full;}
+      const int i=((y-rect->top)*bw+(x-rect->left))*3;
+      c.output.accumulator->add(x,y,rgb[i],rgb[i+1],rgb[i+2]);
     } return 1;
   };
   if (jd_prepare(&decoder, input_cb, jpeg_pool, jpeg_pool_size, &context) != JDR_OK)
@@ -270,10 +272,15 @@ bool decode_jpeg(std::size_t size) {
          (decoder.height >> (scale + 1)) >= 144) ++scale;
   const int width = decoder.width >> scale, height = decoder.height >> scale;
   if (width < 144 || height < 144) return false;
+  // The decoder shrinks by a power of two only; the remaining reduction to
+  // 144 x 144 is a box-filter resize of the whole image (no cropping).
+  accumulator.width = width; accumulator.height = height;
+  accumulator.clear();
+  if (jd_decomp(&decoder, output_cb, BYTE(scale)) != JDR_OK) return false;
   std::fill_n(decoded, pixels, std::uint16_t(0));
-  context.output.crop_x = (width - 144) / 2;
-  context.output.crop_y = (height - 144) / 2;
-  return jd_decomp(&decoder, output_cb, BYTE(scale)) == JDR_OK;
+  return accumulator.finish(decoded, [](std::uint8_t r, std::uint8_t g, std::uint8_t b) {
+    return std::uint16_t(lv_color_make(r, g, b).full);
+  });
 }
 
 bool still_current(const Identity &identity) {
@@ -367,35 +374,65 @@ bool lookup(const Identity &identity) {
       identity, {candidates, count}, release_groups);
   if (!release_group_count) {
     ESP_LOGW(tag, "lookup_rejected stage=selection candidates=%u", unsigned(count));
+    for (std::size_t i = 0; i < count; ++i) {
+      char candidate_artist[96]{}, candidate_title[96]{}, wanted_artist[96]{}, wanted_title[96]{};
+      log_text(candidate_artist, sizeof candidate_artist, candidates[i].artist.data());
+      log_text(candidate_title, sizeof candidate_title, candidates[i].title.data());
+      log_text(wanted_artist, sizeof wanted_artist, identity.artist.data());
+      log_text(wanted_title, sizeof wanted_title, identity.title.data());
+      ESP_LOGW(tag,
+               "selection_candidate %u/%u score=%d artist=[%s] title=[%s] searched_artist=[%s] searched_title=[%s]",
+               unsigned(i + 1), unsigned(count), candidates[i].score, candidate_artist,
+               candidate_title, wanted_artist, wanted_title);
+    }
     record(stats.lookup_rejected); runtime->negatives.remember(identity, now_ms()); return false;
   }
   runtime->positive_identity = {};
-  bool image_decoded = false;
-  for (std::size_t attempt = 0; attempt < release_group_count; ++attempt) {
-    if (!wait_for_network_slot(identity)) return false;
+  bool image_decoded = false, transient_stop = false;
+  for (std::size_t candidate = 0; candidate < release_group_count && !image_decoded &&
+                                   !transient_stop; ++candidate) {
     std::snprintf(url, sizeof url,
                   "https://coverartarchive.org/release-group/%s/front-250",
-                  release_groups[attempt].data());
-    response = {};
-    const bool image_transport = https_get(url, encoded_limit, response);
-    const bool image_payload = image_transport && response.status == 200 &&
-        std::strncmp(response.type, "image/jpeg", 10) == 0;
-    image_decoded = image_payload && decode_jpeg(response.size);
-    if (image_decoded) break;
-    ESP_LOGW(tag,
-             "cover_candidate_rejected attempt=%u count=%u status=%d bytes=%u type=%s",
-             unsigned(attempt + 1), unsigned(release_group_count), response.status,
-             unsigned(response.size), response.type);
-    // A coverless exact release group is expected.  Transport failures are not
-    // evidence that another release group is usable, so do not multiply them.
-    if (!response.status || (response.status != 404 && response.status != 410))
-      break;
+                  release_groups[candidate].data());
+    bool next_candidate = false;
+    for (unsigned attempt = 0; attempt < image_attempts && !next_candidate &&
+                               !image_decoded && !transient_stop; ++attempt) {
+      if (!wait_for_network_slot(identity)) return false;
+      response = {};
+      const bool image_transport = https_get(url, encoded_limit, response);
+      const bool image_payload = image_transport && response.status == 200 &&
+          std::strncmp(response.type, "image/jpeg", 10) == 0;
+      image_decoded = image_payload && decode_jpeg(response.size);
+      if (image_decoded) break;
+      ESP_LOGW(tag,
+               "cover_candidate_rejected candidate=%u/%u attempt=%u/%u status=%d bytes=%u type=%s",
+               unsigned(candidate + 1), unsigned(release_group_count), attempt + 1,
+               image_attempts, response.status, unsigned(response.size), response.type);
+      // A coverless exact release group (404/410) is expected: try the next one.
+      // A transient failure (busy service, transport error) is retried on the
+      // same candidate and is never cached as a property of the song.
+      switch (image_failure_action(response.status, image_payload, attempt, image_attempts)) {
+      case ImageFailureAction::next_candidate: next_candidate = true; break;
+      case ImageFailureAction::retry_same: {
+        const unsigned delay_ms = 5000U << attempt;
+        for (unsigned waited = 0; waited < delay_ms; waited += 100) {
+          vTaskDelay(pdMS_TO_TICKS(100));
+          if (!still_current(identity)) { log_abandoned(identity, "image_retry"); return false; }
+        }
+        break;
+      }
+      case ImageFailureAction::stop_transient: transient_stop = true; break;
+      case ImageFailureAction::stop_final: candidate = release_group_count; next_candidate = true; break;
+      }
+    }
   }
   if (!image_decoded) {
     ESP_LOGW(tag,
-             "lookup_rejected stage=image_candidates status=%d bytes=%u type=%s",
-             response.status, unsigned(response.size), response.type);
-    record(stats.image_rejected); runtime->negatives.remember(identity, now_ms()); return false;
+             "lookup_rejected stage=image_candidates transient=%u status=%d bytes=%u type=%s",
+             unsigned(transient_stop), response.status, unsigned(response.size), response.type);
+    record(stats.image_rejected);
+    if (!transient_stop) runtime->negatives.remember(identity, now_ms());
+    return false;
   }
   if (!still_current(identity)) return false;
   runtime->positive_identity = identity;
@@ -454,10 +491,12 @@ bool start() {
   encoded = static_cast<std::uint8_t *>(heap_caps_malloc(encoded_limit, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
   decoded = static_cast<std::uint16_t *>(heap_caps_malloc(pixels * 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
   jpeg_pool = static_cast<std::uint8_t *>(heap_caps_malloc(jpeg_pool_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-  if (!runtime || !encoded || !decoded || !jpeg_pool) {
-    heap_caps_free(runtime);
+  resize_sums = static_cast<std::uint16_t *>(heap_caps_malloc(
+      resize::accum_values * sizeof(std::uint16_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+  if (!runtime || !encoded || !decoded || !jpeg_pool || !resize_sums) {
+    heap_caps_free(runtime); heap_caps_free(resize_sums);
     heap_caps_free(encoded); heap_caps_free(decoded); heap_caps_free(jpeg_pool);
-    runtime = nullptr; encoded = nullptr; decoded = nullptr; jpeg_pool = nullptr;
+    runtime = nullptr; encoded = nullptr; decoded = nullptr; jpeg_pool = nullptr; resize_sums = nullptr;
     increment(stats.allocation_failures); return false;
   }
   if (xTaskCreatePinnedToCoreWithCaps(
@@ -465,9 +504,9 @@ bool start() {
           &worker_handle, 0,
           MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS) {
     worker_handle = nullptr;
-    heap_caps_free(runtime);
+    heap_caps_free(runtime); heap_caps_free(resize_sums);
     heap_caps_free(encoded); heap_caps_free(decoded); heap_caps_free(jpeg_pool);
-    runtime = nullptr; encoded = nullptr; decoded = nullptr; jpeg_pool = nullptr;
+    runtime = nullptr; encoded = nullptr; decoded = nullptr; jpeg_pool = nullptr; resize_sums = nullptr;
     increment(stats.allocation_failures); return false;
   }
   ESP_LOGI(tag, "online_worker=READY encoded_limit=%u decoded=%u negative_cache=%u",

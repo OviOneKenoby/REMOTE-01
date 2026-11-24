@@ -23,12 +23,27 @@ template <std::size_t N, std::size_t M>
 bool normalize(const std::array<char, N> &in, std::array<char, M> &out) {
   std::size_t used = 0;
   bool space = true;
-  for (const unsigned char c : in) {
+  for (std::size_t at = 0; at < N; ++at) {
+    unsigned char c = in[at];
     if (!c) break;
     if (std::isspace(c)) { space = used != 0; continue; }
     if (space && used && used + 1 < M) out[used++] = ' ';
     space = false;
     if (used + 1 >= M) return false;
+    // Apostrophe variants fold to a plain apostrophe so that both spellings of
+    // a title compare equal: U+2018/U+2019/U+201B (E2 80 98/99/9B), U+02BC
+    // (CA BC), U+00B4 (C2 B4) and the grave accent.
+    if (c == 0xE2 && at + 2 < N && static_cast<unsigned char>(in[at + 1]) == 0x80 &&
+        (static_cast<unsigned char>(in[at + 2]) == 0x98 ||
+         static_cast<unsigned char>(in[at + 2]) == 0x99 ||
+         static_cast<unsigned char>(in[at + 2]) == 0x9B)) {
+      out[used++] = '\''; at += 2; continue;
+    }
+    if (at + 1 < N && ((c == 0xCA && static_cast<unsigned char>(in[at + 1]) == 0xBC) ||
+                       (c == 0xC2 && static_cast<unsigned char>(in[at + 1]) == 0xB4))) {
+      out[used++] = '\''; at += 1; continue;
+    }
+    if (c == '`') { out[used++] = '\''; continue; }
     out[used++] = static_cast<char>(c < 0x80 ? std::tolower(c) : c);
   }
   while (used && out[used - 1] == ' ') --used;

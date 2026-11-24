@@ -53,11 +53,16 @@ generation, station, artist and title is not a new artwork identity.
 
 The ESP32-S3 ROM Tiny JPEG decoder handles baseline JPEG only. The preflight
 scanner requires SOI/SOF0/SOS/EOI, rejects progressive JPEG, and limits both
-dimensions to 2,048 pixels. Decode occurs on the artwork worker, scales by a
-ROM-supported power of two and center-crops proportionally to 144 x 144.
+dimensions to 2,048 pixels. Decode occurs on the artwork worker. The decoder
+shrinks by a ROM-supported power of two (as far as both sides stay at least 144
+pixels); the rest of the reduction to 144 x 144 is a box-filter resize of the
+whole image (each decoded pixel is added to the output cell that contains it and
+the sums are averaged), so the entire cover is visible and nothing is cropped.
+Non-square sources are scaled independently on each axis.
 
 Permanent dynamic storage is explicit PSRAM: one 128 KiB encoded buffer, one
-41,472-byte RGB565 staging/cache buffer and one 8 KiB JPEG work pool, in
+41,472-byte RGB565 staging/cache buffer, one 124,416-byte 16-bit resize
+accumulator (144 x 144 x 3 sums) and one 8 KiB JPEG work pool, in
 addition to Stage 1's 41,472-byte displayed surface. The worker has one fixed
 request, one fixed completion and a four-entry negative cache with a 15-minute
 boot-local TTL. Allocation failure disables online covers and leaves local

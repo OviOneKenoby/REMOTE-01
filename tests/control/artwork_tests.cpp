@@ -1,5 +1,7 @@
 #include "artwork/model.hpp"
 #include "artwork/online.hpp"
+#include "artwork/resize.hpp"
+#include <vector>
 
 #include <cassert>
 #include <algorithm>
@@ -78,6 +80,67 @@ int main() {
                       "Daft Punk", "Daft Punk", "Get Lucky", nullptr};
   assert(make_identity(bt_station, 11, identity)); // Bluetooth is not affected
   radio.combined = "Daft Punk - Get Lucky";
+
+  // Apostrophe variants compare equal (straight, U+2019, U+2018, U+02BC, U+00B4).
+  {
+    Metadata a{true, Source::bluetooth, 7, 3, 8, 9, "Phone", "Five", "Keep On Movin'", nullptr};
+    Identity straight{}, curly{}, modifier{};
+    assert(make_identity(a, 20, straight));
+    a.title = "Keep On Movin\xe2\x80\x99";
+    assert(make_identity(a, 21, curly));
+    a.title = "Keep On Movin\xca\xbc";
+    assert(make_identity(a, 22, modifier));
+    assert(std::string_view(straight.normalized_title.data()) == "keep on movin'");
+    assert(std::string_view(curly.normalized_title.data()) == "keep on movin'");
+    assert(std::string_view(modifier.normalized_title.data()) == "keep on movin'");
+    Candidate curly_candidate{98, {}, {}, {}};
+    std::strcpy(curly_candidate.artist.data(), "Five");
+    std::strcpy(curly_candidate.title.data(), "Keep On Movin\xe2\x80\x99");
+    std::strcpy(curly_candidate.release_group.data(), "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+    std::array<char, mbid_capacity> pick{};
+    assert(select_release_group(straight, std::span(&curly_candidate, 1), pick));
+    // Other punctuation and accents are NOT folded.
+    a.title = "Keep On Movin";
+    Identity bare{};
+    assert(make_identity(a, 23, bare));
+    assert(!select_release_group(bare, std::span(&curly_candidate, 1), pick));
+  }
+  // Cover request failures: transient ones retry the same candidate and are never
+  // cached; 404/410 move on; anything else is final.
+  static_assert(image_failure_action(404, false, 0, 3) == ImageFailureAction::next_candidate);
+  static_assert(image_failure_action(410, false, 2, 3) == ImageFailureAction::next_candidate);
+  static_assert(image_failure_action(503, false, 0, 3) == ImageFailureAction::retry_same);
+  static_assert(image_failure_action(503, false, 1, 3) == ImageFailureAction::retry_same);
+  static_assert(image_failure_action(503, false, 2, 3) == ImageFailureAction::stop_transient);
+  static_assert(image_failure_action(0, false, 0, 3) == ImageFailureAction::retry_same);
+  static_assert(image_failure_action(429, false, 2, 3) == ImageFailureAction::stop_transient);
+  static_assert(image_failure_action(200, true, 0, 3) == ImageFailureAction::stop_final);  // decode failure
+  static_assert(image_failure_action(200, false, 0, 3) == ImageFailureAction::stop_final); // wrong type
+  static_assert(image_failure_action(403, false, 0, 3) == ImageFailureAction::stop_final);
+  // Resize: the whole source contributes, not just its centre.
+  {
+    const int W = 250, H = 250;
+    std::vector<std::uint16_t> sums(artwork::resize::accum_values), out(144 * 144);
+    artwork::resize::Accumulator acc{sums.data(), W, H};
+    acc.clear();
+    for (int y = 0; y < H; ++y)
+      for (int x = 0; x < W; ++x)  // left edge red, right edge blue, rest grey
+        acc.add(x, y, x < 5 ? 255 : 100, x < 5 ? 0 : 100, x >= W - 5 ? 255 : 100);
+    auto pack = [](std::uint8_t r, std::uint8_t g, std::uint8_t b) {
+      return std::uint16_t(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)); };
+    assert(acc.finish(out.data(), pack));
+    assert(out[72 * 144 + 0] != out[72 * 144 + 72]);   // left edge is visible
+    assert(out[72 * 144 + 143] != out[72 * 144 + 72]); // right edge is visible
+    assert(out[0] != 0 && out[143 * 144 + 143] != 0);   // corners are filled
+    // A uniform image stays uniform (exact averaging), also for non-square input.
+    acc = artwork::resize::Accumulator{sums.data(), 200, 288};
+    acc.clear();
+    for (int y = 0; y < 288; ++y) for (int x = 0; x < 200; ++x) acc.add(x, y, 40, 80, 120);
+    assert(acc.finish(out.data(), pack));
+    for (auto v : out) assert(v == pack(40, 80, 120));
+    acc = artwork::resize::Accumulator{sums.data(), 143, 144};
+    assert(!acc.finish(out.data(), pack));              // smaller than the output
+  }
 
   Candidate exact{98, {}, {}, {}};
   std::strcpy(exact.artist.data(), "Daft Punk");
