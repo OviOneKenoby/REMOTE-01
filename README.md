@@ -36,7 +36,7 @@ REMOTE//01 is a beta test and a work in progress; much is still to be done. It
 has been tested only by the author, on one REMOTE (Waveshare
 ESP32-S3-Touch-LCD-3.49B V2) together with one TUNER (v1.1.12), and has had no
 wider validation. Expect bugs and changes, and do not rely on it for anything
-important. The pre-release v0.1.0-beta.2 is published on GitHub (a beta test build, see the release notes); you can also build it yourself with
+important. The pre-release v0.1.0-beta.3 is published on GitHub (a beta test build, see the release notes); you can also build it yourself with
 PlatformIO.
 
 ## Known issues
@@ -48,6 +48,10 @@ PlatformIO.
   battery alone; it started once a charger was connected. The cause is unknown.
   It was observed once by the author and has not been reproduced or isolated.
 - Install firmware updates over the air with the charger connected.
+- Online album covers come from the public MusicBrainz and Cover Art Archive
+  services, which are outside this project's control. They are sometimes busy
+  (HTTP 503) or have no entry or cover for a song; the REMOTE retries a few
+  times and otherwise keeps the generic picture. A cover is not guaranteed.
 - The REMOTE needs a TUNER running compatible firmware (TUNER v1.1.12,
   https://github.com/OviOneKenoby/ESP32-WROVER-Internet-radio) on the same local
   network. The two devices talk over the authenticated RTCP/1 link and must be

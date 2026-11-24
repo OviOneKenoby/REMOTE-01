@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.1.0-beta.3 (pre-release)
+
+BETA TEST release. Tested by the author on one REMOTE with one TUNER; see
+"Known issues" in the README.
+
+- Radio album covers: a bug that wiped the radio metadata about once a second
+  made every online cover lookup for radio stations stop before it could
+  finish; it is fixed, and covers now complete on radio as they already did on
+  Bluetooth. Radio lines that only name the station are ignored.
+- Cover images are now resized to show the whole picture instead of being cut
+  to their centre.
+- Temporary failures of the online cover services are retried (search and
+  image download) instead of giving up after one try, and a temporary failure
+  no longer blocks the same song for 15 minutes.
+- Titles that differ only in the apostrophe character now match.
+- More diagnostic log lines for the cover lookup (searched text, rejected
+  responses, rejected candidates).
+- MusicBrainz and Cover Art Archive are third-party services outside this
+  project's control; they are sometimes busy or have no cover, so a cover is
+  not guaranteed.
+- Known issues are unchanged from v0.1.0-beta.2: re-pairing with the TUNER
+  after a factory reset has not been verified on hardware; after some restarts
+  the REMOTE did not power back on from the battery alone until a charger was
+  connected (cause unknown, seen once). Install updates over the air with the
+  charger connected.
+
 ## v0.1.0-beta.2 (pre-release)
 
 BETA TEST release. Tested by the author on one REMOTE with one TUNER; see
