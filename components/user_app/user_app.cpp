@@ -1275,6 +1275,8 @@ static void tuner_control_create()
 	tuner_control.timer = lv_timer_create(tuner_control_refresh, 20, nullptr);
 }
 
+static void page_style(lv_obj_t *page); // background shared by the carousel pages
+
 static void remote01_mockup_create(void)
 {
 	// Accepted HOME geometry; values arrive only as copied Core presentation.
@@ -1287,10 +1289,7 @@ static void remote01_mockup_create(void)
 	// HOME is carousel page 0 (the factory demo page no longer exists).
 	lv_obj_t *page = src_ui.screen_carousel_1_element_1;
 	home.page = page;
-	lv_obj_set_style_bg_color(page, background, LV_PART_MAIN);
-	lv_obj_set_style_bg_opa(page, LV_OPA_COVER, LV_PART_MAIN);
-	lv_obj_set_style_border_width(page, 0, LV_PART_MAIN);
-	lv_obj_set_style_pad_all(page, 0, LV_PART_MAIN);
+	page_style(page);
 
 	remote01_label(page, "REMOTE//01", &lv_font_montserrat_12, text, 12, 10);
 	home.battery = remote01_single_line(page, "--", &lv_font_montserrat_12, text, 122, 10, 38,
@@ -1497,6 +1496,10 @@ static void settings_refresh(lv_timer_t *)
 
 static void page_style(lv_obj_t *page)
 {
+	// The generated pages carry a focused-state style (transparent, rounded)
+	// that would override this background while the page is shown.
+	lv_obj_remove_style(page, nullptr, static_cast<lv_style_selector_t>(LV_PART_MAIN) |
+	                                   static_cast<lv_style_selector_t>(LV_STATE_FOCUSED));
 	lv_obj_set_style_bg_color(page, lv_color_hex(0x11191d), LV_PART_MAIN);
 	lv_obj_set_style_bg_opa(page, LV_OPA_COVER, LV_PART_MAIN);
 	lv_obj_set_style_border_width(page, 0, LV_PART_MAIN);
