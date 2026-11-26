@@ -1,3 +1,4 @@
+#include "home_clock.hpp"
 #include "user_app.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -25,6 +26,8 @@
 #include "esp_heap_caps.h"
 #include "esp_timer.h"
 #include "esp_log.h"
+#include <cstdlib>
+#include <ctime>
 #include <atomic>
 #include <algorithm>
 #include <cstdio>
@@ -43,6 +46,7 @@ struct HomeWidgets {
 	lv_obj_t *buttons[3]{}, *symbols[3]{};
 	lv_timer_t *timer = nullptr;
 	lv_obj_t *page = nullptr;
+	lv_obj_t *clock = nullptr;
 	std::uint64_t generation = 0;
 } home;
 
@@ -1015,8 +1019,18 @@ static void battery_voltage_text(char (&out)[6])
 	else std::snprintf(out, sizeof out, "--");
 }
 
+// Called on every HOME refresh, so the shown minute follows the system time.
+static void home_clock_refresh()
+{
+	if (!home.clock) return;
+	char text[6];
+	home_clock::format(std::time(nullptr), text);
+	home_text(home.clock, text); // Redraws only when the text changes.
+}
+
 static void home_refresh(lv_timer_t *)
 {
+	home_clock_refresh();
 	ota_service::UiView update{};
 	if (ota.panel && ota_service::ui_view(update)) {
 		if (update.state != ota.state || update.state == ota_service::State::CHALLENGE) {
@@ -1291,7 +1305,8 @@ static void remote01_mockup_create(void)
 	home.page = page;
 	page_style(page);
 
-	remote01_label(page, "REMOTE//01", &lv_font_montserrat_12, text, 12, 10);
+	home.clock = remote01_single_line(page, "--:--", &lv_font_montserrat_12, text, 12, 10, 60,
+	                                  LV_LABEL_LONG_CLIP, LV_TEXT_ALIGN_LEFT);
 	home.battery = remote01_single_line(page, "--", &lv_font_montserrat_12, text, 122, 10, 38,
 	                     LV_LABEL_LONG_CLIP, LV_TEXT_ALIGN_RIGHT);
 	lv_obj_t *battery = home.battery_icon = remote01_panel(page, 104, 13, 13, 8, background, 1);
@@ -1810,6 +1825,8 @@ static void boot_memory_log(void *)
 void user_app_init(void)
 {
 	ota_service::set_activity_callback(power_management::activity);
+	setenv("TZ", home_clock::timezone_rule, 1);
+	tzset();
 	setup_ui(&src_ui);
 	remote01_mockup_create();
 	tuner_control_create();

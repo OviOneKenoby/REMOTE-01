@@ -9,6 +9,7 @@
 #include "lwip/inet.h"
 #include "esp_wifi_default.h"
 #include "esp_netif.h"
+#include "esp_netif_sntp.h"
 #include "esp_event.h"
 #include "nvs_flash.h"
 #include "nvs.h"
@@ -158,12 +159,22 @@ void task(void *) {
     view.status.rssi = ap.rssi;
     std::snprintf(view.status.ip, sizeof view.status.ip, IPSTR, IP2STR(&ip.ip)); return true;
   };
+  // Wall-clock time for the HOME screen. Started once; the SNTP client keeps
+  // retrying and resynchronising by itself, also across Wi-Fi restarts.
+  bool time_sync_started = false;
+  auto start_time_sync = [&] {
+    if (time_sync_started) return;
+    esp_sntp_config_t config = ESP_NETIF_SNTP_DEFAULT_CONFIG("pool.ntp.org");
+    time_sync_started = esp_netif_sntp_init(&config) == ESP_OK;
+    ESP_LOGI("NETWORK", "time_sync started=%u", unsigned(time_sync_started));
+  };
   auto got_ip = [&] {
     if (!healthy() || (policy.state != State::CONNECTING && policy.state != State::RETRY_WAIT)) return;
     if (policy.candidate && !replace(storage, credentials)) {
       ++view.status.errors; esp_wifi_disconnect(); policy.failed(now()); submitting.store(false); return;
     }
     policy.connected(); submitting.store(false); connect_deadline = 0;
+    start_time_sync();
     if (policy.portal) close_portal = now() + 2000;
   };
   // Never erase the partition to "repair" NVS; unrelated state must survive.
